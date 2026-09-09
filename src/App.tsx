@@ -4,6 +4,7 @@ import GraphPanel from './GraphPanel';
 import EvolutionPanel from './EvolutionPanel';
 import NegativeMotifPanel from './NegativeMotifPanel';
 import ReliabilityPanel from './ReliabilityPanel';
+import TaskBankPanel from './TaskBankPanel';
 import { api } from './api';
 import { PRESETS, type TaskGraph, type EvaluationProfile, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
 
@@ -25,7 +26,7 @@ export default function App() {
   const [graphs, setGraphs] = useState<TaskGraph[]>([]);
   const [source, setSource] = useState<DataSource>('sandbox');
   const [task, setTask] = useState(PRESETS.finance);
-  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution' | 'negative' | 'reliability'>(window.location.hash === '#reliability' ? 'reliability' : window.location.hash === '#negative' ? 'negative' : window.location.hash === '#evolution' ? 'evolution' : 'workbench');
+  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution' | 'negative' | 'reliability' | 'taskbank'>(window.location.hash === '#taskbank' ? 'taskbank' : window.location.hash === '#reliability' ? 'reliability' : window.location.hash === '#negative' ? 'negative' : window.location.hash === '#evolution' ? 'evolution' : 'workbench');
   const [tab, setTab] = useState<'overview' | 'trace' | 'report'>('overview');
   const [run, setRun] = useState<AgentRun | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
@@ -135,6 +136,7 @@ export default function App() {
       <button className={`nav-item ${page === 'workbench' && scenario === 'finance' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('finance')}><CircleDollarSign size={19} />财务运营<ChevronRight size={15} /></button>
       <button className={`nav-item ${page === 'workbench' && scenario === 'support' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('support')}><Headphones size={19} />客服运营<ChevronRight size={15} /></button>
       <div className="nav-label second">实验管理</div>
+      <button className={`nav-item ${page === 'taskbank' ? 'active' : ''}`} onClick={() => setPage('taskbank')}><Database size={18} />真实数据任务库</button>
       <button className={`nav-item ${page === 'reliability' ? 'active' : ''}`} onClick={() => setPage('reliability')}><Activity size={18} />长程稳定性对照</button>
       <button className={`nav-item ${page === 'negative' ? 'active' : ''}`} onClick={() => setPage('negative')}><TriangleAlert size={18} />负 Motif · 失败反思</button>
       <button className={`nav-item ${page === 'evolution' ? 'active' : ''}`} onClick={() => setPage('evolution')}><RefreshCw size={18} />递归进化实验</button>
@@ -151,6 +153,7 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
       <main>
+        {page === 'taskbank' && <TaskBankPanel />}
         {page === 'reliability' && <ReliabilityPanel />}
         {page === 'negative' && <NegativeMotifPanel run={run} />}
         {page === 'evolution' && <EvolutionPanel />}

@@ -1,0 +1,81 @@
+{
+  "version": "public-v1",
+  "createdAt": "2026-09-09T16:41:44.294Z",
+  "scenarios": {
+    "finance": {
+      "provider": "Olist",
+      "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+      "license": "CC BY-NC-SA 4.0",
+      "rawSha256": {
+        "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+      },
+      "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。",
+      "fetchedRecords": 99441,
+      "selectedRecords": 1000,
+      "tasks": 100,
+      "families": 10,
+      "splits": {
+        "train": 60,
+        "validation": 20,
+        "test": 20
+      },
+      "referenceHash": "3684420303475255178dc42f2b541a21ee63dca30531136d0125122a235dfb9a"
+    },
+    "support": {
+      "provider": "CFPB",
+      "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+      "license": "CC0 (API metadata)",
+      "requests": [
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+      ],
+      "rawSha256": {
+        "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+        "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+        "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+      },
+      "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。",
+      "fetchedRecords": 2024,
+      "selectedRecords": 500,
+      "tasks": 100,
+      "families": 10,
+      "splits": {
+        "train": 60,
+        "validation": 20,
+        "test": 20
+      },
+      "referenceHash": "ecddbe1f4f57d62bf957fe6a9507417678b97806f5d64b3e37aad4c39451ae64"
+    },
+    "tickets": {
+      "provider": "Zammad GitHub Issues",
+      "url": "https://github.com/zammad/zammad/issues",
+      "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+      "rawSha256": {
+        "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+        "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+        "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+        "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+        "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+        "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+        "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+        "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+        "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+        "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+      },
+      "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。",
+      "fetchedRecords": 811,
+      "selectedRecords": 300,
+      "tasks": 100,
+      "families": 10,
+      "splits": {
+        "train": 60,
+        "validation": 20,
+        "test": 20
+      },
+      "referenceHash": "7ff17031bd1060160b3e376409fca9e0d1039ed515d14bfc71705bd2a7cb449e"
+    }
+  },
+  "taskCount": 300,
+  "note": "真实历史数据上的人工设计任务；未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。"
+}

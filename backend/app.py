@@ -4,7 +4,7 @@ import json
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse, Response
-from pydantic import ValidationError
+from pydantic import ValidationError, BaseModel, ConfigDict, Field
 from . import config
 from .domain import seed, markdown
 from .models import RunRequest
@@ -12,17 +12,31 @@ from .service import RunService, tools_for
 from .platform_check import check_platforms
 from .evolution import EvolutionService, EvolutionRequest
 from .reliability import ReliabilityService, ReliabilityRequest
+from .taskbank import TaskBank
+
+
+class TaskSessionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    taskId: str = Field(min_length=1, max_length=120)
+
+
+class TaskToolRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    tool: str = Field(min_length=1, max_length=100)
+    arguments: dict = Field(default_factory=dict)
 
 
 def create_app(service=None):
     service = service or RunService()
     evolution = EvolutionService(service)
     reliability = ReliabilityService(service)
+    taskbank = TaskBank()
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
         evolution.restore()
         reliability.restore()
+        taskbank.load()
         try:
             yield
         finally:
@@ -33,6 +47,27 @@ def create_app(service=None):
     app.state.service = service
     app.state.evolution = evolution
     app.state.reliability = reliability
+    app.state.taskbank = taskbank
+
+    @app.get('/api/taskbank/manifest')
+    def taskbank_manifest():
+        return {'manifest': taskbank.manifest, 'ready': bool(taskbank.gold)}
+
+    @app.get('/api/taskbank/tasks')
+    def taskbank_tasks(scenario: Optional[Literal['finance', 'support', 'tickets']] = None, split: Optional[Literal['train', 'validation', 'test']] = None):
+        return [t for t in taskbank.tasks.values() if (not scenario or t['scenario'] == scenario) and (not split or t['split'] == split)]
+
+    @app.get('/api/taskbank/tasks/{key}/tools')
+    def taskbank_tools(key: str):
+        return [t.card() for t in taskbank.tools(key)]
+
+    @app.post('/api/taskbank/sessions', status_code=201)
+    def taskbank_session(request: TaskSessionRequest):
+        return taskbank.start(request.taskId)
+
+    @app.post('/api/taskbank/sessions/{key}/call')
+    async def taskbank_call(key: str, request: TaskToolRequest):
+        return await taskbank.call(key, request.tool, request.arguments)
 
     @app.middleware('http')
     async def api_boundary(request, call_next):

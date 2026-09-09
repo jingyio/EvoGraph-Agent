@@ -4,6 +4,8 @@ React/TypeScript 展示界面 + Python/FastAPI Agent 后端，覆盖财务运营
 
 后续端到端实验默认运行 `npm run pipeline:platforms`：直接读取已部署的 ERPNext/Zammad，依次执行 ReAct、学习读取图、Graph 复用与平台状态核对。当前实例仍是本项目初始化的演示记录，不能称为真实企业数据。合成 JSON 沙箱保留用于明确指定的回归实验，不再作为默认端到端环境。
 
+已另建财务、客服、技术工单各 100 个真实历史数据任务，来源为 Olist、CFPB、Zammad GitHub Issues。浏览 `http://127.0.0.1:5173/#taskbank`；任务定义、工具接口、数据划分和恢复方式见 [三场景任务库](docs/taskbank.md)。本地工具验证已完成，尚未执行 300 次 LLM 评测。
+
 TS 原型保存在 Git 提交 `e63b138`，当前工作树不再维护第二套后端。真实运行和历史验证结果不会因迁移被重写。
 
 ## 安装与启动

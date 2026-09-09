@@ -7,6 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "taskbank:build": ".venv/bin/python -m backend.build_taskbank",
+    "taskbank:validate": ".venv/bin/python -m backend.validate_taskbank",
     "dev:frontend": "vite",
     "dev:backend": ".venv/bin/python -m backend serve --reload",
     "dev": ".venv/bin/python -m backend serve --reload",
