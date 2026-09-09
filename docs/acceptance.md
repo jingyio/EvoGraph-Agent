@@ -2,6 +2,8 @@
 
 当前默认后端已迁移到 Python/FastAPI，49 项 Python 测试与真实平台验收通过，详见 [Python 迁移验证](python-migration.md)。下文保留对应 TS 版本的历史验收结果，不能直接当作 Python 版本性能指标。
 
+开启单次响应批量工具调用后的同模型配对结果见 [Graph RSI 配对验证](rsi-batch-validation-2026-09-09.md)：客服 exception 与财务 changed 各一次，Graph RSI 和 ReAct 均通过完整业务状态校验；两组在线指标合计 LLM 请求减少 19.0%、输入 token 减少 23.8%、输出 token 减少 38.2%。该结果只有两个样本，报告文字仍有事实错误，不作为稳定平均收益或质量提升证明。
+
 ## 已执行
 
 - TypeScript 类型检查和 Vite 生产构建。
