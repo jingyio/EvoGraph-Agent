@@ -11,23 +11,28 @@ from .models import RunRequest
 from .service import RunService, tools_for
 from .platform_check import check_platforms
 from .evolution import EvolutionService, EvolutionRequest
+from .reliability import ReliabilityService, ReliabilityRequest
 
 
 def create_app(service=None):
     service = service or RunService()
     evolution = EvolutionService(service)
+    reliability = ReliabilityService(service)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
         evolution.restore()
+        reliability.restore()
         try:
             yield
         finally:
+            await reliability.shutdown()
             await evolution.shutdown()
             await service.shutdown()
     app = FastAPI(title='RSI Agent Lab', version='0.3.0', lifespan=lifespan)
     app.state.service = service
     app.state.evolution = evolution
+    app.state.reliability = reliability
 
     @app.middleware('http')
     async def api_boundary(request, call_next):
@@ -74,7 +79,34 @@ def create_app(service=None):
 
     @app.post('/api/evolutions', status_code=202)
     async def start_evolution(request: EvolutionRequest):
+        if reliability.tasks:
+            raise ValueError('稳定性实验正在运行，请等待或停止后再启动其他执行')
         return await evolution.start(request)
+
+    @app.get('/api/reliability')
+    def reliability_history():
+        return sorted(reliability.items.values(), key=lambda item: item['createdAt'], reverse=True)
+
+    @app.post('/api/reliability', status_code=202)
+    async def start_reliability(request: ReliabilityRequest):
+        if evolution.tasks:
+            raise ValueError('请等待进化实验结束后再开始稳定性对照')
+        return await reliability.start(request)
+
+    @app.post('/api/reliability/{key}/cancel')
+    async def cancel_reliability(key: str):
+        if key not in reliability.items:
+            raise HTTPException(404, 'Experiment not found')
+        task = reliability.tasks.get(key)
+        if task:
+            task.cancel()
+        return {'cancelled': bool(task)}
+
+    @app.get('/api/reliability/{key}/export')
+    def export_reliability(key: str):
+        if key not in reliability.items:
+            raise HTTPException(404, 'Experiment not found')
+        return Response(json.dumps(reliability.items[key], ensure_ascii=False, indent=2), media_type='application/json', headers={'Content-Disposition': f'attachment; filename="reliability-{key}.json"'})
 
     @app.post('/api/evolutions/{key}/cancel')
     async def cancel_evolution(key: str):
@@ -97,6 +129,8 @@ def create_app(service=None):
 
     @app.post('/api/runs', status_code=202)
     async def start(request: RunRequest):
+        if reliability.tasks:
+            raise ValueError('稳定性实验正在运行，请等待或停止后再启动其他执行')
         run = await service.start(request.model_dump())
         return {'id': run['id']}
 

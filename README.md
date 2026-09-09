@@ -35,6 +35,8 @@ npm run verify:platforms
 
 “负 Motif · 失败反思”支持从失败与修复轨迹中学习局部字段绑定经验；财务工作台可独立启用，详见 [负 motif 范围、使用和计量](docs/negative-motifs.md)。
 
+“长程稳定性对照”按相同快照重复比较 ReAct、Graph 和 Graph＋负 motif，展示累计工具错误、任务状态与图执行归属，详见 [实验协议](docs/reliability.md)。
+
 ## 模型配置
 
 填写项目根目录 `.env`。新环境可从 `.env.example` 复制；已有配置不应覆盖。
