@@ -3,7 +3,8 @@ import { Play, Square, GitBranch, ExternalLink } from 'lucide-react';
 import { api } from './api';
 import type { Scenario, TaskGraph, RunMetrics } from '../shared/types';
 
-type Generation = { generation: number; parentGraphId: string | null; status: string; reason?: string; sourceRunId?: string; candidate?: TaskGraph; baselineRunId?: string; candidateRunId?: string; baselineMetrics?: RunMetrics; candidateMetrics?: RunMetrics };
+type NegativeReflection = { motifs: { id: string; reflection: string; validation: { toolCalls: number } }[]; unexplainedFailures: unknown[] };
+type Generation = { generation: number; parentGraphId: string | null; status: string; reason?: string; sourceRunId?: string; candidate?: TaskGraph; baselineRunId?: string; candidateRunId?: string; baselineMetrics?: RunMetrics; candidateMetrics?: RunMetrics; sourceReflection?: NegativeReflection; candidateReflection?: NegativeReflection };
 type Experiment = { id: string; scenario: Scenario; status: string; phase: string; totalModelRequests: number; totalTokens: number; rounds: Generation[] };
 const labels: Record<string, string> = { learning: '候选生成中', promoted: '暂定晋升', rejected: '拒绝晋升', stagnated: '结构停滞', completed: '已结束', running: '运行中', failed: '失败', cancelled: '已取消', interrupted: '已中断' };
 
@@ -51,6 +52,10 @@ export default function EvolutionPanel() {
         <h2>第 {row.generation} 轮 · {labels[row.status]}</h2>
         <p>父版本 {row.parentGraphId?.slice(0, 8) || 'ReAct 冷启动'} → 候选 {row.candidate?.id.slice(0, 8) || '待生成'}</p>
         <p>{row.reason}</p>
+        {[['来源失败反思', row.sourceReflection], ['候选失败反思', row.candidateReflection]].map(([label, value]) => {
+          const reflection = value as NegativeReflection | undefined;
+          return reflection && <div key={label as string}><p>{label as string}：局部验证通过 {reflection.motifs.length} 条 · 待分析 {reflection.unexplainedFailures.length} 条</p>{reflection.motifs.map(m => <p key={m.id}>{m.reflection} · 隔离重放 {m.validation.toolCalls} 次</p>)}</div>;
+        })}
         {row.candidate && <p>候选结构：{row.candidate.nodes.map(n => n.tool + (n.foreach ? '（遍历）' : '')).join(' → ')} · 影子读取 {row.candidate.validation.toolCalls} 次</p>}
         {row.baselineMetrics && row.candidateMetrics && <table style={{ width: '100%' }}><thead><tr><th>验证指标</th><th>父版本</th><th>候选版本</th></tr></thead><tbody>{(['modelRequests', 'toolCalls', 'toolErrors', 'inputTokens', 'outputTokens'] as const).map(key => <tr key={key}><td>{key}</td><td>{row.baselineMetrics![key]}</td><td>{row.candidateMetrics![key]}</td></tr>)}</tbody></table>}
         <div style={{ display: 'flex', gap: 20 }}>{[[row.sourceRunId, '来源轨迹'], [row.baselineRunId, '父版本验证'], [row.candidateRunId, '候选验证']].map(([id, label]) => id && <a key={id} href={`/api/runs/${id}/export/json`} className="text-button"><ExternalLink size={14} />{label}</a>)}</div>

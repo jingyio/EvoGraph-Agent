@@ -36,11 +36,18 @@ def system_prompt(run):
 调用 publish_report 后再给出最终答复。无能力或无可行方案时明确说明，不伪造完成。"""
 
 
-async def execute_run(run, provider, tools, max_steps=24, max_tools=60, timeout=180, graph=None, candidates=None):
+async def execute_run(run, provider, tools, max_steps=24, max_tools=60, timeout=180, graph=None, candidates=None, negative_motifs=None):
+    from .negative_motif import applicable as negative_applicable, matched_rows, GUIDANCE
     started = time.monotonic()
     context = ToolContext(run)
     metrics, known, signatures = run['metrics'], {t.name: t for t in tools}, {}
     messages = [{'role': 'system', 'content': system_prompt(run)}, {'role': 'user', 'content': run['request']['task']}]
+    active_negative = [m for m in negative_motifs or [] if negative_applicable(m, run['request'], tools)] if run['request'].get('negativeMotifs') else []
+    observed_payments = None
+    if run['request'].get('negativeMotifs'):
+        run['negativeMotif'] = {'loadedIds': [m['id'] for m in active_negative], 'guardHits': 0}
+        if active_negative:
+            messages[0]['content'] += '\n' + GUIDANCE
     if getattr(provider, 'settings', None):
         run['modelSettings'] = deepcopy(provider.settings)
 
@@ -81,6 +88,7 @@ async def execute_run(run, provider, tools, max_steps=24, max_tools=60, timeout=
         return result
 
     async def invoke(call, executor='model'):
+        nonlocal observed_payments
         await asyncio.sleep(0)
         if metrics['toolCalls'] >= max_tools:
             raise RunLimit('达到工具调用上限')
@@ -104,7 +112,16 @@ async def execute_run(run, provider, tools, max_steps=24, max_tools=60, timeout=
                 raise ValueError('Unknown tool: ' + name)
             if executor == 'graph' and tool.effect != 'read':
                 raise ValueError('图禁止调用非读取工具')
+            if active_negative and name == 'create_finance_case':
+                peers = matched_rows(args, observed_payments)
+                if peers and matched_rows(args, run['state']['payments']):
+                    run['negativeMotif']['guardHits'] += 1
+                    # Keep this rejected attempt in the normal error/call metrics.
+                    event('motif', '负 motif 命中：bankRef 错绑 entityId', {'motifId': active_negative[0]['id'], 'callId': call['id'], 'candidateEntityIds': [p['id'] for p in peers], 'dispatched': False})
+                    raise ValueError('负 motif 前置检查拒绝：entityId 使用了 bankRef；请从本次 evidenceIds 中选择回款 id：' + json.dumps([p['id'] for p in peers]))
             result = await tool.execute(args, context)
+            if name == 'list_payments':
+                observed_payments = deepcopy(result)
             observation = {'ok': True, 'result': result}
         except Exception as error:
             metrics['toolErrors'] += 1

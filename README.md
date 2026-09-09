@@ -33,6 +33,8 @@ npm run verify:platforms
 
 前后端独立开发：分别运行 `npm run dev:backend`（4317 API）和 `npm run dev:frontend`（5173 React）。在“递归进化实验”中启动独立的学习、验证、晋升闭环，详见 [递归进化范围与运行方式](docs/recursive-evolution.md)。
 
+“负 Motif · 失败反思”支持从失败与修复轨迹中学习局部字段绑定经验；财务工作台可独立启用，详见 [负 motif 范围、使用和计量](docs/negative-motifs.md)。
+
 ## 模型配置
 
 填写项目根目录 `.env`。新环境可从 `.env.example` 复制；已有配置不应覆盖。

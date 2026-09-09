@@ -29,15 +29,16 @@ export interface World {
 }
 export interface Metric { label: string; value: string; note?: string }
 export interface Report { title: string; summary: string; metrics: Metric[]; columns: string[]; rows: string[][]; findings: string[]; source: DataSource; createdAt: string }
-export interface RunEvent { seq: number; at: string; type: 'start' | 'model' | 'action' | 'observation' | 'finish' | 'error' | 'graph' | 'evaluation'; title: string; detail?: unknown; durationMs?: number }
+export interface RunEvent { seq: number; at: string; type: 'start' | 'model' | 'action' | 'observation' | 'finish' | 'error' | 'graph' | 'evaluation' | 'motif'; title: string; detail?: unknown; durationMs?: number }
 export interface RunMetrics { modelRequests: number; toolCalls: number; toolErrors: number; inputTokens: number | null; outputTokens: number | null; reasoningTokens?: number | null; usageComplete: boolean; durationMs: number }
 export type EvaluationProfile = 'auto' | 'invariants' | 'finance_full' | 'support_full';
-export interface RunRequest { scenario: Scenario; mode: RunMode; source: DataSource; task: string; strategy?: AgentStrategy; snapshot?: SnapshotVariant; evaluationProfile?: EvaluationProfile }
+export interface RunRequest { scenario: Scenario; mode: RunMode; source: DataSource; task: string; strategy?: AgentStrategy; snapshot?: SnapshotVariant; evaluationProfile?: EvaluationProfile; negativeMotifs?: boolean }
 export interface AgentRun {
   id: string; request: RunRequest; status: RunStatus; startedAt: string; finishedAt?: string;
   model: string | null; metrics: RunMetrics; events: RunEvent[]; initial: World; state: World;
   report?: Report; finalText?: string; error?: string;
   graph?: GraphExecution;
+  negativeMotif?: { loadedIds: string[]; guardHits: number };
   modelSettings?: { enableThinking: boolean; reasoningEnabled?: boolean; parallelToolCalls?: boolean };
   backend?: 'python';
   evaluation?: { status: 'passed' | 'failed' | 'not_evaluated'; scope: string; issues: { code: string; entityId: string; message: string }[]; note: string };

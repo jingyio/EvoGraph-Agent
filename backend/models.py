@@ -11,10 +11,13 @@ class RunRequest(BaseModel):
     strategy: Literal['react', 'graph'] = 'react'
     snapshot: Literal['base', 'changed', 'exception'] = 'base'
     evaluationProfile: Literal['auto', 'invariants', 'finance_full', 'support_full'] = 'auto'
+    negativeMotifs: bool = False
 
     @model_validator(mode='after')
     def validate_scope(self):
         from .domain import PRESETS
+        if self.negativeMotifs and (self.mode != 'live' or self.source != 'sandbox' or self.scenario != 'finance'):
+            raise ValueError('负 motif 当前仅支持真实模型财务沙箱任务')
         if self.mode == 'fixture' and (self.source != 'sandbox' or self.task != PRESETS[self.scenario]
                                       or self.strategy != 'react' or self.snapshot != 'base'):
             raise ValueError('离线示例仅支持原始沙箱预设任务，不可用作 Graph RSI。')

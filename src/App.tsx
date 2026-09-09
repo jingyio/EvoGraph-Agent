@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Database, FileText, Headphones, Layers3, LoaderCircle, Pause, Play, PlugZap, RefreshCw, Settings2, ShieldCheck, Sparkles, Terminal, TriangleAlert, Wrench, X } from 'lucide-react';
 import GraphPanel from './GraphPanel';
 import EvolutionPanel from './EvolutionPanel';
+import NegativeMotifPanel from './NegativeMotifPanel';
 import { api } from './api';
 import { PRESETS, type TaskGraph, type EvaluationProfile, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
 
@@ -17,12 +18,13 @@ export default function App() {
   const [scenario, setScenario] = useState<Scenario>('finance');
   const [mode, setMode] = useState<RunMode>('fixture');
   const [strategy, setStrategy] = useState<AgentStrategy>('react');
+  const [negativeMotifs, setNegativeMotifs] = useState(false);
   const [variant, setVariant] = useState<SnapshotVariant>('base');
   const [evaluationProfile, setEvaluationProfile] = useState<EvaluationProfile>('auto');
   const [graphs, setGraphs] = useState<TaskGraph[]>([]);
   const [source, setSource] = useState<DataSource>('sandbox');
   const [task, setTask] = useState(PRESETS.finance);
-  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution'>(window.location.hash === '#evolution' ? 'evolution' : 'workbench');
+  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution' | 'negative'>(window.location.hash === '#negative' ? 'negative' : window.location.hash === '#evolution' ? 'evolution' : 'workbench');
   const [tab, setTab] = useState<'overview' | 'trace' | 'report'>('overview');
   const [run, setRun] = useState<AgentRun | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
@@ -80,12 +82,13 @@ export default function App() {
   async function start() {
     setError(''); setSubmitting(true); setRun(null); setRunId(null); setTaskCollapsed(false);
     try {
-      const result = await api<{ id: string }>('/api/runs', { method: 'POST', body: JSON.stringify({ scenario, mode, source, task, strategy, snapshot: variant, evaluationProfile }) });
+      const result = await api<{ id: string }>('/api/runs', { method: 'POST', body: JSON.stringify({ scenario, mode, source, task, strategy, snapshot: variant, evaluationProfile, negativeMotifs: negativeMotifs && mode === 'live' && source === 'sandbox' && scenario === 'finance' }) });
       setRunId(result.id); setPage('workbench'); setTab('trace');
     } catch (error) { setError((error as Error).message); }
     finally { setSubmitting(false); }
   }
   async function loadHistory(item: History) {
+    setNegativeMotifs(Boolean(item.request.negativeMotifs));
     setEvaluationProfile(item.request.evaluationProfile || 'auto'); setStrategy(item.request.strategy || 'react'); setVariant(item.request.snapshot || 'base'); setScenario(item.request.scenario); setMode(item.request.mode); setSource(item.request.source); setTask(item.request.task); setRun(null); setRunId(item.id); setPage('workbench'); setTab('report'); setError('');
   }
   async function checkConnections() {
@@ -131,6 +134,7 @@ export default function App() {
       <button className={`nav-item ${page === 'workbench' && scenario === 'finance' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('finance')}><CircleDollarSign size={19} />财务运营<ChevronRight size={15} /></button>
       <button className={`nav-item ${page === 'workbench' && scenario === 'support' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('support')}><Headphones size={19} />客服运营<ChevronRight size={15} /></button>
       <div className="nav-label second">实验管理</div>
+      <button className={`nav-item ${page === 'negative' ? 'active' : ''}`} onClick={() => setPage('negative')}><TriangleAlert size={18} />负 Motif · 失败反思</button>
       <button className={`nav-item ${page === 'evolution' ? 'active' : ''}`} onClick={() => setPage('evolution')}><RefreshCw size={18} />递归进化实验</button>
       <button className={`nav-item ${page === 'tools' ? 'active' : ''}`} onClick={() => setPage('tools')}><Wrench size={18} />工具目录<span className="nav-count">{tools.length}</span></button>
       <button className={`nav-item ${page === 'platforms' ? 'active' : ''}`} onClick={() => setPage('platforms')}><PlugZap size={18} />平台连接</button>
@@ -145,6 +149,7 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
       <main>
+        {page === 'negative' && <NegativeMotifPanel run={run} />}
         {page === 'evolution' && <EvolutionPanel />}
         {error && <div className="error-banner" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="关闭错误提示"><X size={16} /></button></div>}
         {page === 'workbench' && <>
@@ -153,6 +158,7 @@ export default function App() {
           <section className={`task-card ${taskCollapsed ? 'collapsed' : ''}`}>
             <div className="task-top"><div className="section-title"><span className="icon-tile"><Sparkles size={19} /></span><div><h2>{taskCollapsed ? '本次任务已生成简报' : '交给数字员工'}</h2><p>{mode === 'fixture' ? '固定流程验证工具闭环；本模式不调用 LLM。' : '模型根据任务与工具观察，逐步决定下一项操作。'}</p></div></div><div className="task-top-controls">{run?.report && !busy && <button className="text-button" onClick={() => setTaskCollapsed(!taskCollapsed)}>{taskCollapsed ? '展开任务' : '收起任务'}<ChevronDown size={14} /></button>}{taskCollapsed && <button className="button secondary" disabled={busy} onClick={() => void start()}><RefreshCw size={14} />再次运行</button>}<div className="segmented"><button className={mode === 'fixture' ? 'selected' : ''} disabled={busy} onClick={() => changeMode('fixture')}>离线流程示例</button><button className={mode === 'live' && strategy === 'react' ? 'selected' : ''} disabled={busy} onClick={() => { changeMode('live'); setStrategy('react'); }}>真实模型 ReAct</button><button className={mode === 'live' && strategy === 'graph' ? 'selected' : ''} disabled={busy} onClick={() => { changeMode('live'); setStrategy('graph'); }}>Graph RSI</button></div></div></div>
             <textarea aria-label="任务说明" value={task} readOnly={mode === 'fixture'} disabled={busy} onChange={event => setTask(event.target.value)} />
+            {mode === 'live' && source === 'sandbox' && scenario === 'finance' && <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}><input type="checkbox" disabled={busy} checked={negativeMotifs} onChange={e => setNegativeMotifs(e.target.checked)} />启用已验证负 motif（可独立消融）</label>}
             <div className="task-bottom"><div className="task-options"><label><Database size={14} /><select aria-label="业务数据源" value={source} disabled={busy || mode === 'fixture'} onChange={event => { setSource(event.target.value as DataSource); setVariant('base'); setRun(null); setRunId(null); setTask(scenario === 'finance' ? '分页核查可见的应收发票和客户收款，读取必要详情，识别有依据的待核查事项并输出只读运营简报。不要修改账务。' : '读取可见工单及状态和优先级字典，核查工单详情和往来内容，识别服务风险并输出有依据的只读简报。不要发送消息或修改工单。'); }}><option value="sandbox">独立业务沙箱</option><option value={scenario === 'finance' ? 'erpnext' : 'zammad'} disabled={!config?.connectors[scenario === 'finance' ? 'erpnext' : 'zammad']}>{scenario === 'finance' ? 'ERPNext' : 'Zammad'} · 只读</option></select></label>{mode === 'live' && source === 'sandbox' && <select aria-label="业务快照" disabled={busy} value={variant} onChange={event => { setVariant(event.target.value as SnapshotVariant); setRun(null); setRunId(null); }}><option value="base">原始快照</option><option value="changed">新周次 · 新 ID 与金额</option><option value="exception">例外 · 请假与归属冲突</option></select>}{mode === 'live' && source === 'sandbox' && <select aria-label="结果校验目标" disabled={busy} value={evaluationProfile} onChange={event => setEvaluationProfile(event.target.value as EvaluationProfile)}><option value="auto">自动选择校验目标</option><option value="invariants">仅检查状态约束</option><option value={scenario + '_full'}>岗位完整流程</option></select>}<span className="tool-count"><Wrench size={14} />{tools.length} 个工具</span><span className={`mode-note ${mode === 'fixture' ? 'amber-text' : ''}`}>{mode === 'fixture' ? '固定预设 · 无模型指标' : config?.modelConfigured ? config.model : '尚未配置模型'}</span></div>
               {busy ? <button className="button secondary" onClick={() => runId && void api(`/api/runs/${runId}/cancel`, { method: 'POST', body: '{}' }).catch(error => setError(error.message))}><Pause size={16} />停止执行</button> : <button className="button primary" disabled={!config || !task.trim() || (mode === 'live' && !config.modelConfigured)} onClick={() => void start()}><Play size={16} fill="currentColor" />{mode === 'fixture' ? '运行流程示例' : '开始执行'}<ArrowRight size={17} /></button>}
             </div>

@@ -11,6 +11,7 @@ from .graph_store import GraphStore, write_private
 from .model_client import ModelClient, ModelOptions
 from .runtime import create_run, execute_run
 from .tools import sandbox_tools
+from .negative_motif import NegativeMotifStore
 
 
 class EvolutionRequest(BaseModel):
@@ -99,6 +100,7 @@ class EvolutionService:
 
     async def work(self, item):
         store = GraphStore(self.directory / item['id'] / 'candidates')
+        negative = NegativeMotifStore(self.directory / item['id'] / 'negative-motifs')
         parent = None
         try:
             for index in range(item['maxRounds']):
@@ -106,6 +108,7 @@ class EvolutionService:
                 item['rounds'].append(row)
                 training = await self.execute(item, 'base' if index == 0 else 'changed', parent, '执行当前版本并采集轨迹')
                 row['sourceRunId'] = training['id']
+                row['sourceReflection'] = await negative.learn(training, sandbox_tools(item['scenario']))
                 if training['evaluation']['status'] != 'passed' or training['status'] != 'completed':
                     row.update(status='rejected', reason='来源任务未通过完整状态校验')
                     break
@@ -119,6 +122,7 @@ class EvolutionService:
                 validation = 'changed' if index == 0 else 'exception'
                 baseline = await self.execute(item, validation, parent, '验证快照：运行父版本')
                 trial = await self.execute(item, validation, candidate, '验证快照：运行候选版本')
+                row['candidateReflection'] = await negative.learn(trial, sandbox_tools(item['scenario']))
                 row.update(baselineRunId=baseline['id'], candidateRunId=trial['id'],
                            baselineMetrics=baseline['metrics'], candidateMetrics=trial['metrics'],
                            baselineEvaluation=baseline['evaluation'], candidateEvaluation=trial['evaluation'], validationSnapshot=validation)

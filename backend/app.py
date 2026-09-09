@@ -124,6 +124,15 @@ def create_app(service=None):
     def graphs(scenario: Optional[Literal['finance', 'support']] = None, source: Optional[Literal['sandbox', 'erpnext', 'zammad']] = None):
         return service.graphs.list(scenario, source)
 
+    @app.get('/api/negative-motifs')
+    def negative_motifs():
+        return list(service.negative.motifs.values())
+
+    @app.post('/api/runs/{key}/reflect')
+    async def reflect(key: str):
+        get_run(key)
+        return await service.reflect(key)
+
     @app.get('/api/graphs/{key}/export')
     def export_graph(key: str):
         if key not in service.graphs.graphs:
