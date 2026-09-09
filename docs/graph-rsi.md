@@ -1,4 +1,6 @@
-# Graph RSI v0.2
+# Graph RSI · 读取图原型
+
+当前执行器已迁移至 Python，见 [项目说明](../README.md)。下文的 TS 初版设计保留为背景；当前实现分别位于 backend/autotool.py、gagent.py、graph.py、graph_store.py，模型接口位于 backend/model_client.py。Python 版本增加了任务状态校验及失败经验拦截。
 
 实现借鉴本项目对 AutoTool、G-Agent 和 MotifAgent 的职责划分，未声称复现某篇同名论文或官方实现。当前范围是**从真实执行轨迹学习读取图，并在后续任务中重新绑定数据、选择图节点和执行**。
 
@@ -61,10 +63,10 @@ AutoTool 自动生成的工具与手写列表工具共同进入同一个 registr
 | `GET /api/snapshot?variant=changed` | 查看变体业务数据 |
 | `POST /api/runs` | 使用新增 strategy 和 snapshot 字段运行 |
 
-新增请求字段：`strategy: "react" | "graph"`，`snapshot: "base" | "changed" | "exception"`。旧请求默认 react/base；外部平台只能使用 base（真实实例数据）。任务图和运行产物保存在被 Git 忽略的 `artifacts/` 中，图文件权限为 0600。
+新增请求字段：`strategy: "react" | "graph"`，`snapshot: "base" | "changed" | "exception"`。旧请求默认 react/base；外部平台只能使用 base（真实实例数据）。任务图和运行产物保存在被 Git 忽略的 `artifacts/` 中（Python 图位于 graphs-python 子目录），图文件权限为 0600。
 
 ## 后续需要完成的研究工作
 
 当前是可验证的受限原型。完整任务图的条件分支与受控写入、独立质量评分器、多任务泛化、大小模型规划路由、自动发现平台规格、失败案例归因和更成熟的图版本选择都尚未完成。不要将“读取调用可执行”替代为“RSI 已提高质量”，也不要将旧数据回放作为跨任务复用结果。
 
-所有模型 HTTP 调用集中在 `server/model-client.ts`，模块通过 `model-types.ts` 的接口注入调用。按用户要求关闭 thinking，并记录供应商返回 reasoning token。首次关闭思考的同快照配对和客服失败案例见 [验证记录](graph-rsi-validation-2026-09-09.md)。
+所有模型 HTTP 调用集中在 `backend/model_client.py`，模块通过 `model_client.py` 的接口注入调用。按用户要求关闭 thinking，并记录供应商返回 reasoning token。首次关闭思考的同快照配对和客服失败案例见 [验证记录](graph-rsi-validation-2026-09-09.md)。

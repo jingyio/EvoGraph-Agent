@@ -89,7 +89,7 @@ npm run verify:platforms
 
 ## API 验收与快照
 
-`npm run verify:platforms` 仅允许指向上述本地实验隧道，校验每页 2 条的跨页读取、真实发票与收款关系、工单文章、SLA 截止时间、默认组不可见，以及只读用户同值更新返回 403。结果保存在 `artifacts/platform-deployment/verification.json`。
+`npm run verify:platforms` 现由 Python 模块 backend/verify_platforms.py 执行，仅允许指向上述本地实验隧道，校验每页 2 条的跨页读取、真实发票与收款关系、工单文章、SLA 截止时间、默认组不可见，以及只读用户同值更新返回 403。结果保存在 `artifacts/platform-deployment/verification.json`。
 
 ```bash
 ssh v100 'python3 /home/jingyij/rsi-business-lab/backup.py'

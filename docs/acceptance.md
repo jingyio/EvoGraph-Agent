@@ -1,5 +1,7 @@
 # 基础版本验收
 
+当前默认后端已迁移到 Python/FastAPI，48 项 Python 测试与真实平台验收通过，详见 [Python 迁移验证](python-migration.md)。下文保留对应 TS 版本的历史验收结果，不能直接当作 Python 版本性能指标。
+
 ## 已执行
 
 - TypeScript 类型检查和 Vite 生产构建。

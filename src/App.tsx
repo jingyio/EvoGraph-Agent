@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Database, FileText, Headphones, Layers3, LoaderCircle, Pause, Play, PlugZap, RefreshCw, Settings2, ShieldCheck, Sparkles, Terminal, TriangleAlert, Wrench, X } from 'lucide-react';
 import GraphPanel from './GraphPanel';
-import { PRESETS, type TaskGraph, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
+import { PRESETS, type TaskGraph, type EvaluationProfile, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
@@ -22,6 +22,7 @@ export default function App() {
   const [mode, setMode] = useState<RunMode>('fixture');
   const [strategy, setStrategy] = useState<AgentStrategy>('react');
   const [variant, setVariant] = useState<SnapshotVariant>('base');
+  const [evaluationProfile, setEvaluationProfile] = useState<EvaluationProfile>('auto');
   const [graphs, setGraphs] = useState<TaskGraph[]>([]);
   const [source, setSource] = useState<DataSource>('sandbox');
   const [task, setTask] = useState(PRESETS.finance);
@@ -77,19 +78,19 @@ export default function App() {
   }, [runId]);
 
   function changeScenario(next: Scenario) {
-    setScenario(next); setTask(PRESETS[next]); setRun(null); setRunId(null); setSource('sandbox'); setPage('workbench'); setTab('overview'); setError(''); setTaskCollapsed(false); setVariant('base');
+    setScenario(next); setTask(PRESETS[next]); setRun(null); setRunId(null); setSource('sandbox'); setPage('workbench'); setTab('overview'); setError(''); setTaskCollapsed(false); setVariant('base'); setEvaluationProfile('auto');
   }
-  function changeMode(next: RunMode) { setMode(next); setRun(null); setRunId(null); setTaskCollapsed(false); if (next === 'fixture') { setStrategy('react'); setVariant('base'); setTask(PRESETS[scenario]); setSource('sandbox'); } }
+  function changeMode(next: RunMode) { setMode(next); setRun(null); setRunId(null); setTaskCollapsed(false); if (next === 'fixture') { setStrategy('react'); setVariant('base'); setEvaluationProfile('auto'); setTask(PRESETS[scenario]); setSource('sandbox'); } }
   async function start() {
     setError(''); setSubmitting(true); setRun(null); setRunId(null); setTaskCollapsed(false);
     try {
-      const result = await api<{ id: string }>('/api/runs', { method: 'POST', body: JSON.stringify({ scenario, mode, source, task, strategy, snapshot: variant }) });
+      const result = await api<{ id: string }>('/api/runs', { method: 'POST', body: JSON.stringify({ scenario, mode, source, task, strategy, snapshot: variant, evaluationProfile }) });
       setRunId(result.id); setPage('workbench'); setTab('trace');
     } catch (error) { setError((error as Error).message); }
     finally { setSubmitting(false); }
   }
   async function loadHistory(item: History) {
-    setStrategy(item.request.strategy || 'react'); setVariant(item.request.snapshot || 'base'); setScenario(item.request.scenario); setMode(item.request.mode); setSource(item.request.source); setTask(item.request.task); setRun(null); setRunId(item.id); setPage('workbench'); setTab('report'); setError('');
+    setEvaluationProfile(item.request.evaluationProfile || 'auto'); setStrategy(item.request.strategy || 'react'); setVariant(item.request.snapshot || 'base'); setScenario(item.request.scenario); setMode(item.request.mode); setSource(item.request.source); setTask(item.request.task); setRun(null); setRunId(item.id); setPage('workbench'); setTab('report'); setError('');
   }
   async function checkConnections() {
     setChecking(true); setError('');
@@ -103,7 +104,7 @@ export default function App() {
     try { await api(`/api/runs/${run.id}/learn`, { method: 'POST', body: '{}' }); setGraphs(await api<TaskGraph[]>(`/api/graphs?scenario=${scenario}&source=${source}`)); } catch (error) { setError((error as Error).message); }
   }
   function useGraph(graph: TaskGraph) {
-    setScenario(graph.scenario); setSource(graph.source); setTask(graph.task); setMode('live'); setStrategy('graph'); setRun(null); setRunId(null); setTaskCollapsed(false); setPage('workbench'); setTab('trace');
+    setEvaluationProfile('auto'); setScenario(graph.scenario); setSource(graph.source); setTask(graph.task); setMode('live'); setStrategy('graph'); setRun(null); setRunId(null); setTaskCollapsed(false); setPage('workbench'); setTab('trace');
     if (graph.source !== 'sandbox') setVariant('base');
   }
   const world = run?.state || snapshot;
@@ -142,23 +143,24 @@ export default function App() {
         {!history.length && <p>完成任务后，执行记录会保存在这里。</p>}
         {history.slice(0, 5).map(item => <button key={item.id} disabled={busy} onClick={() => void loadHistory(item)} className={runId === item.id ? 'selected' : ''}><span className={`dot ${item.status === 'completed' ? 'green' : 'amber'}`} /><span>{names[item.request.scenario]}<small>{new Date(item.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} · {item.request.mode === 'fixture' ? '离线示例' : item.request.strategy === 'graph' ? 'Graph RSI' : 'ReAct'}</small></span></button>)}
       </div>
-      <div className="sidebar-bottom"><div className="small-logo">R</div><div>ReAct 基础执行器<small>选择工具 → 观察 → 继续执行</small></div><span className="dot green" /></div>
+      <div className="sidebar-bottom"><div className="small-logo">R</div><div>{config?.backend === 'python' ? 'Python 执行器' : 'ReAct 执行器'}<small>选择工具 → 观察 → 继续执行</small></div><span className="dot green" /></div>
     </aside>
     <div className="main-shell">
       <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
       <main>
         {error && <div className="error-banner" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="关闭错误提示"><X size={16} /></button></div>}
         {page === 'workbench' && <>
-          <div className="page-heading"><div><div className="eyebrow">DIGITAL WORKFORCE / {scenario === 'finance' ? 'FINANCE' : 'CUSTOMER SERVICE'}</div><h1>{names[scenario]}工作台<span className="version">RSI v0.2</span></h1><p>{scenario === 'finance' ? '从回款核对到异常处理，每一步都有业务依据。' : '从工单巡检到回复准备，让每一项服务动作可追溯。'}</p></div><div className="snapshot-pill"><Database size={15} />{synthetic ? `合成业务快照 · ${variant === 'base' ? '原始' : variant === 'changed' ? '新周次' : '例外'}` : `${source} · 实例只读数据`}</div></div>
+          <div className="page-heading"><div><div className="eyebrow">DIGITAL WORKFORCE / {scenario === 'finance' ? 'FINANCE' : 'CUSTOMER SERVICE'}</div><h1>{names[scenario]}工作台<span className="version">Python · RSI v0.3</span></h1><p>{scenario === 'finance' ? '从回款核对到异常处理，每一步都有业务依据。' : '从工单巡检到回复准备，让每一项服务动作可追溯。'}</p></div><div className="snapshot-pill"><Database size={15} />{synthetic ? `合成业务快照 · ${variant === 'base' ? '原始' : variant === 'changed' ? '新周次' : '例外'}` : `${source} · 实例只读数据`}</div></div>
           <div className="stats-grid">{stats.map((stat, index) => <div className={`stat-card stat-${index}`} key={stat.label}><div className="stat-label">{stat.label}<stat.icon size={18} /></div><strong>{synthetic ? stat.value : '—'}</strong><small>{synthetic ? stat.note : '平台结果见工具观察与报告'}</small></div>)}</div>
           <section className={`task-card ${taskCollapsed ? 'collapsed' : ''}`}>
             <div className="task-top"><div className="section-title"><span className="icon-tile"><Sparkles size={19} /></span><div><h2>{taskCollapsed ? '本次任务已生成简报' : '交给数字员工'}</h2><p>{mode === 'fixture' ? '固定流程验证工具闭环；本模式不调用 LLM。' : '模型根据任务与工具观察，逐步决定下一项操作。'}</p></div></div><div className="task-top-controls">{run?.report && !busy && <button className="text-button" onClick={() => setTaskCollapsed(!taskCollapsed)}>{taskCollapsed ? '展开任务' : '收起任务'}<ChevronDown size={14} /></button>}{taskCollapsed && <button className="button secondary" disabled={busy} onClick={() => void start()}><RefreshCw size={14} />再次运行</button>}<div className="segmented"><button className={mode === 'fixture' ? 'selected' : ''} disabled={busy} onClick={() => changeMode('fixture')}>离线流程示例</button><button className={mode === 'live' && strategy === 'react' ? 'selected' : ''} disabled={busy} onClick={() => { changeMode('live'); setStrategy('react'); }}>真实模型 ReAct</button><button className={mode === 'live' && strategy === 'graph' ? 'selected' : ''} disabled={busy} onClick={() => { changeMode('live'); setStrategy('graph'); }}>Graph RSI</button></div></div></div>
             <textarea aria-label="任务说明" value={task} readOnly={mode === 'fixture'} disabled={busy} onChange={event => setTask(event.target.value)} />
-            <div className="task-bottom"><div className="task-options"><label><Database size={14} /><select aria-label="业务数据源" value={source} disabled={busy || mode === 'fixture'} onChange={event => { setSource(event.target.value as DataSource); setVariant('base'); setRun(null); setRunId(null); setTask(scenario === 'finance' ? '分页核查可见的应收发票和客户收款，读取必要详情，识别有依据的待核查事项并输出只读运营简报。不要修改账务。' : '读取可见工单及状态和优先级字典，核查工单详情和往来内容，识别服务风险并输出有依据的只读简报。不要发送消息或修改工单。'); }}><option value="sandbox">独立业务沙箱</option><option value={scenario === 'finance' ? 'erpnext' : 'zammad'} disabled={!config?.connectors[scenario === 'finance' ? 'erpnext' : 'zammad']}>{scenario === 'finance' ? 'ERPNext' : 'Zammad'} · 只读</option></select></label>{mode === 'live' && source === 'sandbox' && <select aria-label="业务快照" disabled={busy} value={variant} onChange={event => { setVariant(event.target.value as SnapshotVariant); setRun(null); setRunId(null); }}><option value="base">原始快照</option><option value="changed">新周次 · 新 ID 与金额</option><option value="exception">例外 · 请假与归属冲突</option></select>}<span className="tool-count"><Wrench size={14} />{tools.length} 个工具</span><span className={`mode-note ${mode === 'fixture' ? 'amber-text' : ''}`}>{mode === 'fixture' ? '固定预设 · 无模型指标' : config?.modelConfigured ? config.model : '尚未配置模型'}</span></div>
+            <div className="task-bottom"><div className="task-options"><label><Database size={14} /><select aria-label="业务数据源" value={source} disabled={busy || mode === 'fixture'} onChange={event => { setSource(event.target.value as DataSource); setVariant('base'); setRun(null); setRunId(null); setTask(scenario === 'finance' ? '分页核查可见的应收发票和客户收款，读取必要详情，识别有依据的待核查事项并输出只读运营简报。不要修改账务。' : '读取可见工单及状态和优先级字典，核查工单详情和往来内容，识别服务风险并输出有依据的只读简报。不要发送消息或修改工单。'); }}><option value="sandbox">独立业务沙箱</option><option value={scenario === 'finance' ? 'erpnext' : 'zammad'} disabled={!config?.connectors[scenario === 'finance' ? 'erpnext' : 'zammad']}>{scenario === 'finance' ? 'ERPNext' : 'Zammad'} · 只读</option></select></label>{mode === 'live' && source === 'sandbox' && <select aria-label="业务快照" disabled={busy} value={variant} onChange={event => { setVariant(event.target.value as SnapshotVariant); setRun(null); setRunId(null); }}><option value="base">原始快照</option><option value="changed">新周次 · 新 ID 与金额</option><option value="exception">例外 · 请假与归属冲突</option></select>}{mode === 'live' && source === 'sandbox' && <select aria-label="结果校验目标" disabled={busy} value={evaluationProfile} onChange={event => setEvaluationProfile(event.target.value as EvaluationProfile)}><option value="auto">自动选择校验目标</option><option value="invariants">仅检查状态约束</option><option value={scenario + '_full'}>岗位完整流程</option></select>}<span className="tool-count"><Wrench size={14} />{tools.length} 个工具</span><span className={`mode-note ${mode === 'fixture' ? 'amber-text' : ''}`}>{mode === 'fixture' ? '固定预设 · 无模型指标' : config?.modelConfigured ? config.model : '尚未配置模型'}</span></div>
               {busy ? <button className="button secondary" onClick={() => runId && void api(`/api/runs/${runId}/cancel`, { method: 'POST', body: '{}' }).catch(error => setError(error.message))}><Pause size={16} />停止执行</button> : <button className="button primary" disabled={!config || !task.trim() || (mode === 'live' && !config.modelConfigured)} onClick={() => void start()}><Play size={16} fill="currentColor" />{mode === 'fixture' ? '运行流程示例' : '开始执行'}<ArrowRight size={17} /></button>}
             </div>
             {mode === 'live' && !config?.modelConfigured && <div className="config-note">在项目 .env 中填写 LLM_API_KEY、LLM_MODEL 和服务地址后重启，即可执行自定义任务。密钥只保存在服务端。</div>}
           </section>
+          {run?.evaluation && <section className={`evaluation-card ${run.evaluation.status}`}><div><ShieldCheck size={18} /><strong>{run.evaluation.status === 'failed' ? '任务结果存在缺项' : run.evaluation.status === 'not_evaluated' ? '结果需要独立评估' : '业务状态校验通过'}</strong><span>{run.evaluation.scope}</span></div><p>{run.evaluation.note}</p>{run.evaluation.issues.length > 0 && <ul>{run.evaluation.issues.map((issue, index) => <li key={index}>{issue.entityId}：{issue.message}</li>)}</ul>}</section>}
           <div className="content-toolbar"><div className="tabs"><button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}><Database size={16} />业务数据</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => setTab('trace')}><Activity size={16} />执行轨迹{run && <span>{actionEvents.length}</span>}</button><button className={tab === 'report' ? 'active' : ''} onClick={() => setTab('report')}><FileText size={16} />运营简报{run?.report && <span className="ready-dot" />}</button></div><div className="run-state">{run ? <><span className={`dot ${run.status === 'completed' ? 'green' : 'amber'}`} />{statusNames[run.status]}<code>{run.id.slice(0, 8)}</code></> : '每次运行均从原始快照开始'}</div></div>
           <div className="workspace-grid"><div className="main-panel">
             {tab === 'overview' && <section className="panel"><div className="panel-heading"><h2>{scenario === 'finance' ? '应收账款明细' : '服务工单队列'}</h2><span>{synthetic ? `${scenario === 'finance' ? world?.invoices.length || 0 : active.length} 条记录` : '外部只读模式'}</span></div>{!synthetic ? <Empty icon={Database} title="平台原始数据保留在执行观察中" description="运行任务后，可在执行轨迹查看真实 API 字段与分页信息，并在运营简报查看引用的资源。" /> : world && <BusinessTable world={world} scenario={scenario} />}

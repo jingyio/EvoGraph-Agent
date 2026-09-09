@@ -1,0 +1,301 @@
+{
+  "asOf": "2026-09-15T10:00:00+08:00",
+  "invoices": [
+    {
+      "id": "NEXT-INV-001",
+      "customerId": "C-01",
+      "customer": "青禾科技",
+      "amountCents": 1440000,
+      "currency": "CNY",
+      "dueDate": "2026-09-07"
+    },
+    {
+      "id": "NEXT-INV-002",
+      "customerId": "C-02",
+      "customer": "远山零售",
+      "amountCents": 1020000,
+      "currency": "CNY",
+      "dueDate": "2026-09-04"
+    },
+    {
+      "id": "NEXT-INV-003",
+      "customerId": "C-03",
+      "customer": "星海制造",
+      "amountCents": 2400000,
+      "currency": "CNY",
+      "dueDate": "2026-09-15"
+    },
+    {
+      "id": "NEXT-INV-004",
+      "customerId": "C-04",
+      "customer": "白鹭设计",
+      "amountCents": 720000,
+      "currency": "CNY",
+      "dueDate": "2026-09-06"
+    },
+    {
+      "id": "NEXT-INV-005",
+      "customerId": "C-05",
+      "customer": "橙光教育",
+      "amountCents": 1800000,
+      "currency": "CNY",
+      "dueDate": "2026-09-05"
+    },
+    {
+      "id": "NEXT-INV-006",
+      "customerId": "C-03",
+      "customer": "星海制造",
+      "amountCents": 600000,
+      "currency": "CNY",
+      "dueDate": "2026-09-16"
+    },
+    {
+      "id": "NEXT-INV-007",
+      "customerId": "C-07",
+      "customer": "新桥数据",
+      "amountCents": 450000,
+      "currency": "CNY",
+      "dueDate": "2026-09-14"
+    }
+  ],
+  "payments": [
+    {
+      "id": "NEXT-PAY-001",
+      "customerId": "C-01",
+      "amountCents": 1440000,
+      "currency": "CNY",
+      "date": "2026-09-07",
+      "bankRef": "NEXT-BANK-1001",
+      "invoiceRefs": [
+        "NEXT-INV-001"
+      ]
+    },
+    {
+      "id": "NEXT-PAY-002",
+      "customerId": "C-02",
+      "amountCents": 600000,
+      "currency": "CNY",
+      "date": "2026-09-06",
+      "bankRef": "NEXT-BANK-1002",
+      "invoiceRefs": [
+        "NEXT-INV-002"
+      ]
+    },
+    {
+      "id": "NEXT-PAY-003",
+      "customerId": "C-03",
+      "amountCents": 3000000,
+      "currency": "CNY",
+      "date": "2026-09-07",
+      "bankRef": "NEXT-BANK-1003",
+      "invoiceRefs": [
+        "NEXT-INV-003",
+        "NEXT-INV-006"
+      ]
+    },
+    {
+      "id": "NEXT-PAY-004",
+      "customerId": "C-04",
+      "amountCents": 720000,
+      "currency": "CNY",
+      "date": "2026-09-07",
+      "bankRef": "NEXT-BANK-1004",
+      "invoiceRefs": [
+        "NEXT-INV-004"
+      ]
+    },
+    {
+      "id": "NEXT-PAY-005",
+      "customerId": "C-04",
+      "amountCents": 720000,
+      "currency": "CNY",
+      "date": "2026-09-07",
+      "bankRef": "NEXT-BANK-1004",
+      "invoiceRefs": [
+        "NEXT-INV-004"
+      ]
+    },
+    {
+      "id": "NEXT-PAY-006",
+      "customerId": "C-99",
+      "amountCents": 384000,
+      "currency": "CNY",
+      "date": "2026-09-08",
+      "bankRef": "NEXT-BANK-1006",
+      "invoiceRefs": []
+    },
+    {
+      "id": "NEXT-PAY-007",
+      "customerId": "C-WRONG",
+      "amountCents": 450000,
+      "currency": "CNY",
+      "date": "2026-09-14",
+      "bankRef": "NEXT-BANK-1007",
+      "invoiceRefs": [
+        "NEXT-INV-007"
+      ]
+    }
+  ],
+  "allocations": [],
+  "cases": [],
+  "tickets": [
+    {
+      "id": "NEXT-T-1001",
+      "subject": "付款成功，订单仍显示待支付",
+      "customer": "青禾科技",
+      "category": "billing",
+      "priority": "high",
+      "status": "open",
+      "ownerId": null,
+      "dueAt": "2026-09-15T09:30:00+08:00",
+      "body": "银行已经扣款，订单状态没有更新。请核查订单 A-3901。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1002",
+      "subject": "生产环境 API 大面积超时",
+      "customer": "星海制造",
+      "category": "technical",
+      "priority": "urgent",
+      "status": "open",
+      "ownerId": null,
+      "dueAt": "2026-09-15T10:30:00+08:00",
+      "body": "从早上开始请求超时，请协助排查。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1003",
+      "subject": "管理员无法登录账户",
+      "customer": "橙光教育",
+      "category": "account",
+      "priority": "high",
+      "status": "open",
+      "ownerId": null,
+      "dueAt": "2026-09-15T09:00:00+08:00",
+      "body": "管理员登录时提示凭证过期。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1004",
+      "subject": "申请更正发票抬头",
+      "customer": "远山零售",
+      "category": "billing",
+      "priority": "normal",
+      "status": "open",
+      "ownerId": null,
+      "dueAt": "2026-09-15T17:00:00+08:00",
+      "body": "本月发票抬头需要更正，想了解流程。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1005",
+      "subject": "导出 CSV 时出现乱码",
+      "customer": "白鹭设计",
+      "category": "technical",
+      "priority": "normal",
+      "status": "pending",
+      "ownerId": "A-02",
+      "dueAt": "2026-09-16T10:00:00+08:00",
+      "body": "在表格软件打开 CSV 后中文乱码。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1006",
+      "subject": "账户信息修改已确认",
+      "customer": "山岚咨询",
+      "category": "account",
+      "priority": "low",
+      "status": "closed",
+      "ownerId": "A-03",
+      "dueAt": "2026-09-07T17:00:00+08:00",
+      "body": "客户已确认完成。",
+      "version": 3
+    },
+    {
+      "id": "NEXT-T-1007",
+      "subject": "新客户需要重置登录凭证",
+      "customer": "新桥数据",
+      "category": "account",
+      "priority": "normal",
+      "status": "open",
+      "ownerId": null,
+      "dueAt": "2026-09-15T16:00:00+08:00",
+      "body": "需要了解官方账户恢复步骤。",
+      "version": 1
+    }
+  ],
+  "agents": [
+    {
+      "id": "A-01",
+      "name": "林悦",
+      "skills": [
+        "billing"
+      ],
+      "capacity": 2,
+      "available": true
+    },
+    {
+      "id": "A-02",
+      "name": "陈卓",
+      "skills": [
+        "technical"
+      ],
+      "capacity": 2,
+      "available": false
+    },
+    {
+      "id": "A-03",
+      "name": "许宁",
+      "skills": [
+        "account",
+        "billing"
+      ],
+      "capacity": 2,
+      "available": true
+    },
+    {
+      "id": "A-04",
+      "name": "周可",
+      "skills": [
+        "technical",
+        "account"
+      ],
+      "capacity": 3,
+      "available": false
+    }
+  ],
+  "knowledge": [
+    {
+      "id": "KB-01",
+      "category": "billing",
+      "title": "付款状态核验",
+      "body": "先核对订单号、银行流水与付款时间。重复扣款须交财务核查，核实前不承诺退款或到账。"
+    },
+    {
+      "id": "KB-02",
+      "category": "billing",
+      "title": "发票信息更正",
+      "body": "收集原发票号、正确抬头和税号，转交开票专员确认更正流程；不索取银行卡密码。"
+    },
+    {
+      "id": "KB-03",
+      "category": "technical",
+      "title": "服务超时排查",
+      "body": "收集错误码、发生时间、请求 ID 和影响范围，核查服务状态后升级技术团队；不要索取 API 密钥。"
+    },
+    {
+      "id": "KB-04",
+      "category": "technical",
+      "title": "CSV 编码说明",
+      "body": "建议通过数据导入选择 UTF-8 编码。若仍异常，提供已去除敏感数据的最小样本。"
+    },
+    {
+      "id": "KB-05",
+      "category": "account",
+      "title": "登录凭证过期",
+      "body": "通过官方密码重置入口重新验证账户。不要在工单中提供密码或验证码。无法恢复时升级账户支持。"
+    }
+  ],
+  "drafts": [],
+  "escalations": []
+}

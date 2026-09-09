@@ -1,0 +1,34 @@
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / '.env')
+
+
+def integer(name, default, minimum, maximum):
+    value = int(os.getenv(name, str(default)))
+    if not minimum <= value <= maximum:
+        raise ValueError(f'{name} must be {minimum}..{maximum}')
+    return value
+
+
+PORT = integer('PORT', 4317, 1024, 65535)
+MODEL = os.getenv('LLM_MODEL', '')
+API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY', '')
+BASE_URL = os.getenv('LLM_BASE_URL') or os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+MODEL_TIMEOUT = integer('LLM_TIMEOUT_MS', 60000, 100, 300000) / 1000
+MAX_STEPS = integer('AGENT_MAX_STEPS', 24, 1, 100)
+MAX_TOOLS = integer('AGENT_MAX_TOOL_CALLS', 60, 1, 200)
+RUN_TIMEOUT = integer('AGENT_TIMEOUT_MS', 180000, 1000, 900000) / 1000
+ARTIFACTS = ROOT / 'artifacts'
+
+
+def public_config():
+    from .domain import PRESETS
+    return {'modelConfigured': bool(API_KEY and MODEL), 'model': MODEL or None,
+            'maxSteps': MAX_STEPS, 'backend': 'python', 'enableThinking': False,
+            'connectors': {
+                'erpnext': all(os.getenv(key) for key in ['ERPNEXT_BASE_URL', 'ERPNEXT_API_KEY', 'ERPNEXT_API_SECRET']),
+                'zammad': all(os.getenv(key) for key in ['ZAMMAD_BASE_URL', 'ZAMMAD_API_TOKEN'])},
+            'presets': PRESETS}

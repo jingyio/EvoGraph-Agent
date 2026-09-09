@@ -29,15 +29,18 @@ export interface World {
 }
 export interface Metric { label: string; value: string; note?: string }
 export interface Report { title: string; summary: string; metrics: Metric[]; columns: string[]; rows: string[][]; findings: string[]; source: DataSource; createdAt: string }
-export interface RunEvent { seq: number; at: string; type: 'start' | 'model' | 'action' | 'observation' | 'finish' | 'error' | 'graph'; title: string; detail?: unknown; durationMs?: number }
+export interface RunEvent { seq: number; at: string; type: 'start' | 'model' | 'action' | 'observation' | 'finish' | 'error' | 'graph' | 'evaluation'; title: string; detail?: unknown; durationMs?: number }
 export interface RunMetrics { modelRequests: number; toolCalls: number; toolErrors: number; inputTokens: number | null; outputTokens: number | null; reasoningTokens?: number | null; usageComplete: boolean; durationMs: number }
-export interface RunRequest { scenario: Scenario; mode: RunMode; source: DataSource; task: string; strategy?: AgentStrategy; snapshot?: SnapshotVariant }
+export type EvaluationProfile = 'auto' | 'invariants' | 'finance_full' | 'support_full';
+export interface RunRequest { scenario: Scenario; mode: RunMode; source: DataSource; task: string; strategy?: AgentStrategy; snapshot?: SnapshotVariant; evaluationProfile?: EvaluationProfile }
 export interface AgentRun {
   id: string; request: RunRequest; status: RunStatus; startedAt: string; finishedAt?: string;
   model: string | null; metrics: RunMetrics; events: RunEvent[]; initial: World; state: World;
   report?: Report; finalText?: string; error?: string;
   graph?: GraphExecution;
   modelSettings?: { enableThinking: boolean; reasoningEnabled?: boolean };
+  backend?: 'python';
+  evaluation?: { status: 'passed' | 'failed' | 'not_evaluated'; scope: string; issues: { code: string; entityId: string; message: string }[]; note: string };
 }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type GraphBinding = { kind: 'literal'; value: JsonValue } | { kind: 'item'; path: string[] } | { kind: 'result'; nodeId: string; path: string[] };
@@ -61,7 +64,7 @@ export interface GraphExecution {
   selection?: 'exact' | 'adapted' | 'none'; plannerRequests?: number; selectedNodeIds?: string[];
 }
 export interface ToolCard { name: string; description: string; effect: 'read' | 'sandbox-write' | 'artifact'; parameters: Record<string, unknown>; origin?: { kind: 'autotool'; spec: string; operationId: string; digest: string } }
-export interface PublicConfig { modelConfigured: boolean; model: string | null; maxSteps: number; connectors: { erpnext: boolean; zammad: boolean }; presets: Record<Scenario, string> }
+export interface PublicConfig { modelConfigured: boolean; model: string | null; maxSteps: number; backend?: string; enableThinking?: boolean; connectors: { erpnext: boolean; zammad: boolean }; presets: Record<Scenario, string> }
 
 export const PRESETS: Record<Scenario, string> = {
   finance: '核对当前快照的全部回款与应收。仅在客户、币种和发票引用一致且无重复银行流水时分配回款；处理部分回款，登记疑似重复、无法匹配和逾期异常，输出有记录依据的对账简报。',

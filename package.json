@@ -1,35 +1,31 @@
 {
   "name": "rsi-agent-lab",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "tsx server/index.ts",
+    "dev": ".venv/bin/python -m backend serve --reload",
     "build": "tsc --noEmit && vite build",
-    "start": "NODE_ENV=production tsx server/index.ts",
-    "test": "tsx --test tests/*.test.ts",
-    "check": "tsc --noEmit",
-    "demo": "tsx server/cli.ts",
-    "platforms": "tsx server/platform-check.ts",
-    "verify:platforms": "tsx deploy/verify-platforms.ts"
+    "start": ".venv/bin/python -m backend serve",
+    "test": ".venv/bin/python -m pytest -q",
+    "check": ".venv/bin/python -m compileall -q backend && tsc --noEmit",
+    "demo": ".venv/bin/python -m backend demo",
+    "platforms": ".venv/bin/python -m backend platforms",
+    "verify:platforms": ".venv/bin/python -m backend.verify_platforms"
   },
   "dependencies": {
-    "dotenv": "^16.6.1",
-    "express": "^5.1.0",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.25.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
     "@types/node": "^22.16.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.7.0",
-    "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }

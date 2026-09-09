@@ -1,138 +1,116 @@
-# 数字员工 ReAct Lab
+# 数字员工 RSI Lab · Python 后端
 
-财务运营与客服运营共用的基础 ReAct Agent，配有 React + TypeScript 本地工作台。这里的 **ReAct** 指模型选择工具、读取观察、继续执行的循环；前端也使用 React。
+React/TypeScript 展示界面 + Python/FastAPI Agent 后端，覆盖财务运营与客服运营。模型接口、业务工具、AutoTool、G-Agent 风格经验规划和 NetworkX 任务图均使用 Python。
 
-当前版本包含普通 ReAct 基线与 **Graph RSI v0.2 受限原型**：从真实轨迹学习读取图、检索历史经验、选择可复用节点、按本次数据绑定执行和回退；部分平台工具由 OpenAPI 规格生成。具体能力与边界见 [Graph RSI 说明](docs/graph-rsi.md)，不等同于完整论文复现或已证明 RSI 收益。
+TS 原型保存在 Git 提交 `e63b138`，当前工作树不再维护第二套后端。真实运行和历史验证结果不会因迁移被重写。
 
-## 快速运行
+## 安装与启动
 
-需要 Node.js 22+。无需 Docker，也不需要模型密钥即可验证离线固定流程。
+需要 Python 3.9+，Node 22+ 仅用于前端安装和构建。当前机器已创建 `.venv` 并安装依赖。
 
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.lock.txt
 npm install
-npm run dev
-```
-
-打开 <http://127.0.0.1:4317>。在财务运营或客服运营页面点击“运行流程示例”，可查看业务状态、执行轨迹、简报和历史记录。
-
-```bash
-npm run demo -- finance
-npm run demo -- support
-npm test
 npm run build
-# 生产构建后运行（需先停止相同端口的 dev 服务）：
 npm start
 ```
 
-运行结果自动保存在 `artifacts/<run-id>/run.json` 与 `report.md`。目录默认仅当前用户可访问；`.env`、运行记录和依赖均已加入 `.gitignore`。
-
-## 两种执行模式
-
-| 模式 | 实际行为 | 可用于什么 |
-|---|---|---|
-| 离线流程示例 | 固定的测试程序驱动真实业务工具，使用同一执行器并保存真实沙箱状态；无 LLM 调用 | UI 演示、工具闭环、回归验证；也可以作为固定工作流基线的起点 |
-| 真实模型 ReAct | 调用配置的模型，由模型逐轮选择工具、消费观察并产生结论 | 自定义任务、普通 Agent 基线与后续 RSI 对比 |
-| Graph RSI | 复用经过影子验证的历史读取图，必要时进行经验规划，再由真实模型处理其余任务 | 任务图复用、参数绑定、回退与后续收益评估 |
-
-离线示例只接受界面显示的固定任务，服务端拒绝离线模式的自定义提示，避免“用户输入被忽略但仍显示完成”。离线耗时与 token=0 **不能**作为 RSI 或模型性能结果。未配置模型时，界面明确提示缺少配置，不会默默回退为脚本。
-
-## 接入真实模型
+打开 <http://127.0.0.1:4317>。FastAPI 同时提供业务 API 和构建后的 React 页面；接口文档在 <http://127.0.0.1:4317/docs>。
 
 ```bash
-cp .env.example .env
-```
-
-在 `.env` 填写：
-
-```dotenv
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=填写服务端密钥
-LLM_MODEL=填写该服务实际支持的模型标识
-```
-
-可使用支持 Chat Completions + function calling 的兼容服务。`LLM_BASE_URL` 是 API 基础路径，不要包含末尾 `/chat/completions`。代码不猜测模型名称，也不读取 Codex 登录凭据。保存配置后重启服务，在工作台选择“真实模型 ReAct”。命令行也可使用：
-
-```bash
-npm run demo -- finance --live
-npm run demo -- support --live
-```
-
-模型按官方 [Function calling](https://developers.openai.com/api/docs/guides/function-calling) 协议接入：发送工具 schema，追加 assistant tool_calls，按原始 `tool_call_id` 回传观察，再继续请求。服务商需支持该协议。2026-09-09 已使用用户配置的 `qwen/qwen3.8-flash` 完成财务、客服各一次真实模型沙箱运行；业务状态校验通过，简报仍有个别文字统计错误。详见 [首次真实模型验证](docs/live-model-validation-2026-09-09.md)。这不等于真实 ERPNext/Zammad 联调或多样本质量评测。
-
-每次模型请求都计数，包括失败请求；input/output token 使用供应商实际 usage。缺失 usage 会显示“未知”或“不完整”，不估算成零。不自动重试计费请求。原始内部推理字段不会记录或展示，仅保留操作说明、工具与最终答复。
-
-按用户要求，模型 HTTP 请求统一由 `server/model-client.ts` 发出，ReAct 和经验规划器均通过同一接口调用。请求固定发送 `enable_thinking: false`；OpenRouter 额外发送 `reasoning: { enabled: false }`。运行记录保存实际请求设置，以及供应商提供的 reasoning token 合计，不把“没有展示思考文本”当作“已关闭思考”。
-
-## 财务运营沙箱
-
-- 6 张发票、6 条回款，固定业务时钟为 2026-09-08 10:00（UTC+8）。
-- 覆盖准确匹配、部分回款、一笔回款对应多张发票、疑似重复银行流水、无法识别用途的回款和逾期余额。
-- 9 个工具：读取业务时间、发票列表、回款列表、发票详情、匹配预览、保存分配、查询逾期、登记异常、生成报告。
-- 金额使用整数分；批量分配原子校验。禁止跨客户、跨币种、无引用和超额匹配；相同请求幂等。
-- 对相同银行流水的两条记录都保留待核查，不能擅自选择其中一条记账。
-- 固定示例验证结果：应收 ¥66,500，已分配 ¥42,000，剩余应收 ¥24,500，登记 5 个核查事项。
-
-这些是合成案例的真实执行结果，不代表模型质量测试或现实回款收益。沙箱仅覆盖单币种的简化应收分配；不是会计总账或完整银行对账系统。
-
-## 客服运营沙箱
-
-- 6 个工单，其中 5 个未关闭；4 名坐席、5 篇知识文章。
-- 覆盖紧急问题、SLA 超时、坐席休假、技能和容量约束。
-- 10 个工具：业务时间、工单列表、工单详情、SLA 风险、坐席列表、分派、知识检索、草稿保存、升级、报告。
-- 工单分派校验版本号、技能、可用状态和容量。草稿引用实际知识文章，保留 `sent: false`。
-- 固定示例验证结果：5 个未关闭工单均已分派，保存 5 个草稿，登记 2 个超时升级；原有 2 个 SLA 超时不会因分派而消失。
-
-没有邮件发送、对客发送或自动关闭工具。知识库采用简单分类和词面匹配，尚未接入 embedding/RAG。
-
-## 外部平台
-
-2026-09-09 已在 v100 部署 ERPNext 与 Zammad，初始化合成业务数据并接入本地工作台。通过 SSH 隧道访问 <http://127.0.0.1:18080> 和 <http://127.0.0.1:18081>；本地 `deploy/runtime/platform-access.json` 保存测试平台登录信息，已被 Git 忽略。部署、隧道和备份说明见 [deploy/README.md](deploy/README.md)，真实 API 与 ReAct 验证见 [部署验收](docs/platform-deployment-validation-2026-09-09.md)。
-
-详细选型调研见 [docs/platform-research.md](docs/platform-research.md)。
-
-- 财务：ERPNext。提供已提交销售发票、客户收款、客户主数据的分页读取及详情工具。
-- 客服：Zammad。提供工单分页、工单详情、往来内容、状态与优先级字典。
-- Frappe Helpdesk：已完成文档调研，是共用 Frappe 技术栈的候选；本版本没有实现其连接器。
-
-配置 `.env` 中对应地址和 API 凭据后：
-
-```bash
+npm test                 # Python pytest
+npm run check            # Python 语法检查 + 前端类型检查
+npm run build            # React 生产构建
+npm run dev              # Python 后端热重载；前端改动后需重新 build
+npm run demo -- --scenario finance
+npm run demo -- --scenario support
 npm run platforms
-# 针对本项目已部署种子数据的真实 API 与权限验收：
 npm run verify:platforms
 ```
 
-也可在界面“平台连接”点击“检查 API 连接”。它会请求相关业务端点，区分未配置、可达和失败。可达只代表这些读取端点通过；本次另用 `verify:platforms` 验证了分页、详情、业务数据和只读用户写入被拒绝。
+直接运行 Python 也可以：`.venv/bin/python -m backend serve`。
 
-外部平台必须搭配真实模型运行。外部连接目前**全部只读**，支持核查和报告，不执行付款、账务分配、工单修改或消息发送。真实平台金额保留原生字段及币种，不自动映射到简化沙箱；外部结果不会混入模拟数据。读取报告要求引用已观察的资源 ID，但业务结论仍需任务级评估。
+## 模型配置
 
-## 结构
+填写项目根目录 `.env`。新环境可从 `.env.example` 复制；已有配置不应覆盖。
 
-```text
-src/                  React 工作台、业务表格、执行记录、报告
-shared/               类型定义和预设任务
-server/runtime.ts     ReAct 循环、观察回传、限额、取消和计量
-server/model-client.ts 唯一模型 HTTP 接口与关闭思考参数
-server/model-types.ts  注入给各模块的模型接口类型
-server/fixture-provider.ts 明确标记的离线固定流程
-server/tools.ts       schema 校验、确定性业务规则和沙箱写工具
-server/connectors.ts  ERPNext / Zammad 只读适配器
-server/autotool.ts    从受控 OpenAPI 规格获取平台工具包装
-server/gagent.ts      历史图检索、模型节点选择和依赖补齐
-server/graph.ts       轨迹编译、参数绑定和 DAG 执行
-server/graph-store.ts 影子验证、图版本持久化和适用性检查
-specs/                已核验的平台读取 API 规格子集
-server/seed.ts        合成业务数据、固定时钟
-server/reports.ts     同一模板的确定性统计与 Markdown 导出
-server/service.ts     独立运行快照、存储和恢复
-tests/                业务约束、模型协议和平台协议测试
-docs/                 平台调研、部署现状与验收说明
+```dotenv
+LLM_BASE_URL=https://你的服务基础地址/v1
+LLM_API_KEY=服务端密钥
+LLM_MODEL=服务实际支持的模型名
 ```
 
-前端与 API 由同一个本地服务提供，默认只监听 `127.0.0.1:4317`。目前采用 500 ms 轮询更新运行状态；运行中的结果保存在内存，结束时落盘。进程中断会丢失尚未落盘的运行，不支持中断恢复。
+地址不要以 `/chat/completions` 结尾，程序会追加该路径。保存后重启服务。模型 HTTP 请求仅在 [backend/model_client.py](backend/model_client.py)，ReAct 和经验规划器通过注入接口使用同一客户端。
 
-## 对比实验的下一步
+按用户要求，请求固定发送 `enable_thinking: false`；OpenRouter 同时发送 `reasoning.enabled: false`。运行记录保存请求设置和供应商实际 reasoning token，未返回用量时不伪造为零。密钥不会返回浏览器或加入 Git。
 
-使用同一模型、工具和报告模板，在 base/changed/exception 快照上比较 ReAct 与 Graph RSI。经验库已能从执行轨迹学习、验证和持久化读取图；完整工作流自我改进、受控写入图和多样本模型质量 benchmark 尚未完成。
+## 运行方式
 
-后续对比应额外记录任务正确性、风险遗漏、错误修改和约束违反。`status=completed` 仅表示模型正常结束，**不等于自动证明用户任务成功**；`report` 是否生成、内容是否正确应独立评分。
+| 方式 | 行为 |
+|---|---|
+| 离线流程示例 | 固定程序驱动实际沙箱工具，验证业务闭环；0 次 LLM，不作为 RSI 性能结果 |
+| 真实模型 ReAct | 模型选择工具、读取观察、继续执行；记录请求、token、工具错误和耗时 |
+| Graph RSI | 从真实轨迹学习读取图，按当前数据绑定和执行；相似任务先进行经验选择，失败回退模型 |
+
+命令行真实运行示例：
+
+```bash
+npm run demo -- --scenario finance --live --strategy graph --snapshot changed
+```
+
+`base` 是原始快照，`changed` 改变 ID、金额和记录数，`exception` 加入坐席不可用和付款归属冲突。数据在 `data/`，每次运行独立复制。
+
+## 任务结果校验
+
+执行器在模型结束后检查业务状态，有缺项时最多返回模型修正两轮，额外请求计入原有调用预算。预算、超时或取消后仍保存部分结果和校验信息。
+
+- `auto`：预设任务检查岗位完整流程；自定义任务只检查状态约束，明确标记未验证任务完整性。
+- `invariants`：检查超额分配、重复流水被分配、工单状态被改变、消息发送和坐席超载等。
+- `finance_full`：额外检查可核验回款未分配、异常回款未登记、逾期事项缺失和报告缺失。
+- `support_full`：额外检查草稿缺失、超时未升级、无合适负责人且未升级和报告缺失。
+
+在界面的“结果校验目标”中可选择“岗位完整流程”。这会要求完成对应岗位任务，不适用于用户仅要求局部读取的任务。外部平台只读报告目前标记为 `not_evaluated`，需要独立事实评分。
+
+`status=completed` 表示执行器正常结束，`evaluation.status=passed` 只证明所列业务状态规则通过，不能证明报告文字和因果解释完全正确。校验失败的运行不会自动晋升为新任务图。
+
+## 任务图与 AutoTool
+
+- [backend/autotool.py](backend/autotool.py)：从受控 OpenAPI 规格生成 7 个平台读取工具，校验参数、编码路径、提取响应；不生成任意代码或接受规格提供的目标主机。
+- [backend/gagent.py](backend/gagent.py)：检索历史任务、让模型选择候选图与必要节点、补齐依赖；规划调用计入总数。
+- [backend/graph.py](backend/graph.py)：从成功读取轨迹推断参数绑定、集合遍历和分页，使用 NetworkX 检查 DAG。
+- [backend/graph_store.py](backend/graph_store.py)：影子读取验证、版本保存和适用性检查。
+
+图仅复用第一次业务写入前的读取步骤。写入、草稿和报告继续由模型处理。图保存的是结构与参数来源，不缓存旧结果。学习本身无额外 LLM，但影子读取和源轨迹采集成本需单列与摊销。
+
+Python 图使用新的实例/运行时指纹，保存在 `artifacts/graphs-python/`。旧 TS 图保留在原目录，不直接执行；可从同一历史真实运行重新学习并验证。已有运行的 JSON 和 Markdown 格式继续兼容前端。
+
+## 外部业务环境
+
+ERPNext 与 Zammad 已在 v100 独立部署；通过 SSH 隧道访问：
+
+- ERPNext：<http://127.0.0.1:18080>
+- Zammad：<http://127.0.0.1:18081>
+
+Python 连接器支持真实分页、详情、证据引用和权限校验，当前全部只读。平台登录信息在被忽略的 `deploy/runtime/platform-access.json`。部署、隧道和备份见 [deploy/README.md](deploy/README.md)。
+
+## 文件结构
+
+```text
+backend/model_client.py    唯一模型 HTTP 接口，关闭 thinking
+backend/runtime.py         ReAct、图复用、预算、取消、缺项修正
+backend/tools.py           沙箱业务规则与强 schema 校验
+backend/connectors.py      ERPNext / Zammad 读取适配器
+backend/evaluation.py      独立业务状态校验
+backend/graph.py            NetworkX 任务图
+backend/gagent.py           经验检索和节点选择
+backend/app.py              FastAPI 与前端静态服务
+src/                        React 工作台、图查看器、结果展示
+shared/                     前端 TypeScript 类型
+specs/                      平台 OpenAPI 与沙箱工具契约
+data/                       合成业务快照与预设任务
+tests_python/               Python 业务、协议、图和 HTTP API 测试
+artifacts/                  运行、报告、图与验证结果（不提交）
+```
+
+详细的历史结果见 [Graph RSI 验证](docs/graph-rsi-validation-2026-09-09.md) 和 [平台验证](docs/platform-deployment-validation-2026-09-09.md)。这些是对应版本与配置的测量，不能当成当前 Python 版本的平均收益。
