@@ -28,7 +28,7 @@ def valid_count(value):
 def request_body(options, messages, tools):
     body = {'model': options.model, 'messages': messages, 'tools': [
         {'type': 'function', 'function': {'name': t.name, 'description': t.description, 'parameters': t.parameters}} for t in tools],
-        'tool_choice': 'auto', 'parallel_tool_calls': False, 'enable_thinking': False}
+        'tool_choice': 'auto', 'parallel_tool_calls': True, 'enable_thinking': False}
     if urlsplit(options.base_url).hostname == 'openrouter.ai':
         body['reasoning'] = {'enabled': False}
     return body
@@ -44,7 +44,7 @@ class ModelClient:
         if parsed.scheme not in ['http', 'https'] or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError('模型地址必须是无内嵌凭据的 HTTP(S) API 基础地址')
         self.options, self.model, self.transport = options, options.model, transport
-        self.settings = {'enableThinking': False}
+        self.settings = {'enableThinking': False, 'parallelToolCalls': True}
         if parsed.hostname == 'openrouter.ai':
             self.settings['reasoningEnabled'] = False
 

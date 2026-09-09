@@ -38,7 +38,7 @@ export interface AgentRun {
   model: string | null; metrics: RunMetrics; events: RunEvent[]; initial: World; state: World;
   report?: Report; finalText?: string; error?: string;
   graph?: GraphExecution;
-  modelSettings?: { enableThinking: boolean; reasoningEnabled?: boolean };
+  modelSettings?: { enableThinking: boolean; reasoningEnabled?: boolean; parallelToolCalls?: boolean };
   backend?: 'python';
   evaluation?: { status: 'passed' | 'failed' | 'not_evaluated'; scope: string; issues: { code: string; entityId: string; message: string }[]; note: string };
 }

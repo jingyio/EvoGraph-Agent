@@ -43,7 +43,7 @@ LLM_MODEL=服务实际支持的模型名
 
 地址不要以 `/chat/completions` 结尾，程序会追加该路径。保存后重启服务。模型 HTTP 请求仅在 [backend/model_client.py](backend/model_client.py)，ReAct 和经验规划器通过注入接口使用同一客户端。
 
-按用户要求，请求固定发送 `enable_thinking: false`；OpenRouter 同时发送 `reasoning.enabled: false`。运行记录保存请求设置和供应商实际 reasoning token，未返回用量时不伪造为零。密钥不会返回浏览器或加入 Git。
+按用户要求，请求固定发送 `enable_thinking: false`；OpenRouter 同时发送 `reasoning.enabled: false`。模型请求开启多工具调用，提示模型把同一阶段互不依赖的读取、知识检索和已确定动作合并到一次响应；执行器仍按返回顺序逐项校验和执行。运行记录保存请求设置和供应商实际 reasoning token，未返回用量时不伪造为零。密钥不会返回浏览器或加入 Git。
 
 ## 运行方式
 

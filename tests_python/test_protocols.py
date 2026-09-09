@@ -16,6 +16,7 @@ async def test_model_boundary_disables_thinking_and_returns_tool_observations():
         body = json.loads(request.content)
         requests.append(body)
         assert body['enable_thinking'] is False and body['reasoning'] == {'enabled': False}
+        assert body['parallel_tool_calls'] is True
         message = {'role': 'assistant', 'content': 'done', 'reasoning_content': 'must-not-be-exposed'}
         if len(requests) == 1:
             message['tool_calls'] = [{'id': 'call1', 'type': 'function', 'function': {'name': 'get_invoice', 'arguments': '{"invoiceId":"INV-001"}'}}]
@@ -43,7 +44,7 @@ async def test_model_http_errors_are_not_retried_or_exposed(status):
 
 def test_direct_qwen_uses_enable_thinking_without_router_specific_setting():
     body = request_body(ModelOptions('http://localhost:8000/v1', 'key', 'qwen'), [], [])
-    assert body['enable_thinking'] is False and 'reasoning' not in body
+    assert body['enable_thinking'] is False and body['parallel_tool_calls'] is True and 'reasoning' not in body
 
 
 async def test_erpnext_generated_tools_preserve_native_currency_and_encode_ids():

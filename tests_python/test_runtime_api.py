@@ -49,6 +49,18 @@ async def test_invalid_json_and_unknown_tool_become_repairable_observations():
     assert run['metrics']['modelRequests'] == 4 and run['metrics']['inputTokens'] == 40
 
 
+async def test_independent_tool_calls_share_one_model_request_and_return_all_observations():
+    model = Scripted([
+        response([call('list_invoices', key='invoices'), call('list_payments', key='payments')]),
+        response(),
+    ])
+    run = await execute_run(run_state(), model, sandbox_tools('finance'))
+    assert run['status'] == 'completed'
+    assert run['metrics']['modelRequests'] == 2 and run['metrics']['toolCalls'] == 2
+    assert [message['tool_call_id'] for message in model.histories[1][-2:]] == ['invoices', 'payments']
+    assert '一次响应中同时发出多个 tool_calls' in model.histories[0][0]['content']
+
+
 @pytest.mark.parametrize('limits,expected', [({'max_steps': 1}, 1), ({'max_tools': 1}, 1), ({}, 4)])
 async def test_run_budgets_and_repetition(limits, expected):
     run = await execute_run(run_state(), Scripted([response([call('list_invoices')])]), sandbox_tools('finance'), **limits)
