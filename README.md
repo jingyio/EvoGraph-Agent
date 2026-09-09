@@ -83,7 +83,9 @@ npm run demo -- support --live
 
 ## 外部平台
 
-详细调研见 [docs/platform-research.md](docs/platform-research.md)。
+2026-09-09 已在 v100 部署 ERPNext 与 Zammad，初始化合成业务数据并接入本地工作台。通过 SSH 隧道访问 <http://127.0.0.1:18080> 和 <http://127.0.0.1:18081>；本地 `deploy/runtime/platform-access.json` 保存测试平台登录信息，已被 Git 忽略。部署、隧道和备份说明见 [deploy/README.md](deploy/README.md)，真实 API 与 ReAct 验证见 [部署验收](docs/platform-deployment-validation-2026-09-09.md)。
+
+详细选型调研见 [docs/platform-research.md](docs/platform-research.md)。
 
 - 财务：ERPNext。提供已提交销售发票、客户收款、客户主数据的分页读取及详情工具。
 - 客服：Zammad。提供工单分页、工单详情、往来内容、状态与优先级字典。
@@ -93,9 +95,11 @@ npm run demo -- support --live
 
 ```bash
 npm run platforms
+# 针对本项目已部署种子数据的真实 API 与权限验收：
+npm run verify:platforms
 ```
 
-也可在界面“平台连接”点击“检查 API 连接”。它会请求相关业务端点，区分未配置、可达和失败。可达只代表这些读取端点通过，并不代表平台全功能或写权限已经验证。
+也可在界面“平台连接”点击“检查 API 连接”。它会请求相关业务端点，区分未配置、可达和失败。可达只代表这些读取端点通过；本次另用 `verify:platforms` 验证了分页、详情、业务数据和只读用户写入被拒绝。
 
 外部平台必须搭配真实模型运行。外部连接目前**全部只读**，支持核查和报告，不执行付款、账务分配、工单修改或消息发送。真实平台金额保留原生字段及币种，不自动映射到简化沙箱；外部结果不会混入模拟数据。读取报告要求引用已观察的资源 ID，但业务结论仍需任务级评估。
 

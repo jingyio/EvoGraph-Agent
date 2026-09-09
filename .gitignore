@@ -7,3 +7,6 @@ artifacts/
 *.log
 .DS_Store
 coverage/
+deploy/runtime/
+__pycache__/
+*.pyc

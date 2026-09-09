@@ -1,0 +1,37 @@
+[
+  {
+    "repository": "frappe/erpnext",
+    "tag": "v16.34.2",
+    "digest": "sha256:7eb53132b91ac597d97ed4c4221c96b1c84ef93c94cdb6924c785d5612d343c5"
+  },
+  {
+    "repository": "library/mariadb",
+    "tag": "11.8",
+    "digest": "sha256:2439dcd7d14010ecd1ff7a4e1c5abe8e208c34fe35290744deeeaac3569043c3"
+  },
+  {
+    "repository": "library/redis",
+    "tag": "6.2-alpine",
+    "digest": "sha256:d0c875bdacfb5c4d2c2d9124de3f53cee1dc9ceff8936bd459fabc135cb33015"
+  },
+  {
+    "repository": "library/redis",
+    "tag": "8.10.1-alpine",
+    "digest": "sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576"
+  },
+  {
+    "repository": "library/postgres",
+    "tag": "17.11-alpine",
+    "digest": "sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73"
+  },
+  {
+    "repository": "library/memcached",
+    "tag": "1.6.45-alpine",
+    "digest": "sha256:c29847751abb41f4c268c84fb3087fee05d4edcbda44409ccb5086e26148e8a7"
+  },
+  {
+    "repository": "ghcr.io/zammad/zammad",
+    "tag": "7.1.3-0011",
+    "digest": "sha256:e65123a43eccb27633cb06158a6715da9d0043ebcd80fafb640a5638ed09cb59"
+  }
+]
