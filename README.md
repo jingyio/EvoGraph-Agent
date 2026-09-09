@@ -56,7 +56,7 @@ npm run demo -- finance --live
 npm run demo -- support --live
 ```
 
-模型按官方 [Function calling](https://developers.openai.com/api/docs/guides/function-calling) 协议接入：发送工具 schema，追加 assistant tool_calls，按原始 `tool_call_id` 回传观察，再继续请求。服务商需支持该协议；当前已对本地协议测试服务器验证，**没有真实模型凭据，因此尚未完成外部模型实测**。
+模型按官方 [Function calling](https://developers.openai.com/api/docs/guides/function-calling) 协议接入：发送工具 schema，追加 assistant tool_calls，按原始 `tool_call_id` 回传观察，再继续请求。服务商需支持该协议。2026-09-09 已使用用户配置的 `qwen/qwen3.8-flash` 完成财务、客服各一次真实模型沙箱运行；业务状态校验通过，简报仍有个别文字统计错误。详见 [首次真实模型验证](docs/live-model-validation-2026-09-09.md)。这不等于真实 ERPNext/Zammad 联调或多样本质量评测。
 
 每次模型请求都计数，包括失败请求；input/output token 使用供应商实际 usage。缺失 usage 会显示“未知”或“不完整”，不估算成零。不自动重试计费请求。原始内部推理字段不会记录或展示，仅保留操作说明、工具与最终答复。
 
