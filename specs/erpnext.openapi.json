@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ERPNext validated read API subset",
+    "version": "16.34.2-lab1"
+  },
+  "paths": {
+    "/api/resource/Sales Invoice/{invoiceId}": {
+      "get": {
+        "operationId": "erpnext_get_invoice",
+        "summary": "读取单张销售发票的完整字段，核查客户、币种、余额和关联信息。",
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "x-resource": "Sales Invoice",
+        "x-data-path": [
+          "data"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful API resource response; validated by the configured adapter."
+          }
+        }
+      }
+    },
+    "/api/resource/Payment Entry/{paymentId}": {
+      "get": {
+        "operationId": "erpnext_get_payment",
+        "summary": "读取收款详情及 references 子表，区分已分配、未分配和不同币种，不修改账务。",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "x-resource": "Payment Entry",
+        "x-data-path": [
+          "data"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful API resource response; validated by the configured adapter."
+          }
+        }
+      }
+    },
+    "/api/resource/Customer/{customerId}": {
+      "get": {
+        "operationId": "erpnext_get_customer",
+        "summary": "读取指定客户主数据以核对付款方。",
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "x-resource": "Customer",
+        "x-data-path": [
+          "data"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful API resource response; validated by the configured adapter."
+          }
+        }
+      }
+    }
+  }
+}

@@ -38,7 +38,9 @@ export function makeReport(scenario: Scenario, world: World, summary: string, so
 function cell(text: string) { return text.replaceAll('|', '\\|').replaceAll('\n', ' '); }
 export function reportMarkdown(run: AgentRun): string {
   const report = run.report;
-  const header = `# ${report?.title || 'Agent 执行记录'}\n\n运行：${run.id}\n\n模式：${run.request.mode === 'fixture' ? '离线固定流程示例（没有调用 LLM）' : '真实模型 ReAct'}；数据源：${run.request.source}；状态：${run.status}\n\n`;
+  const graphNote = run.graph ? `\n\n任务图：${run.graph.status}；图执行工具调用：${run.graph.toolCalls}；完成节点：${run.graph.completedNodes}；来源运行：${run.graph.sourceRunId || '冷启动'}。学习读取调用：${run.graph.learning?.toolCalls ?? 0}（单列，未计入执行工具调用）；学习耗时：${run.graph.learning ? run.graph.learning.compileMs + run.graph.learning.durationMs : 0} ms。` : '';
+  const thinkingNote = run.modelSettings ? `；enable_thinking=${run.modelSettings.enableThinking}；供应商返回 reasoning token 合计=${run.metrics.reasoningTokens ?? '未知'}` : '';
+  const header = `# ${report?.title || 'Agent 执行记录'}\n\n运行：${run.id}\n\n模式：${run.request.mode === 'fixture' ? '离线固定流程示例（没有调用 LLM）' : run.request.strategy === 'graph' ? '真实模型 Graph RSI' : '真实模型 ReAct'}；数据源：${run.request.source}；状态：${run.status}${thinkingNote}${graphNote}\n\n`;
   if (!report) return header + (run.finalText || run.error || '未生成报告。');
   return header + report.summary + '\n\n' + report.metrics.map(item => `- ${item.label}：${item.value}${item.note ? `（${item.note}）` : ''}`).join('\n') + '\n\n' +
     `| ${report.columns.map(cell).join(' | ')} |\n| ${report.columns.map(() => '---').join(' | ')} |\n` + report.rows.map(row => `| ${row.map(cell).join(' | ')} |`).join('\n') + '\n\n' + report.findings.map(item => `- ${item}`).join('\n') +

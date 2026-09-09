@@ -2,7 +2,7 @@
 
 财务运营与客服运营共用的基础 ReAct Agent，配有 React + TypeScript 本地工作台。这里的 **ReAct** 指模型选择工具、读取观察、继续执行的循环；前端也使用 React。
 
-当前版本是普通 Agent 基线，**尚未实现 AutoTool 学习、G-Agent 经验复用或 MotifAgent**。
+当前版本包含普通 ReAct 基线与 **Graph RSI v0.2 受限原型**：从真实轨迹学习读取图、检索历史经验、选择可复用节点、按本次数据绑定执行和回退；部分平台工具由 OpenAPI 规格生成。具体能力与边界见 [Graph RSI 说明](docs/graph-rsi.md)，不等同于完整论文复现或已证明 RSI 收益。
 
 ## 快速运行
 
@@ -32,6 +32,7 @@ npm start
 |---|---|---|
 | 离线流程示例 | 固定的测试程序驱动真实业务工具，使用同一执行器并保存真实沙箱状态；无 LLM 调用 | UI 演示、工具闭环、回归验证；也可以作为固定工作流基线的起点 |
 | 真实模型 ReAct | 调用配置的模型，由模型逐轮选择工具、消费观察并产生结论 | 自定义任务、普通 Agent 基线与后续 RSI 对比 |
+| Graph RSI | 复用经过影子验证的历史读取图，必要时进行经验规划，再由真实模型处理其余任务 | 任务图复用、参数绑定、回退与后续收益评估 |
 
 离线示例只接受界面显示的固定任务，服务端拒绝离线模式的自定义提示，避免“用户输入被忽略但仍显示完成”。离线耗时与 token=0 **不能**作为 RSI 或模型性能结果。未配置模型时，界面明确提示缺少配置，不会默默回退为脚本。
 
@@ -59,6 +60,8 @@ npm run demo -- support --live
 模型按官方 [Function calling](https://developers.openai.com/api/docs/guides/function-calling) 协议接入：发送工具 schema，追加 assistant tool_calls，按原始 `tool_call_id` 回传观察，再继续请求。服务商需支持该协议。2026-09-09 已使用用户配置的 `qwen/qwen3.8-flash` 完成财务、客服各一次真实模型沙箱运行；业务状态校验通过，简报仍有个别文字统计错误。详见 [首次真实模型验证](docs/live-model-validation-2026-09-09.md)。这不等于真实 ERPNext/Zammad 联调或多样本质量评测。
 
 每次模型请求都计数，包括失败请求；input/output token 使用供应商实际 usage。缺失 usage 会显示“未知”或“不完整”，不估算成零。不自动重试计费请求。原始内部推理字段不会记录或展示，仅保留操作说明、工具与最终答复。
+
+按用户要求，模型 HTTP 请求统一由 `server/model-client.ts` 发出，ReAct 和经验规划器均通过同一接口调用。请求固定发送 `enable_thinking: false`；OpenRouter 额外发送 `reasoning: { enabled: false }`。运行记录保存实际请求设置，以及供应商提供的 reasoning token 合计，不把“没有展示思考文本”当作“已关闭思考”。
 
 ## 财务运营沙箱
 
@@ -109,9 +112,16 @@ npm run verify:platforms
 src/                  React 工作台、业务表格、执行记录、报告
 shared/               类型定义和预设任务
 server/runtime.ts     ReAct 循环、观察回传、限额、取消和计量
-server/provider.ts    真实模型适配器、明确标记的离线测试流程
+server/model-client.ts 唯一模型 HTTP 接口与关闭思考参数
+server/model-types.ts  注入给各模块的模型接口类型
+server/fixture-provider.ts 明确标记的离线固定流程
 server/tools.ts       schema 校验、确定性业务规则和沙箱写工具
 server/connectors.ts  ERPNext / Zammad 只读适配器
+server/autotool.ts    从受控 OpenAPI 规格获取平台工具包装
+server/gagent.ts      历史图检索、模型节点选择和依赖补齐
+server/graph.ts       轨迹编译、参数绑定和 DAG 执行
+server/graph-store.ts 影子验证、图版本持久化和适用性检查
+specs/                已核验的平台读取 API 规格子集
 server/seed.ts        合成业务数据、固定时钟
 server/reports.ts     同一模板的确定性统计与 Markdown 导出
 server/service.ts     独立运行快照、存储和恢复
@@ -123,6 +133,6 @@ docs/                 平台调研、部署现状与验收说明
 
 ## 对比实验的下一步
 
-固定 `seedWorld()` 数据与同一报告模板，使用多组独立快照运行真实模型基线，再接入可替换的 planner/motif 层。`Provider` 与 `Tool` 接口已经分开，但当前还没有自动学习、持久记忆或模型质量 benchmark。
+使用同一模型、工具和报告模板，在 base/changed/exception 快照上比较 ReAct 与 Graph RSI。经验库已能从执行轨迹学习、验证和持久化读取图；完整工作流自我改进、受控写入图和多样本模型质量 benchmark 尚未完成。
 
 后续对比应额外记录任务正确性、风险遗漏、错误修改和约束违反。`status=completed` 仅表示模型正常结束，**不等于自动证明用户任务成功**；`report` 是否生成、内容是否正确应独立评分。

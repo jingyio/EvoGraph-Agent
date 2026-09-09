@@ -92,7 +92,7 @@ test('HTTP model adapter executes real request/observation loop against a protoc
     const payload = JSON.parse(body); requests.push(payload);
     const response = requests.length === 1 ? completion([call('get_invoice', '{"invoiceId":"INV-001"}')]) : completion([], '已读取真实工具返回的 INV-001。');
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ choices: [{ message: { ...response.message, reasoning_content: 'must not be exposed' }, finish_reason: response.finishReason }], usage: { prompt_tokens: 42, completion_tokens: 7 } }));
+    res.end(JSON.stringify({ choices: [{ message: { ...response.message, reasoning_content: 'must not be exposed' }, finish_reason: response.finishReason }], usage: { prompt_tokens: 42, completion_tokens: 7, completion_tokens_details: { reasoning_tokens: 0 } } }));
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
@@ -101,7 +101,9 @@ test('HTTP model adapter executes real request/observation loop against a protoc
   const run = await executeRun(make(), provider, sandboxTools('finance'), limits);
   assert.equal(run.status, 'completed'); assert.equal(requests.length, 2);
   assert.equal(requests[0].tools[0].type, 'function'); assert.equal(requests[0].parallel_tool_calls, false);
+  assert.equal(requests[0].enable_thinking, false); assert.equal(requests[1].enable_thinking, false);
   assert.equal(JSON.parse(requests[1].messages.at(-1).content).result.id, 'INV-001');
   assert.equal(run.metrics.inputTokens, 84); assert.equal(run.metrics.outputTokens, 14);
+  assert.equal(run.metrics.reasoningTokens, 0); assert.equal(run.modelSettings?.enableThinking, false);
   assert.ok(!JSON.stringify(run).includes('must not be exposed')); assert.ok(!JSON.stringify(run).includes('test-only'));
 });

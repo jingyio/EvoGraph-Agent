@@ -1,4 +1,4 @@
-import type { World } from '../shared/types.js';
+import type { World, SnapshotVariant } from '../shared/types.js';
 
 // Fixed business clock: wall-clock execution speed never changes SLA/aging results.
 export function seedWorld(): World {
@@ -43,4 +43,23 @@ export function seedWorld(): World {
       { id: 'KB-05', category: 'account', title: '登录凭证过期', body: '通过官方密码重置入口重新验证账户。不要在工单中提供密码或验证码。无法恢复时升级账户支持。' },
     ], drafts: [], escalations: [],
   };
+}
+
+/** Independent test snapshots; changing IDs/cardinality exposes stale-result replay. */
+export function seedVariant(variant: SnapshotVariant = 'base'): World {
+  const world = seedWorld();
+  if (variant === 'base') return world;
+  world.asOf = '2026-09-15T10:00:00+08:00';
+  const rename = (id: string) => `NEXT-${id}`;
+  world.invoices.forEach(item => { item.id = rename(item.id); item.amountCents = Math.round(item.amountCents * 1.2); });
+  world.payments.forEach(item => { item.id = rename(item.id); item.invoiceRefs = item.invoiceRefs.map(rename); item.bankRef = rename(item.bankRef); item.amountCents = Math.round(item.amountCents * 1.2); });
+  world.invoices.push({ id: 'NEXT-INV-007', customerId: 'C-07', customer: '新桥数据', amountCents: 450000, currency: 'CNY', dueDate: '2026-09-14' });
+  world.payments.push({ id: 'NEXT-PAY-007', customerId: 'C-07', amountCents: 450000, currency: 'CNY', date: '2026-09-14', bankRef: 'NEXT-BANK-1007', invoiceRefs: ['NEXT-INV-007'] });
+  world.tickets.forEach(item => { item.id = rename(item.id); item.dueAt = item.dueAt.replace('2026-09-08', '2026-09-15').replace('2026-09-09', '2026-09-16'); item.version = 3; });
+  world.tickets.push({ id: 'NEXT-T-1007', subject: '新客户需要重置登录凭证', customer: '新桥数据', category: 'account', priority: 'normal', status: 'open', ownerId: null, dueAt: '2026-09-15T16:00:00+08:00', body: '需要了解官方账户恢复步骤。', version: 1 });
+  if (variant === 'exception') {
+    world.agents.find(item => item.id === 'A-02')!.available = false;
+    world.payments.find(item => item.id === 'NEXT-PAY-007')!.customerId = 'C-WRONG';
+  }
+  return world;
 }

@@ -5,3 +5,4 @@
 - 提交前检查 diff，并执行与改动相关的验证。主要命令：`npm test`、`npm run build`。
 - 不提交真实 `.env`、密钥、`node_modules`、`dist` 或 `artifacts` 中的运行记录；保留 `.env.example`。
 - 业务平台和真实模型的接入状态必须如实记录；离线固定流程不能作为真实 LLM 或 RSI 实验结果。
+- 模型 HTTP 调用统一放在 `server/model-client.ts`，业务模块只依赖注入接口；按用户要求关闭思考模式（`enable_thinking: false`，OpenRouter 同时发送 `reasoning.enabled: false`）。
