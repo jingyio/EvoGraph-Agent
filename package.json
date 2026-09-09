@@ -7,6 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev:frontend": "vite",
+    "dev:backend": ".venv/bin/python -m backend serve --reload",
     "dev": ".venv/bin/python -m backend serve --reload",
     "build": "tsc --noEmit && vite build",
     "start": ".venv/bin/python -m backend serve",

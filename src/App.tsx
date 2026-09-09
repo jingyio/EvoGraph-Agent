@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Database, FileText, Headphones, Layers3, LoaderCircle, Pause, Play, PlugZap, RefreshCw, Settings2, ShieldCheck, Sparkles, Terminal, TriangleAlert, Wrench, X } from 'lucide-react';
 import GraphPanel from './GraphPanel';
+import EvolutionPanel from './EvolutionPanel';
+import { api } from './api';
 import { PRESETS, type TaskGraph, type EvaluationProfile, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
 
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-  return body;
-}
 const currency = (cents: number) => `¥${(cents / 100).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`;
 const names = { finance: '财务运营', support: '客服运营' };
 const statusNames = { running: '执行中', completed: '执行结束', failed: '执行失败', cancelled: '已取消', limited: '达到执行上限' };
@@ -26,7 +22,7 @@ export default function App() {
   const [graphs, setGraphs] = useState<TaskGraph[]>([]);
   const [source, setSource] = useState<DataSource>('sandbox');
   const [task, setTask] = useState(PRESETS.finance);
-  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs'>('workbench');
+  const [page, setPage] = useState<'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution'>(window.location.hash === '#evolution' ? 'evolution' : 'workbench');
   const [tab, setTab] = useState<'overview' | 'trace' | 'report'>('overview');
   const [run, setRun] = useState<AgentRun | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
@@ -135,6 +131,7 @@ export default function App() {
       <button className={`nav-item ${page === 'workbench' && scenario === 'finance' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('finance')}><CircleDollarSign size={19} />财务运营<ChevronRight size={15} /></button>
       <button className={`nav-item ${page === 'workbench' && scenario === 'support' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('support')}><Headphones size={19} />客服运营<ChevronRight size={15} /></button>
       <div className="nav-label second">实验管理</div>
+      <button className={`nav-item ${page === 'evolution' ? 'active' : ''}`} onClick={() => setPage('evolution')}><RefreshCw size={18} />递归进化实验</button>
       <button className={`nav-item ${page === 'tools' ? 'active' : ''}`} onClick={() => setPage('tools')}><Wrench size={18} />工具目录<span className="nav-count">{tools.length}</span></button>
       <button className={`nav-item ${page === 'platforms' ? 'active' : ''}`} onClick={() => setPage('platforms')}><PlugZap size={18} />平台连接</button>
       <button className={`nav-item ${page === 'graphs' ? 'active' : ''}`} onClick={() => setPage('graphs')}><Layers3 size={18} />任务图经验库<span className="nav-count">{graphs.length}</span></button>
@@ -148,6 +145,7 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
       <main>
+        {page === 'evolution' && <EvolutionPanel />}
         {error && <div className="error-banner" role="alert"><TriangleAlert size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="关闭错误提示"><X size={16} /></button></div>}
         {page === 'workbench' && <>
           <div className="page-heading"><div><div className="eyebrow">DIGITAL WORKFORCE / {scenario === 'finance' ? 'FINANCE' : 'CUSTOMER SERVICE'}</div><h1>{names[scenario]}工作台<span className="version">Python · RSI v0.3</span></h1><p>{scenario === 'finance' ? '从回款核对到异常处理，每一步都有业务依据。' : '从工单巡检到回复准备，让每一项服务动作可追溯。'}</p></div><div className="snapshot-pill"><Database size={15} />{synthetic ? `合成业务快照 · ${variant === 'base' ? '原始' : variant === 'changed' ? '新周次' : '例外'}` : `${source} · 实例只读数据`}</div></div>

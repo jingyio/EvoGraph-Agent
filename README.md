@@ -31,6 +31,8 @@ npm run verify:platforms
 
 直接运行 Python 也可以：`.venv/bin/python -m backend serve`。
 
+前后端独立开发：分别运行 `npm run dev:backend`（4317 API）和 `npm run dev:frontend`（5173 React）。在“递归进化实验”中启动独立的学习、验证、晋升闭环，详见 [递归进化范围与运行方式](docs/recursive-evolution.md)。
+
 ## 模型配置
 
 填写项目根目录 `.env`。新环境可从 `.env.example` 复制；已有配置不应覆盖。

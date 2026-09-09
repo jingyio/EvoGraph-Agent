@@ -10,25 +10,30 @@ from .domain import seed, markdown
 from .models import RunRequest
 from .service import RunService, tools_for
 from .platform_check import check_platforms
+from .evolution import EvolutionService, EvolutionRequest
 
 
 def create_app(service=None):
     service = service or RunService()
+    evolution = EvolutionService(service)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
+        evolution.restore()
         try:
             yield
         finally:
+            await evolution.shutdown()
             await service.shutdown()
     app = FastAPI(title='RSI Agent Lab', version='0.3.0', lifespan=lifespan)
     app.state.service = service
+    app.state.evolution = evolution
 
     @app.middleware('http')
     async def api_boundary(request, call_next):
         if request.url.path.startswith('/api'):
             origin = request.headers.get('origin')
-            if origin and origin not in [f'http://127.0.0.1:{config.PORT}', f'http://localhost:{config.PORT}']:
+            if origin and origin not in [f'http://127.0.0.1:{config.PORT}', f'http://localhost:{config.PORT}', 'http://127.0.0.1:5173', 'http://localhost:5173']:
                 return JSONResponse({'error': 'Origin not allowed'}, status_code=403)
             if request.method not in ['GET', 'HEAD']:
                 if request.headers.get('content-type', '').split(';')[0] != 'application/json':
@@ -62,6 +67,21 @@ def create_app(service=None):
     @app.get('/api/config')
     def configuration():
         return config.public_config()
+
+    @app.get('/api/evolutions')
+    def evolutions():
+        return sorted(evolution.items.values(), key=lambda item: item['createdAt'], reverse=True)
+
+    @app.post('/api/evolutions', status_code=202)
+    async def start_evolution(request: EvolutionRequest):
+        return await evolution.start(request)
+
+    @app.post('/api/evolutions/{key}/cancel')
+    async def cancel_evolution(key: str):
+        task = evolution.tasks.get(key)
+        if task:
+            task.cancel()
+        return {'cancelled': bool(task)}
 
     @app.get('/api/snapshot')
     def snapshot(variant: Literal['base', 'changed', 'exception'] = 'base'):
