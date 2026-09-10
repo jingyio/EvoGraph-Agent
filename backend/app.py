@@ -107,11 +107,13 @@ def create_app(service=None):
     @app.get('/api/taskbank/evolution')
     async def online_evolution_list():
         return {'versions': task_runner.evolution.versions, 'tinyEdges': task_runner.evolution.tiny_edges,
+                'toolInertia': task_runner.evolution.tool_inertia,
                 'workflows': [{key: item.get(key) for key in ['id', 'sourceRunId', 'sourceGraphId', 'sourceTaskId', 'scenario', 'family']} for item in task_runner.evolution.workflows],
                 'runs': [{k: r.get(k) for k in ['id', 'taskId', 'status', 'createdAt', 'split', 'metrics', 'evaluation', 'evolution']}
-                         for r in task_runner.runs.values() if r.get('strategy') == 'graph_rsi'],
+                         for r in task_runner.runs.values() if r.get('strategy') in ['graph_rsi', 'motif_only', 'motif_first']],
                 'protocol': {'shadowRollouts': 0, 'learningSplit': 'train', 'validation': 'natural-tasks',
-                             'test': 'frozen-no-feedback', 'score': 'structured-facts-and-evidence'}}
+                             'test': 'frozen-no-feedback', 'score': 'structured-facts-and-evidence',
+                             'toolInertia': 'model-origin train-only; motif_first is bounded read-only runtime use'}}
 
     @app.get('/api/taskbank/runs')
     async def task_run_list(taskId: Optional[str] = None, limit: int = Query(50, ge=1, le=500)):
@@ -132,8 +134,9 @@ def create_app(service=None):
             raise HTTPException(404, 'Task run not found')
         result = deepcopy(task_runner.runs[key])
         result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
-        result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi'] else None
-        result['reusedPlanReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react_reuse') if result.get('strategy') == 'graph_rsi' else None
+        result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi', 'motif_only', 'motif_first'] else None
+        result['reusedPlanReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react_reuse') if result.get('strategy') in ['graph_rsi', 'motif_only', 'motif_first'] else None
+        result['motifOnlyComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'motif_only') if result.get('strategy') == 'motif_first' else None
         return result
 
     @app.get('/api/taskbank/runs/{key}/report', response_class=HTMLResponse)

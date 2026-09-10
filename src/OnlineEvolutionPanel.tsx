@@ -12,6 +12,7 @@ type Version = {
 };
 type Run = { id: string; taskId: string; split: string; status: string; metrics: { inputTokens: number; outputTokens: number; modelRequests: number; durationMs: number; toolErrors: number }; evaluation: { status: string }; evolution?: { usedVersionId?: string; generation?: number; maintenanceMs?: number; lookupMs?: number; extraModelRequests?: number; extraToolCalls?: number; shadowRollouts?: number; note?: string } };
 type TinyEdge = { id: string; scenario: string; support: number; length: number; intent: string; inputSlots: string[]; outputSlots: string[]; sourceRunIds: string[]; sourceWorkflowIds: string[]; nodeTemplates: { tool: string }[] };
+type ToolInertia = { toolPaths: { tools: string[]; support: number; sourceRunIds: string[] }[]; parameterEdges: { sourceTool: string; sourcePath: string[]; targetTool: string; targetParameter: string; support: number; sourceRunIds: string[] }[] };
 type Task = { id: string; scenario: string; family: string; split: string; title: string };
 const names: Record<string, string> = { finance: '财务运营 · Olist', support: '客服运营 · CFPB', tickets: '技术工单 · Zammad GitHub Issues' };
 const states: Record<string, string> = { probation: '同类任务试用', 'family-supported': '适用证据已积累', 'needs-repair': '待修订' };
@@ -19,7 +20,7 @@ const patchNames: Record<string, string> = { compile_observed_graph: '保存轨�
 
 export default function OnlineEvolutionPanel() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [data, setData] = useState<{ versions: Version[]; tinyEdges: TinyEdge[]; runs: Run[] }>({ versions: [], tinyEdges: [], runs: [] });
+  const [data, setData] = useState<{ versions: Version[]; tinyEdges: TinyEdge[]; toolInertia?: ToolInertia; runs: Run[] }>({ versions: [], tinyEdges: [], runs: [] });
   const [scenario, setScenario] = useState('tickets');
   const [family, setFamily] = useState('');
   const [taskId, setTaskId] = useState('');
@@ -54,6 +55,11 @@ export default function OnlineEvolutionPanel() {
     <p>进化维护额外 LLM {runs.reduce((n, r) => n + (r.evolution?.extraModelRequests || 0), 0)} 次 · 额外工具 {runs.reduce((n, r) => n + (r.evolution?.extraToolCalls || 0), 0)} 次。当前任务的恢复调用计入正常执行成本。</p>
     <p>训练集生成 Patch；验证集只累计适用证据；测试集使用已获支持的图且不更新经验。三个不同任务通过是应用门槛，不是统计显著性或成本优势证明。</p>
     {task && <TaskRunPanel taskId={task.id} defaultStrategy="graph_rsi" />}
+    <h2>AutoTool 惯性经验</h2>
+    <p>仅通过评分的模型来源 train 轨迹更新；Graph 与惯性执行不自我强化。运行时只绑定当前观察，具体接受/拒绝和成本在任务回放中展示。</p>
+    {!data.toolInertia?.toolPaths.length && <p>尚无可用的模型来源串行工具路径。</p>}
+    {data.toolInertia?.toolPaths.map(path => <section key={path.tools.join('→')} className="online-version"><h3>{path.tools.join(' → ')} · 支持 {path.support}</h3><p>来源运行 {path.sourceRunIds.map(id => id.slice(0, 8)).join(' · ')}</p></section>)}
+    {data.toolInertia?.parameterEdges.length ? <details><summary>参数来源契约（不保存旧业务值）</summary><pre>{JSON.stringify(data.toolInertia.parameterEdges, null, 2)}</pre></details> : null}
     <h2>Persistent TinyEdge</h2>
     {!data.tinyEdges.filter(edge => edge.scenario === scenario).length && <p>尚无达到支持度门槛的可执行片段。仅通过评分的 train 图执行会增加支持度；验证和测试不会写入。</p>}
     {data.tinyEdges.filter(edge => edge.scenario === scenario).map(edge => <section key={edge.id} className="online-version"><h3>{edge.id.slice(0, 14)} · 支持 {edge.support} · {edge.length} 节点</h3><p>{edge.intent}</p><p>工具 {edge.nodeTemplates.map(node => node.tool).join(' → ')} · 输入槽 {edge.inputSlots.join(', ') || '无'} · 输出槽 {edge.outputSlots.join(', ') || '无'}</p><p>来源运行 {edge.sourceRunIds.map(id => id.slice(0, 8)).join(' · ')}；执行时只绑定当前任务参数。</p><details><summary>片段规范化身份与来源</summary><pre>{JSON.stringify(edge, null, 2)}</pre></details></section>)}

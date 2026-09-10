@@ -7,7 +7,7 @@ import './execution-demo.css';
 
 type Task = { id: string; scenario: string; family: string; title: string; task: string; split: string; sourceUrl: string; recordCount: number };
 const sources: Record<string, string> = { tickets: '技术工单 · Zammad GitHub Issues', finance: '财务运营 · Olist', support: '客服运营 · CFPB' };
-const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', composition: '局部片段组合', graph: '图执行', graph_created: '读取图就绪', motif: '筛选后补查', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
+const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', composition: '局部片段组合', graph: '图执行', graph_created: '读取图就绪', motif: '筛选后补查', inertia: 'AutoTool 惯性', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
 const stateNames: Record<string, string> = { pending: '等待依赖', running: '执行中', done: '完成', reused: '复用结果', failed: '失败', 'model-handoff': '交接模型' };
 const n = (value: number) => Math.round(value).toLocaleString('zh-CN');
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -29,14 +29,15 @@ function TraceGraph({ nodes, states, prefix }: { nodes: GraphNode[]; states: Rec
 function TimelineEvent({ event, run, onInspect }: { event: TraceEvent; run: TraceRun; onInspect: () => void }) {
   const bad = event.type === 'model_error' || event.type === 'fallback' || event.detail?.ok === false || (event.type === 'evaluation' && event.detail?.status === 'failed');
   const graph = event.detail?.executor === 'graph' || ['graph', 'graph_created', 'motif', 'recovery'].includes(event.type);
+  const inertia = event.detail?.executor === 'inertia' || event.type === 'inertia';
   let summary = event.title;
   if (event.type === 'model') summary = (typeof event.detail?.content === 'string' ? event.detail.content.trim() : '') || (Array.isArray(event.detail?.toolCalls) ? event.detail.toolCalls.map((call: any) => call.function?.name).join(' · ') : '') || event.title;
   if (event.type === 'action') summary += ' · ' + String(event.detail?.arguments || '{}');
   if (event.type === 'observation') summary += event.detail?.ok ? ` · 成功${Array.isArray(event.detail?.result?.records) ? ` · ${event.detail.result.records.length} 条记录` : ''}` : ` · ${event.detail?.error || '工具错误'}`;
 
-  return <button className={`demo-event ${bad ? 'bad' : ''} ${graph ? 'by-graph' : ''}`} onClick={onInspect} aria-label={`查看事件 ${event.seq} ${eventNames[event.type] || event.type} ${event.title}`}>
+  return <button className={`demo-event ${bad ? 'bad' : ''} ${graph ? 'by-graph' : ''} ${inertia ? 'by-inertia' : ''}`} onClick={onInspect} aria-label={`查看事件 ${event.seq} ${eventNames[event.type] || event.type} ${event.title}`}>
     <span className="demo-event-icon">{bad ? <Activity size={14} /> : graph ? <GitBranch size={14} /> : event.type.startsWith('model') ? <Zap size={14} /> : <Wrench size={14} />}</span>
-    <span><strong>{eventNames[event.type] || event.type}<em>{graph ? '图' : event.detail?.executor === 'model' ? '模型调度' : ''}</em></strong><small title={summary}>{summary}</small></span>
+    <span><strong>{eventNames[event.type] || event.type}<em>{inertia ? '惯性' : graph ? '图' : event.detail?.executor === 'model' ? '模型调度' : ''}</em></strong><small title={summary}>{summary}</small></span>
     <time>{seconds(eventTime(run, event))}</time>
   </button>;
 }

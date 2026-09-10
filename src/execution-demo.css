@@ -16,3 +16,5 @@
 
 .demo-focused .demo-dag{min-width:0}
 @media(max-width:900px){.demo-focused .demo-kpis strong{font-size:18px}.demo-kpis>div{min-width:0}}
+
+.demo-event.by-inertia .demo-event-icon{background:#fff0c9;color:#80641e}.demo-event.by-inertia{background:#fffdf5}

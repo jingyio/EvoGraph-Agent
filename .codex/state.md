@@ -7,11 +7,13 @@
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 本轮已实现 G-Agent 式 Fast / Composition / Fallback、Persistent TinyEdge 与前端观测，待本地提交；临时当前代码服务 `4319` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
+- 本轮已实现 G-Agent 式 Fast / Composition / Fallback、Persistent TinyEdge 与最小 AutoTool TIG `motif_only` / `motif_first`；当前代码尚待本地提交。临时验证服务 `4320` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
 
 ## 已完成
 
 任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 加入 Persistent TinyEdge 规范化 identity、train-only 连续读取片段挖掘、Fast/Composition/Fallback 路由、composition 模型角色和片段来源/绑定/执行 UI；不做 Transient TinyEdge Group。详细边界和实证见 [g-agent-local-composition-design-2026-09-10.md](../docs/g-agent-local-composition-design-2026-09-10.md) 与 [g-agent-local-composition-validation-2026-09-10.md](../docs/g-agent-local-composition-validation-2026-09-10.md)。
+
+本轮追加最小 AutoTool：`backend/tool_inertia.py` 持久化模型来源、通过评分的 train 串行工具路径与无业务值参数契约；`motif_first` 在 `defer` 读取交接处至多尝试一次只读惯性调用，`motif_only` 是关闭对照。真实预检三条 train 均通过，`motif_first` 一次尝试因 CIPS 0.1348 低于 0.55 拒绝，未实际调用工具、未观察到收益；并发批不形成惯性上下文。详情见 [autotool-inertia-design-2026-09-10.md](../docs/autotool-inertia-design-2026-09-10.md)。
 
 最近功能提交：`9520ae7` Judge/reward/Plan对照；`e9e9df1` 强基线评测/报告；`e15d7c1` 执行回放；`f50d97d` 在线图进化。
 
@@ -39,7 +41,7 @@ npm run build
 
 - `artifacts/taskbank/records.sqlite3`、`gold.json`：冻结记录/仅供硬评分的参考答案。
 - `artifacts/taskbank-runs/<id>.json`：原始运行。
-- `artifacts/online-graphs.json`：已有图版本加本轮 schema 2 的 `workflows` / `tinyEdges`；当前真实训练未形成 support>=2 的可组合片段，不能假设其中存在 TinyEdge。
+- `artifacts/online-graphs.json`：已有图版本、`workflows` / `tinyEdges` 和 schema 3 的 `toolInertia`；TIG 仅保存路径/参数契约，不保存旧业务值。
 - `artifacts/paired-evaluations/<id>.json`、`sources/`：成对实验与新实验源码快照。
 - `artifacts/llm-judgements/<id>.json`、`inputs/`：裁判与输入。
 
@@ -47,7 +49,7 @@ npm run build
 
 ## 下一步
 
-执行入口见 `docs/EXECUTION_HANDOFF.md`。下一项优先用正常 train 流量解决图编译歧义并积累两个以上不同可执行来源，再运行一次真实 Composition；冻结方案前不扩展 validation/test，test 反馈不得回写 Motif/TinyEdge。
+执行入口见 `docs/EXECUTION_HANDOFF.md`。下一项先在正常 train 流量中积累足够 TIG 支持后再冻结 `motif_only` / `motif_first` 小样本；没有真实接受/净收益就保持 AutoTool 关闭。Composition 仍需先解决图编译歧义并积累两个以上不同可执行来源；冻结方案前不扩展 validation/test，test 反馈不得回写 Motif/TinyEdge/TIG。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 
