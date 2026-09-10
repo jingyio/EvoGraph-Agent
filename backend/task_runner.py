@@ -32,9 +32,11 @@ class BudgetExceeded(Exception):
 
 
 class TaskRunner:
-    def __init__(self, bank, provider_factory=None, run_limit=None, model_limit=None, read_limit=None):
+    def __init__(self, bank, provider_factory=None, run_limit=None, model_limit=None, read_limit=None,
+                 run_directory=None, evolution_path=None, learning_enabled=True):
         self.bank, self.provider_factory = bank, provider_factory
-        self.directory = bank.root / 'artifacts/taskbank-runs'
+        self.directory = run_directory or bank.root / 'artifacts/taskbank-runs'
+        self.learning_enabled = learning_enabled
         self.run_limit = run_limit or config.TASK_RUN_CONCURRENCY
         self.model_limit = model_limit or config.TASK_MODEL_CONCURRENCY
         self.read_limit = read_limit or config.TASK_READ_CONCURRENCY
@@ -42,7 +44,7 @@ class TaskRunner:
         self.model_slots = asyncio.Semaphore(self.model_limit)
         self.read_slots = asyncio.Semaphore(self.read_limit)
         self.runs, self.tasks = {}, {}
-        self.evolution = OnlineEvolution(bank)
+        self.evolution = OnlineEvolution(bank, evolution_path)
         self.active_runs = self.active_models = self.active_reads = 0
         self.peaks = dict(runs=0, models=0, reads=0)
 
@@ -174,14 +176,14 @@ class TaskRunner:
             except Exception as error:
                 run.update(status='failed', error=str(error)[:1200])
             finally:
-                if run['strategy'] in ['graph_rsi', 'motif_only', 'motif_first'] and 'evaluationContext' not in run:
+                if self.learning_enabled and run['strategy'] in ['graph_rsi', 'motif_only', 'motif_first'] and 'evaluationContext' not in run:
                     try:
                         self.evolution.observe(run, task, tools)
                     except Exception as error:
                         run.setdefault('evolution', {})['maintenanceError'] = str(error)[:500]
                     overhead = run.get('evolution', {}).get('maintenanceMs', 0)
                     run['metrics']['durationMs'] += overhead
-                elif 'evaluationContext' not in run:
+                elif self.learning_enabled and 'evaluationContext' not in run:
                     try:
                         run['toolInertiaMaintenance'] = self.evolution.observe_tool_inertia(run, task, tools)
                     except Exception as error:

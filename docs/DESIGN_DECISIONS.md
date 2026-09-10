@@ -22,6 +22,7 @@
 | D17 | 局部子图以受约束的语义筛选接口复用 | 2026-09-10 已确认。Plan 角色只能声明可由上游列表已声明字段验证的精确相等条件；编译器负责绑定和本地筛选。无法可靠确定时交给模型，字段/类型变化失败关闭；不新增大型 IR，也不硬编码任务答案。 |
 | D18 | G-Agent 式三路径只复用可执行结构，不照搬参考实现的专用策略 | 2026-09-10 已确认。Graph RSI 先 Fast 完整 Workflow，再用 composition 角色的粗子目标检索/确定性组合 Persistent TinyEdge，覆盖不足才调用完整 Plan。TinyEdge 只由通过评分的 train 图连续读取链产生，记录 support/来源/依赖/槽位；执行器直接消费已选 ID。当前不做论文 embedding、gap filler、LRU、AppWorld codegen 或 §4.6 Transient TinyEdge Group，普通工具并发不能计为组批收益。 |
 | D19 | 最小 AutoTool 采用 `motif_first` 的保守惯性补充 | 2026-09-10 已确认并实现。`motif_only` 保持图/Motif 后的原模型流程；`motif_first` 仅在历史图明确交接模型的读取位置尝试一次只读惯性调用。TIG 只从通过的 train 模型来源串行轨迹更新，参数只从本次观察绑定；并发批次不形成依赖，缺失/歧义/类型不符/重复均回退模型。论文的 embedding、thought、Adapter 与启发式填参未实现，不能声称完整复现。 |
+| D20 | 端到端在线对照使用隔离、空经验的六轮 train 流 | 2026-09-10 已确认。`plan_react` 基线不学习；`motif_first` RSI 仅在每个正常 train 任务后更新独立 Workflow/Motif/TinyEdge/TIG 存储。任务 manifest 在结果前冻结，任务对交替先后但每臂顺序相同；中断 run 计入失败、不自动重跑。Agent 与 Judge 成本分开，当前同模型 Judge 只作受限文字质量证据。协议见 `online-e2e-train-protocol-2026-09-10.md`。 |
 | D15 | 将当前讨论 session 与用户将建立的执行 session 分工 | 文档承接设计和状态，不依赖聊天长上下文；不绑定具体型号的能力假设 |
 
 ## 明确没有确认成结论的说法

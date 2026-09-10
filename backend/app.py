@@ -70,6 +70,25 @@ def create_app(service=None):
         return [{k: item.get(k) for k in ['id', 'status', 'createdAt', 'split', 'protocol', 'summary', 'byScenario', 'historicalSetupTokens']}
                 for item in sorted(paired.items.values(), key=lambda x: x['createdAt'], reverse=True)]
 
+    def online_e2e_path(key):
+        if not key or any(char not in 'abcdefghijklmnopqrstuvwxyz0123456789-_' for char in key):
+            raise HTTPException(404, 'Online experiment not found')
+        return taskbank.root / 'artifacts' / 'online-e2e' / key
+
+    @app.get('/api/online-e2e/{key}')
+    async def online_e2e_get(key: str):
+        path = online_e2e_path(key) / 'result.json'
+        if not path.exists():
+            raise HTTPException(404, 'Online experiment not found')
+        return json.loads(path.read_text())
+
+    @app.get('/api/online-e2e/{key}/report', response_class=HTMLResponse)
+    async def online_e2e_report(key: str):
+        path = online_e2e_path(key) / 'index.html'
+        if not path.exists():
+            raise HTTPException(404, 'Online experiment report not found')
+        return HTMLResponse(path.read_text(), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
     @app.post('/api/evaluations', status_code=202)
     async def evaluation_start(request: EvaluationRequest):
         if judge.tasks:

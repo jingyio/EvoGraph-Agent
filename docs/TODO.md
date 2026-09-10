@@ -1,6 +1,14 @@
 # 下一阶段任务
 
-日期：2026-09-10。目标见 [mentor-goals.md](mentor-goals.md)，已确认边界见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。此表是工作优先级，不是已完成能力清单。当前没有在途功能实现或需要接管的模型评测。
+日期：2026-09-10。目标见 [mentor-goals.md](mentor-goals.md)，已确认边界见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。此表是工作优先级，不是已完成能力清单。当前在途工作为隔离的 36-task 在线训练对照；协议已冻结在 `online-e2e-train-protocol-2026-09-10.md`，结果产生前不得调整任务、阈值或提示以影响结果。
+
+## P0.0 端到端在线对照
+
+状态：2026-09-10 启动前协议、隔离存储、断点恢复、Judge 审计与结果页已实现；尚未产生本轮 Agent 结果。
+
+- 依次运行六轮、36 对 `plan_react` / `motif_first` train 任务；首轮为正式预检，正确则不重跑地继续。
+- 记录经验版本和来源到后续使用的链，以及所有模型、工具、恢复、维护与 Judge 成本。基线不得读取 RSI 存储。
+- 验收：只有成对实测差值结合结构化评分和双顺序 Judge 才能支持效率/质量主张；无触发、负收益、失败和同模型 Judge 边界必须保留。
 
 ## P0.1 G-Agent Persistent TinyEdge 的真实训练覆盖
 

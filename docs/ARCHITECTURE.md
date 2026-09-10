@@ -70,3 +70,5 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 前端 `5173`：`#demo` 实时/回放、`#evaluation` 成对评测与裁判、`#evolution` 在线版本、`#taskbank` 任务工具。后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
+
+`scripts/run_online_e2e.py` 是独立的 36-task 在线训练对照入口。它创建专用 run/experience 目录，基线禁用学习，RSI 仅从此前正常 train 任务更新经验；每次启动后立即 checkpoint run ID，避免恢复时重复学习。结果静态页由 `/api/online-e2e/{id}/report` 提供，不能替代主前端的实时单任务回放。

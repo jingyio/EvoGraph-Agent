@@ -15,9 +15,9 @@ from . import tool_inertia
 
 
 class OnlineEvolution:
-    def __init__(self, bank):
+    def __init__(self, bank, path=None):
         self.bank = bank
-        self.path = bank.root / 'artifacts/online-graphs.json'
+        self.path = path or bank.root / 'artifacts/online-graphs.json'
         self.versions = []
         self.workflows = []
         self.tiny_edges = []
