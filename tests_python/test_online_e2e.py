@@ -1,4 +1,4 @@
-from scripts.run_online_e2e import TYPES, result_report, summary, task_manifest
+from scripts.run_online_e2e import TYPES, judge_summary, result_report, summary, task_manifest
 
 
 class Bank:
@@ -36,3 +36,13 @@ def test_online_summary_keeps_failures_and_local_maintenance():
     assert report['arms']['rsi']['diagnostics']['evolutionMaintenanceMs'] == 3.4
     assert report['arms']['rsi']['diagnostics']['inertiaUpdates'] == 1
     assert 'RSI' in result_report(dict(id='x', status='running', summary=report, rounds=[], evolutionChain=[]))
+
+
+def test_judge_cost_stays_separate_from_agent_summary():
+    rows = [dict(judge=dict(status='completed', sameAsExecutor=True,
+                            metrics=dict(modelRequests=2, inputTokens=20, outputTokens=4, durationMs=30, usageComplete=True),
+                            result=dict(winner='rsi', orderConsistent=True,
+                                        reports=dict(baseline=dict(reward=.8), rsi=dict(reward=.9)))))]
+    report = judge_summary(rows)
+    assert report['totalTokens'] == 24 and report['modelRequests'] == 2
+    assert report['rewards'] == dict(baseline=.8, rsi=.9)

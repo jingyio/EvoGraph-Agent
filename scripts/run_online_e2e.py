@@ -126,7 +126,8 @@ def evolution_chain(rows):
     chains = []
     for row in rows:
         run = row.get('runs', {}).get('rsi') or {}
-        before, after = row.get('experienceBefore') or {}, row.get('experienceAfter') or {}
+        timeline = row.get('experienceTimeline') or {}
+        before, after = timeline.get('before') or row.get('experienceBefore') or {}, timeline.get('after') or row.get('experienceAfter') or {}
         used = (run.get('evolution') or {}).get('usedVersionId')
         produced = (run.get('evolution') or {}).get('generatedVersionIds') or []
         if used or produced or before != after:
@@ -137,6 +138,55 @@ def evolution_chain(rows):
                                createdGraphIds=produced, before=before, after=after,
                                note=(run.get('evolution') or {}).get('note')))
     return chains
+
+
+def reconstructed_timeline(rows, runner):
+    """Recover per-task snapshots from append-only source-run lists after a resume.
+
+    This does not execute or learn anything; it derives counts from the isolated
+    final store and retains the legacy checkpoint fields for audit.
+    """
+    evolution, seen = runner.evolution, set()
+    for pair in rows:
+        run_id = (pair.get('runs', {}).get('rsi') or {}).get('id')
+        before = set(seen)
+        if run_id:
+            seen.add(run_id)
+        def snapshot(ids):
+            workflows = [row for row in evolution.workflows if row['sourceRunId'] in ids]
+            versions = [row for row in evolution.versions if row['sourceRunId'] in ids]
+            edges = [row for row in evolution.tiny_edges if set(row.get('sourceWorkflowIds', [])) <= {item['id'] for item in workflows}]
+            paths = [row for row in evolution.tool_inertia.get('toolPaths', []) if set(row.get('sourceRunIds', [])) & ids]
+            parameters = [row for row in evolution.tool_inertia.get('parameterEdges', []) if set(row.get('sourceRunIds', [])) & ids]
+            return dict(versions=len(versions), workflows=len(workflows), tinyEdges=len(edges), toolPaths=len(paths),
+                        parameterEdges=len(parameters), graphIds=[row['id'] for row in versions])
+        pair['experienceTimeline'] = dict(method='reconstructed_from_append_only_source_run_ids',
+                                          before=snapshot(before), after=snapshot(seen),
+                                          note='Legacy experienceBefore/After is retained; this derived timeline corrects resume-time overwrite.')
+
+
+def judge_summary(rows):
+    judges = [row.get('judge') or {} for row in rows]
+    completed = [row for row in judges if row.get('status') == 'completed']
+    metrics = [row.get('metrics') or {} for row in judges]
+    rewards = {arm: [] for arm in ['baseline', 'rsi']}
+    winners = {}
+    consistent = 0
+    for item in completed:
+        result = item.get('result') or {}
+        winners[result.get('winner', 'unknown')] = winners.get(result.get('winner', 'unknown'), 0) + 1
+        consistent += bool(result.get('orderConsistent'))
+        for arm in rewards:
+            report = (result.get('reports') or {}).get(arm)
+            if report:
+                rewards[arm].append(report['reward'])
+    return dict(attempts=len(judges), completed=len(completed), failed=len(judges) - len(completed), winners=winners,
+                orderConsistent=consistent, orderInconclusive=len(completed) - consistent,
+                rewards={arm: round(sum(values) / len(values), 4) if values else None for arm, values in rewards.items()},
+                modelRequests=aggregate(metrics, 'modelRequests'), inputTokens=aggregate(metrics, 'inputTokens'),
+                outputTokens=aggregate(metrics, 'outputTokens'), totalTokens=aggregate(metrics, 'inputTokens') + aggregate(metrics, 'outputTokens'),
+                durationMs=aggregate(metrics, 'durationMs'), usageComplete=all(item.get('usageComplete') for item in metrics),
+                sameAsExecutor=all(item.get('sameAsExecutor') for item in completed) if completed else None)
 
 
 def judge_input(bank, baseline, rsi):
@@ -197,7 +247,8 @@ def result_report(result):
         return f"<tr><th>{escape(name)}</th><td>{row.get('passed', 0)} / {row.get('attempts', 0)}</td><td>{row.get('totalTokens', 0):,}</td><td>{row.get('modelRequests', 0)}</td><td>{row.get('toolCalls', 0)}</td><td>{row.get('durationMs', 0) / 1000:.1f}s</td></tr>"
     rounds = ''.join(f"<tr><td>{row['round']}</td><td>{row['summary']['arms']['baseline']['totalTokens']:,}</td><td>{row['summary']['arms']['rsi']['totalTokens']:,}</td><td>{row['summary']['arms']['baseline']['passed']}</td><td>{row['summary']['arms']['rsi']['passed']}</td></tr>" for row in result.get('rounds', []))
     chains = ''.join(f"<li><b>{escape(item['taskId'])}</b>: used={escape(str(item['usedGraphId'] or 'none'))}, created={escape(', '.join(item['createdGraphIds']) or 'none')}</li>" for item in result.get('evolutionChain', [])) or '<li>尚未观察到经验变化。</li>'
-    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1100px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本不含 Judge 成本。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}</p><h2>累计执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>RSI - 基线：token {data.get('allOutcomeTokenDelta', 0):,}；延迟 {data.get('allOutcomeLatencyDeltaMs', 0) / 1000:.1f}s。负值才表示 RSI 较低。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main>'''
+    judge = result.get('judgeSummary') or {}
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1100px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>RSI - 基线：token {data.get('allOutcomeTokenDelta', 0):,}；延迟 {data.get('allOutcomeLatencyDeltaMs', 0) / 1000:.1f}s。负值才表示 RSI 较低。</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main>'''
 
 
 def write_report(root, result):
@@ -207,11 +258,14 @@ def write_report(root, result):
     temporary.replace(path)
 
 
-def checkpoint(root, result_path, result):
+def checkpoint(root, result_path, result, rsi=None):
+    if rsi:
+        reconstructed_timeline(result['pairs'], rsi)
     result['pairs'] = sorted(result['pairs'], key=lambda row: row['index'])
     result['summary'] = summary(result['pairs'])
     result['rounds'] = round_summaries(result['pairs'])
     result['evolutionChain'] = evolution_chain(result['pairs'])
+    result['judgeSummary'] = judge_summary(result['pairs'])
     write(result_path, result)
     write_report(root, result)
 
@@ -250,7 +304,7 @@ async def main(through_round=6):
         if pair['experienceBefore'] is None:
             pair['experienceBefore'] = experience_summary(rsi)
             result['pairs'] = list(by_task.values())
-            checkpoint(root, result_path, result)
+            checkpoint(root, result_path, result, rsi)
         for arm in pair['launchOrder']:
             existing = pair['runs'].get(arm)
             if existing:
@@ -264,19 +318,20 @@ async def main(through_round=6):
             pair['runs'][arm] = compact(run)
             pair['experienceAfter'] = experience_summary(rsi)
             result['pairs'] = list(by_task.values())
-            checkpoint(root, result_path, result)
+            checkpoint(root, result_path, result, rsi)
             await runner.tasks[run['id']]
             pair['runs'][arm] = compact(run)
             pair['experienceAfter'] = experience_summary(rsi)
             result['pairs'] = list(by_task.values())
-            checkpoint(root, result_path, result)
-        pair['experienceAfter'] = experience_summary(rsi)
+            checkpoint(root, result_path, result, rsi)
+        if pair['experienceAfter'] is None:
+            pair['experienceAfter'] = experience_summary(rsi)
         result['pairs'] = list(by_task.values())
-        checkpoint(root, result_path, result)
+        checkpoint(root, result_path, result, rsi)
     if through_round < 6:
         result['status'] = 'running'
         result['precheckThroughRound'] = through_round
-        checkpoint(root, result_path, result)
+        checkpoint(root, result_path, result, rsi)
         print(root)
         return
     provider = ModelClient(ModelOptions(config.JUDGE_BASE_URL, config.JUDGE_API_KEY, config.JUDGE_MODEL, config.MODEL_TIMEOUT))
@@ -293,9 +348,9 @@ async def main(through_round=6):
         except Exception as error:
             pair['judge'] = dict(status='failed', error=str(error)[:1000])
         write(root / 'judgements' / (pair['taskId'] + '.json'), pair['judge'])
-        checkpoint(root, result_path, result)
+        checkpoint(root, result_path, result, rsi)
     result['status'] = 'completed'; result['finishedAt'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    checkpoint(root, result_path, result)
+    checkpoint(root, result_path, result, rsi)
     print(root)
 
 

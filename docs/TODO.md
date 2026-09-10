@@ -4,11 +4,10 @@
 
 ## P0.0 端到端在线对照
 
-状态：2026-09-10 启动前协议、隔离存储、断点恢复、Judge 审计与结果页已实现；尚未产生本轮 Agent 结果。
+状态：2026-09-10 已完成 `online-e2e-train-v1`：36 对 train 在线执行和36对双顺序 Judge 均保留。RSI 全量 token +27.4%、延迟 +20.7%、35/36 通过，未达到总体收益目标；详情见 `online-e2e-train-results-2026-09-10.md`。
 
-- 依次运行六轮、36 对 `plan_react` / `motif_first` train 任务；首轮为正式预检，正确则不重跑地继续。
-- 记录经验版本和来源到后续使用的链，以及所有模型、工具、恢复、维护与 Judge 成本。基线不得读取 RSI 存储。
-- 验收：只有成对实测差值结合结构化评分和双顺序 Judge 才能支持效率/质量主张；无触发、负收益、失败和同模型 Judge 边界必须保留。
+- 已观察到 `support-channels-01 → -02...-06` 的 Fast 复用和少 Plan 请求，但没有 Composition、TinyEdge 或 AutoTool 运行时触发；不能把局部热点收益推广为总体结果。
+- 后续只能基于失败原因和正常 train 流量提出新假设；不得重跑同一任务、修改阈值制造 AutoTool 命中，或删除 `finance-installments-06` 的失败。
 
 ## P0.1 G-Agent Persistent TinyEdge 的真实训练覆盖
 
