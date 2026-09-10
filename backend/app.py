@@ -13,6 +13,7 @@ from .platform_check import check_platforms
 from .evolution import EvolutionService, EvolutionRequest
 from .reliability import ReliabilityService, ReliabilityRequest
 from .taskbank import TaskBank
+from .task_runner import TaskRunner, TaskRunRequest
 
 
 class TaskSessionRequest(BaseModel):
@@ -31,15 +32,18 @@ def create_app(service=None):
     evolution = EvolutionService(service)
     reliability = ReliabilityService(service)
     taskbank = TaskBank()
+    task_runner = TaskRunner(taskbank)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
         evolution.restore()
         reliability.restore()
         taskbank.load()
+        task_runner.restore()
         try:
             yield
         finally:
+            await task_runner.shutdown()
             await reliability.shutdown()
             await evolution.shutdown()
             await service.shutdown()
@@ -48,6 +52,31 @@ def create_app(service=None):
     app.state.evolution = evolution
     app.state.reliability = reliability
     app.state.taskbank = taskbank
+    app.state.task_runner = task_runner
+
+    @app.get('/api/taskbank/runs')
+    def task_run_list():
+        rows = sorted(task_runner.runs.values(), key=lambda r: r['createdAt'], reverse=True)[:50]
+        return {'scheduler': task_runner.status(), 'runs': [{k: r[k] for k in ['id', 'taskId', 'status', 'strategy', 'phase', 'models', 'metrics', 'evaluation']} for r in rows]}
+
+    @app.post('/api/taskbank/runs', status_code=202)
+    async def task_run_start(request: TaskRunRequest):
+        return {'id': (await task_runner.start(request))['id']}
+
+    @app.get('/api/taskbank/runs/{key}')
+    def task_run_get(key: str):
+        if key not in task_runner.runs:
+            raise HTTPException(404, 'Task run not found')
+        return task_runner.runs[key]
+
+    @app.post('/api/taskbank/runs/{key}/cancel')
+    async def task_run_cancel(key: str):
+        if key not in task_runner.runs:
+            raise HTTPException(404, 'Task run not found')
+        job = task_runner.tasks.get(key)
+        if job:
+            job.cancel()
+        return {'cancelled': bool(job)}
 
     @app.get('/api/taskbank/manifest')
     def taskbank_manifest():

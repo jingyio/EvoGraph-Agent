@@ -65,6 +65,13 @@ async def validate():
     report = dict(status='passed', tasks=300, scenarios=summaries, toolCalls=tool_calls, modelRequests=0,
                   note='分页、全部字段接口、评分器拒绝错误答案与分组隔离验证；不是 300 次 LLM 任务成功率。')
     write_private(ROOT / 'artifacts/taskbank/validation.json', report)
+    catalog = ['# 工具简明目录', '', '仅列用途和主要返回内容；精确参数见 specs/taskbank 或任务 API。', '']
+    for scenario in FAMILIES:
+        task = next(t for t in bank.tasks.values() if t['scenario'] == scenario)
+        catalog.extend(['## ' + scenario, '', '| 工具 | 用途与返回内容 |', '|---|---|'])
+        catalog.extend('| `' + t.name + '` | ' + t.description + ' |' for t in bank.tools(task['id']))
+        catalog.append('')
+    write_private(ROOT / 'docs/tool-catalog.md', '\n'.join(catalog))
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

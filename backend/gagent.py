@@ -6,6 +6,16 @@ from .tools import Tool, object_schema
 from .graph import contract_hash, ordered_nodes
 
 
+async def build_data_plan(task, tools, submit):
+    """Separate planner role; injected submit keeps HTTP and metering centralized."""
+    from .intent_graph import plan_tool, validate_plan
+    plan = await submit([
+        {'role': 'system', 'content': '只规划数据获取阶段。每一步描述一种字段读取能力，运行时自动遍历所有记录。严禁按第一条、第二条等逐条规划；每种能力只能出现一次。先列出本任务记录，再获取必要字段。独立字段读取仅依赖记录列表，不要串行依赖彼此。不要计算或发布结果，不输出内部推理。steps 必须是 JSON 数组，不能是转义后的字符串。必须调用 submit_plan。'},
+        {'role': 'user', 'content': json.dumps({'task': task['task'], 'capabilities': [{'name': t.name, 'description': t.description} for t in tools]}, ensure_ascii=False)}], plan_tool())
+    validate_plan(plan)
+    return plan
+
+
 def grams(text):
     text = ''.join(c for c in text.lower() if c.isalnum())
     return {text[i:i + 2] for i in range(len(text) - 1)}

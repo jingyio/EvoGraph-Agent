@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Database, Play, RefreshCw, ArrowDownToLine } from 'lucide-react';
 import { api } from './api';
 import type { ToolCard } from '../shared/types';
+import TaskRunPanel from './TaskRunPanel';
 
 type Scenario = 'finance' | 'support' | 'tickets';
 type Task = { id: string; scenario: Scenario; family: string; title: string; split: string; task: string; recordIds: string[]; recordCount: number; asOf: string; sourceUrl: string; acceptance: { metricKeys: string[]; selectedIdsOrderMatters: boolean; prose: string } };
@@ -66,6 +67,7 @@ export default function TaskBankPanel() {
       <div className="taskbank-list" role="navigation" aria-label="任务列表">{filtered.map(t => <button disabled={busy} key={t.id} className={t.id === task?.id ? 'selected' : ''} onClick={() => setSelected(t.id)}><strong>{t.title}</strong><small>{t.id} · {splits[t.split]}</small></button>)}</div>
       <div className="taskbank-detail">{task && <>
         <h2>{task.id}</h2><p>{task.task}</p>
+        {manifest?.ready && <TaskRunPanel taskId={task.id} />}
         <p>评分：结构化事实与证据匹配；报告文字未评分。工具调试不调用 LLM。</p>
         <details><summary>来源记录与验收字段</summary><pre>{JSON.stringify({ source: task.sourceUrl, recordIds: task.recordIds, acceptance: task.acceptance }, null, 2)}</pre></details>
         <h2>工具接口 · {tools.length} 个</h2>

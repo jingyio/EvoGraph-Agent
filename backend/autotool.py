@@ -1,12 +1,39 @@
-"""Restricted OpenAPI acquisition: no arbitrary code execution or spec-provided hosts."""
+"""OpenAPI tool acquisition and intent retrieval over short tool descriptions."""
 from copy import deepcopy
 import hashlib
 import json
 import re
+import math
+from collections import Counter
 from urllib.parse import quote
 from .tools import Tool, object_schema
 
 UNSAFE = {'__proto__', 'constructor', 'prototype'}
+
+
+def intent_tokens(text):
+    words = re.findall(r'[a-z0-9]+', text.lower())
+    for phrase in re.findall(r'[\u4e00-\u9fff]+', text):
+        words.extend(phrase[i:i+2] for i in range(max(0, len(phrase)-1)))
+    return words
+
+
+def retrieve_tools(intent, tools, k=4):
+    """Local BM25 over concise tool descriptions, not a semantic embedding model."""
+    docs = [Counter(intent_tokens(t.name.replace('_', ' ') + ' ' + t.description)) for t in tools]
+    query = set(intent_tokens(intent))
+    mean = sum(sum(d.values()) for d in docs) / max(1, len(docs))
+    df = Counter(word for doc in docs for word in doc)
+    ranked = []
+    for tool, doc in zip(tools, docs):
+        score = 0.0
+        for term in query:
+            freq = doc[term]
+            if freq:
+                idf = math.log(1 + (len(docs) - df[term] + .5) / (df[term] + .5))
+                score += idf * freq * 2.2 / (freq + 1.2 * (.25 + .75 * sum(doc.values()) / max(mean, 1)))
+        ranked.append(dict(name=tool.name, score=round(score, 5)))
+    return sorted(ranked, key=lambda r: (-r['score'], r['name']))[:k]
 
 
 def canonical(value):

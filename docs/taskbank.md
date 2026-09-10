@@ -57,7 +57,7 @@
 
 `npm run taskbank:validate` 遍历全部任务和字段接口，检查分页、分组隔离、参考答案可提交与错误答案被拒绝。此命令不调用 LLM。
 
-页面：`http://127.0.0.1:5173/#taskbank`。可按场景、任务族、划分筛选任务，查看规格，并在独立会话中手动调用工具。当前任务库与原有两场景 Agent 工作台分开；尚未把 300 个任务批量送入 ReAct/Graph 运行器。
+页面：`http://127.0.0.1:5173/#taskbank`。可筛选任务、查看规格并手动调试工具；Agent 执行区已支持 ReAct、Plan + ReAct 和 Plan + AutoTool DAG，见 [执行机制](intent-autotool.md)。尚未运行完整 300 任务对照。
 
 HTTP 接口：
 
