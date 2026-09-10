@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the fixed, isolated 36-task online RSI experiment exactly once per task."""
 import asyncio
+import argparse
 from copy import deepcopy
 from html import escape
 import json
@@ -215,7 +216,9 @@ def checkpoint(root, result_path, result):
     write_report(root, result)
 
 
-async def main():
+async def main(through_round=6):
+    if not 1 <= through_round <= 6:
+        raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
     if not bank.gold:
         raise RuntimeError('taskbank_records_missing')
@@ -241,6 +244,8 @@ async def main():
         raise RuntimeError('experiment_checkpoint_protocol_changed')
     by_task = {row['taskId']: row for row in result['pairs']}
     for index, item in enumerate(manifest):
+        if item['round'] > through_round:
+            break
         pair = by_task.setdefault(item['taskId'], dict(index=index, **item, launchOrder=['baseline', 'rsi'] if index % 2 == 0 else ['rsi', 'baseline'], runs={}, experienceBefore=None, experienceAfter=None))
         if pair['experienceBefore'] is None:
             pair['experienceBefore'] = experience_summary(rsi)
@@ -268,6 +273,12 @@ async def main():
         pair['experienceAfter'] = experience_summary(rsi)
         result['pairs'] = list(by_task.values())
         checkpoint(root, result_path, result)
+    if through_round < 6:
+        result['status'] = 'running'
+        result['precheckThroughRound'] = through_round
+        checkpoint(root, result_path, result)
+        print(root)
+        return
     provider = ModelClient(ModelOptions(config.JUDGE_BASE_URL, config.JUDGE_API_KEY, config.JUDGE_MODEL, config.MODEL_TIMEOUT))
     for pair in result['pairs']:
         if pair.get('judge') or not {'baseline', 'rsi'}.issubset(pair['runs']):
@@ -289,4 +300,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--through-round', type=int, default=6, help='Run through this fixed round; values below 6 retain a resumable formal precheck.')
+    asyncio.run(main(parser.parse_args().through_round))
