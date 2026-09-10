@@ -1,6 +1,7 @@
 """Intent retrieval, model-selected read DAGs, and dependency-aware execution."""
 from copy import deepcopy
 import asyncio
+import re
 import networkx as nx
 from .autotool import canonical, path_value
 from .graph import ordered_nodes
@@ -35,6 +36,43 @@ def graph_tool(plan, retrieval):
                 object_schema({'nodes': {'type': 'array', 'minItems': 1, 'maxItems': 10, 'items': node}}), lambda args, ctx: args)
 
 
+def select_retrieved_graph(plan, retrieval, tools):
+    """Choose graph tools locally from retrieval scores and compilable signatures."""
+    validate_plan(plan)
+    known = {tool.name: tool for tool in tools}
+    dag = nx.DiGraph()
+    dag.add_nodes_from(step['id'] for step in plan['steps'])
+    dag.add_edges_from((dep, step['id']) for step in plan['steps'] for dep in step['dependencies'])
+    selected, diagnostics = {}, []
+
+    def signature(tool):
+        required = set(tool.parameters['required'])
+        if not required:
+            return 'scope'
+        if required == {'page', 'pageSize'}:
+            return 'list'
+        if len(required) == 1 and next(iter(required)).endswith('Id'):
+            return 'record'
+        return 'unsupported'
+
+    for key in nx.topological_sort(dag):
+        rows = retrieval.get(key) or []
+        candidates = [(row, known.get(row['name'])) for row in rows if row.get('score', 0) > 0]
+        candidates = [(row, tool) for row, tool in candidates if tool and tool.effect == 'read' and signature(tool) != 'unsupported']
+        list_ancestor = any(signature(known[selected[parent]]) == 'list' for parent in nx.ancestors(dag, key) if parent in selected)
+        preferred = 'record' if list_ancestor else None
+        eligible = [(row, tool) for row, tool in candidates if preferred is None or signature(tool) == preferred]
+        if not eligible:
+            eligible = candidates
+        if not eligible:
+            raise ValueError('No positive, compilable AutoTool candidate for ' + key)
+        row, tool = eligible[0]
+        selected[key] = tool.name
+        diagnostics.append(dict(stepId=key, tool=tool.name, score=row['score'], candidateRank=rows.index(row) + 1,
+                                signature=signature(tool), selection='local-retrieval-and-contract'))
+    return {'nodes': [{'id': step['id'], 'tool': selected[step['id']]} for step in plan['steps']]}, diagnostics
+
+
 def compile_intent_graph(plan, proposal, retrieval, tools):
     validate_plan(plan)
     graph_tool(plan, retrieval).validator.validate(proposal)
@@ -54,6 +92,19 @@ def compile_intent_graph(plan, proposal, retrieval, tools):
         if tool.effect != 'read':
             raise ValueError('Read graph cannot publish or write')
         node.update(dependencies=steps[node['id']]['dependencies'], sourceEventSeqs=[])
+        ignored = {'id', 'records', 'page', 'mayHaveMore', '_evidenceRef'}
+        requested = {field for field in (tool.outputs or []) if field not in ignored and re.search(r'(?<![A-Za-z0-9_])' + re.escape(field) + r'(?![A-Za-z0-9_])', steps[node['id']]['intent'], re.I)}
+        reusable = []
+        for source in nx.ancestors(dag, node['id']):
+            source_tool = known[selected[source]]
+            if requested and requested.issubset(set(source_tool.outputs or [])):
+                reusable.append(source)
+        if len(reusable) == 1:
+            source = reusable[0]
+            node['reuse'] = {'nodeId': source, 'collectionPath': ['records'], 'fields': sorted(requested)}
+            node['dependencies'] = sorted(set(node['dependencies']) | {source})
+            node['arguments'] = {}
+            continue
         parameters = set(tool.parameters['required'])
         node['arguments'] = {}
         if parameters == {'page', 'pageSize'}:
@@ -73,7 +124,7 @@ def compile_intent_graph(plan, proposal, retrieval, tools):
     return nodes
 
 
-async def execute_graph(nodes, tools, invoke, on_node):
+async def execute_graph(nodes, tools, invoke, on_node, on_elide=None):
     ordered_nodes(nodes, tools)
     dag = nx.DiGraph()
     dag.add_nodes_from(n['id'] for n in nodes)
@@ -83,6 +134,14 @@ async def execute_graph(nodes, tools, invoke, on_node):
     async def execute(node):
         on_node(node['id'], 'running')
         try:
+            if node.get('reuse'):
+                source = outputs[node['reuse']['nodeId']]
+                count = sum(len(path_value(page, node['reuse']['collectionPath'])) for page in source)
+                outputs[node['id']] = source
+                if on_elide:
+                    on_elide(node['id'], count)
+                on_node(node['id'], 'reused')
+                return
             items = [None]
             if node.get('foreach'):
                 items = []

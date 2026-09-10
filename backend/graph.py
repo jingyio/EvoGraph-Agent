@@ -12,7 +12,7 @@ def task_key(task):
 
 
 def contract_hash(tools):
-    return digest(sorted([{'name': t.name, 'description': t.description, 'parameters': t.parameters, 'effect': t.effect} for t in tools], key=lambda t: t['name']))
+    return digest(sorted([{'name': t.name, 'description': t.description, 'parameters': t.parameters, 'effect': t.effect, 'outputs': list(t.outputs or [])} for t in tools], key=lambda t: t['name']))
 
 
 def candidates(samples, tool_name, parameter, value):
@@ -125,7 +125,7 @@ def ordered_nodes(nodes, tools):
         raise ValueError('任务图节点数量无效')
     graph = nx.DiGraph()
     known = {t.name: t for t in tools}
-    allowed = {'id', 'tool', 'arguments', 'dependencies', 'foreach', 'paginate', 'sourceEventSeqs'}
+    allowed = {'id', 'tool', 'arguments', 'dependencies', 'foreach', 'paginate', 'reuse', 'sourceEventSeqs'}
     for node in nodes:
         if not isinstance(node, dict) or set(node) - allowed:
             raise ValueError('无效图节点字段')
@@ -160,6 +160,16 @@ def ordered_nodes(nodes, tools):
             path = node['foreach']['collectionPath']
             if path is not None and (not isinstance(path, list) or any(not isinstance(p, str) or p in UNSAFE for p in path)):
                 raise ValueError('遍历路径无效')
+        if node.get('reuse'):
+            reuse = node['reuse']
+            if set(reuse) != {'nodeId', 'collectionPath', 'fields'} or node['arguments'] or node.get('foreach') or node.get('paginate'):
+                raise ValueError('复用节点结构无效')
+            path, fields = reuse['collectionPath'], reuse['fields']
+            if not isinstance(path, list) or any(not isinstance(p, str) or p in UNSAFE for p in path):
+                raise ValueError('复用路径无效')
+            if not isinstance(fields, list) or not fields or any(not isinstance(field, str) or field in UNSAFE for field in fields):
+                raise ValueError('复用字段无效')
+            actual.add(reuse['nodeId'])
         deps = node['dependencies']
         if not isinstance(deps, list) or not actual.issubset(deps) or any(dep not in by_id for dep in deps):
             raise ValueError('任务图缺少数据依赖')
@@ -177,6 +187,10 @@ async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: Non
         await asyncio.sleep(0)
         node_event(node['id'], 'running')
         try:
+            if node.get('reuse'):
+                outputs[node['id']] = deepcopy(outputs[node['reuse']['nodeId']])
+                node_event(node['id'], 'reused')
+                continue
             items = [None]
             if node.get('foreach'):
                 source = outputs[node['foreach']['nodeId']]

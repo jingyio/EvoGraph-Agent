@@ -1,5 +1,6 @@
 """Queued taskbank agents: Plan, intent/tool retrieval, read DAG, then execution."""
 import asyncio
+from collections import Counter
 from copy import deepcopy
 import json
 import time
@@ -12,8 +13,8 @@ from .domain import now
 from .graph_store import write_private
 from .model_client import ModelClient, ModelOptions
 from .tools import Tool, ToolContext, object_schema
-from .autotool import retrieve_tools
-from .intent_graph import graph_tool, compile_intent_graph, execute_graph
+from .autotool import canonical, retrieve_tools
+from .intent_graph import select_retrieved_graph, compile_intent_graph, execute_graph
 from .gagent import build_data_plan
 
 
@@ -46,6 +47,61 @@ class TaskRunner:
                     active=dict(runs=self.active_runs, models=self.active_models, reads=self.active_reads), peaks=self.peaks,
                     queued=sum(r['status'] == 'queued' for r in self.runs.values()))
 
+    @staticmethod
+    def tool_trace(run):
+        if run.get('toolTrace') is not None:
+            return run['toolTrace']
+        trace = []
+        for item in run.get('events', []):
+            if item.get('type') != 'action':
+                continue
+            detail = item.get('detail') or {}
+            try:
+                arguments = json.loads(detail.get('arguments', '{}'))
+            except (TypeError, ValueError):
+                arguments = {'_unparsed': str(detail.get('arguments', ''))}
+            trace.append(dict(tool=item.get('title'), arguments=arguments, executor=detail.get('executor', 'unknown'),
+                              effect=detail.get('effect', 'unknown'), signature=canonical([item.get('title'), arguments])))
+        return trace
+
+    def compare_with_strategy(self, run, strategy):
+        if run.get('strategy') == strategy:
+            return None
+        baselines = [candidate for candidate in self.runs.values()
+                     if candidate.get('taskId') == run.get('taskId') and candidate.get('strategy') == strategy
+                     and candidate.get('evaluation', {}).get('status') == 'passed' and candidate.get('status') == 'completed']
+        if run.get('evaluation', {}).get('status') != 'passed' or run.get('status') != 'completed' or not baselines:
+            return None
+        baseline = max(baselines, key=lambda candidate: candidate.get('createdAt', ''))
+        left, right = self.tool_trace(baseline), self.tool_trace(run)
+        left_counts, right_counts = Counter(item['signature'] for item in left), Counter(item['signature'] for item in right)
+        skipped_counts, added_counts = left_counts - right_counts, right_counts - left_counts
+        left_names, right_names = Counter(item['tool'] for item in left), Counter(item['tool'] for item in right)
+        fewer_names, more_names = left_names - right_names, right_names - left_names
+
+        def rows(trace, counts):
+            by_signature = {item['signature']: item for item in trace}
+            return [dict(tool=by_signature[key]['tool'], arguments=by_signature[key]['arguments'], effect=by_signature[key].get('effect'), count=count)
+                    for key, count in counts.items()]
+
+        effects = {item['tool']: item.get('effect') for item in left + right}
+        by_tool = lambda counts: [dict(tool=name, effect=effects.get(name), count=count) for name, count in counts.items()]
+        skipped, added = rows(left, skipped_counts), rows(right, added_counts)
+        fewer, more = by_tool(fewer_names), by_tool(more_names)
+        baseline_metrics, candidate_metrics = baseline.get('metrics', {}), run.get('metrics', {})
+        return dict(baselineRunId=baseline['id'], baselineStrategy=strategy, comparable=True, baselineToolCalls=len(left), candidateToolCalls=len(right),
+                    netToolCallReduction=len(left) - len(right), fewerToolCalls=sum(fewer_names.values()),
+                    fewerReadCalls=sum(row['count'] for row in fewer if row.get('effect') == 'read'), fewerByTool=fewer, moreByTool=more,
+                    modelRequestReduction=baseline_metrics.get('modelRequests', 0) - candidate_metrics.get('modelRequests', 0),
+                    inputTokenReduction=baseline_metrics.get('inputTokens', 0) - candidate_metrics.get('inputTokens', 0),
+                    outputTokenReduction=baseline_metrics.get('outputTokens', 0) - candidate_metrics.get('outputTokens', 0),
+                    durationMsReduction=baseline_metrics.get('durationMs', 0) - candidate_metrics.get('durationMs', 0),
+                    sharedToolCalls=sum((left_counts & right_counts).values()), skippedToolCalls=sum(skipped_counts.values()),
+                    addedToolCalls=sum(added_counts.values()), skipped=skipped, added=added)
+
+    def compare_with_baseline(self, run):
+        return self.compare_with_strategy(run, 'react')
+
     def save(self, run):
         write_private(self.directory / (run['id'] + '.json'), run)
 
@@ -76,11 +132,11 @@ class TaskRunner:
         tools = self.bank.tools(task['id'])
         planner, executor = self.providers()
         run = dict(id=str(uuid4()), taskId=task['id'], scenario=task['scenario'], split=task['split'], strategy=request.strategy,
-                   status='queued', phase='排队', createdAt=now(), events=[], plan=None, graph=None, retrieval=[],
+                   status='queued', phase='排队', createdAt=now(), events=[], toolTrace=[], plan=None, graph=None, retrieval=[], graphSelection=[],
                    models=dict(planner=planner.model, executor=executor.model, distinctModels=planner.model != executor.model),
                    modelSettings=dict(planner=getattr(planner, 'settings', {}), executor=getattr(executor, 'settings', {})),
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
-                                usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0),
+                                usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         self.runs[run['id']] = run
@@ -193,12 +249,17 @@ class TaskRunner:
             entry = dict(call=deepcopy(call), observation=None)
             ledger.append(entry)
             name = call['function']['name']
-            event('action', name, dict(arguments=call['function']['arguments'], executor=owner, callId=call['id']))
+            effect = known[name].effect if name in known else 'unknown'
+            event('action', name, dict(arguments=call['function']['arguments'], executor=owner, effect=effect, callId=call['id']))
+            trace = dict(tool=name, arguments=None, executor=owner, effect=effect, signature=None, ok=None)
+            run['toolTrace'].append(trace)
             try:
                 if name not in known or (allowed is not None and name not in allowed):
                     raise ValueError('工具不在当前可用集合；可使用 request_tools 更新当前意图')
                 tool = known[name]
                 args = json.loads(call['function']['arguments'])
+                trace['arguments'] = deepcopy(args)
+                trace['signature'] = canonical([name, args])
                 if tool.effect == 'read':
                     async with self.read_slots:
                         active_reads += 1
@@ -221,7 +282,11 @@ class TaskRunner:
             except Exception as error:
                 metrics['toolErrors'] += 1
                 observation = dict(ok=False, error=str(error)[:1200])
+                if trace['arguments'] is None:
+                    trace['arguments'] = {'_unparsed': str(call['function'].get('arguments', ''))}
+                    trace['signature'] = canonical([name, trace['arguments']])
             entry['observation'] = deepcopy(observation)
+            trace['ok'] = observation['ok']
             event('observation', name, observation)
             return observation
 
@@ -242,13 +307,17 @@ class TaskRunner:
                     event('plan', '数据获取计划', plan)
                     messages.append(dict(role='user', content='当前数据获取计划：' + json.dumps(plan, ensure_ascii=False)))
                     if run['strategy'] == 'autotool':
-                        run['phase'] = 'AutoTool 检索与图选择'
+                        run['phase'] = 'AutoTool 本地检索与图编译'
                         retrieval = {s['id']: retrieve_tools(s['intent'], acquisition) for s in plan['steps']}
                         run['retrieval'] = [dict(stepId=s['id'], intent=s['intent'], candidates=retrieval[s['id']]) for s in plan['steps']]
-                        candidate_names = {r['name'] for rows in retrieval.values() for r in rows}
-                        proposal = await structured(executor, 'graph', [dict(role='system', content='将每个 Plan 步骤映射为该步骤召回列表中的一个工具。id 必须与 Plan 一致。每个节点只输出 id 和 tool，节点数组使用原生 JSON 数组。分页、记录 ID 绑定和遍历由编译器自动生成，不要输出 arguments 或 foreach。必须调用 submit_graph。'),
-                            dict(role='user', content=json.dumps(dict(plan=plan, retrieval=retrieval, tools=[t.card() for t in acquisition if t.name in candidate_names]), ensure_ascii=False))], graph_tool(plan, retrieval))
+                        proposal, selection = select_retrieved_graph(plan, retrieval, acquisition)
                         nodes = compile_intent_graph(plan, proposal, retrieval, acquisition)
+                        by_id = {node['id']: node for node in nodes}
+                        for row in selection:
+                            if by_id[row['stepId']].get('reuse'):
+                                row.update(execution='reuse-upstream-output', reuse=by_id[row['stepId']]['reuse'])
+                        run['graphSelection'] = selection
+                        event('graph', '本地工具图选择', selection)
                         run['graph'] = dict(status='running', nodes=nodes, nodeStates={n['id']: 'pending' for n in nodes})
                         run['phase'] = '并发读取图执行'
                         start = len(ledger)
@@ -261,8 +330,11 @@ class TaskRunner:
                         def node_event(key, state):
                             run['graph']['nodeStates'][key] = state
                             event('graph', key + ' ' + state)
+                        def elide_event(key, count):
+                            metrics['elidedToolCalls'] += count
+                            event('graph', key + ' 复用上游字段，消除工具调用', {'elidedToolCalls': count})
                         try:
-                            await execute_graph(nodes, acquisition, graph_invoke, node_event)
+                            await execute_graph(nodes, acquisition, graph_invoke, node_event, elide_event)
                             run['graph']['status'] = 'done'
                         finally:
                             # One batch history instead of synthetic one-tool thought turns.

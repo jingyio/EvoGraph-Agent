@@ -88,6 +88,23 @@ async def test_dynamic_pagination_expands_beyond_original_sample():
     assert pages == [1, 2, 3] and ids == [11, 12, 13, 14, 15]
 
 
+async def test_legacy_graph_executor_reuses_upstream_output_without_calling_detail_tool():
+    tools = [Tool('list_issues', 'read', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), lambda a, c: None),
+             Tool('get_issue', 'read', 'read', object_schema({'issueId': {'type': 'string'}}), lambda a, c: None)]
+    nodes = [
+        {'id': 'list', 'tool': 'list_issues', 'arguments': {'page': {'kind': 'literal', 'value': 1}, 'pageSize': {'kind': 'literal', 'value': 50}}, 'dependencies': [], 'paginate': {'maxPages': 2}, 'sourceEventSeqs': []},
+        {'id': 'state', 'tool': 'get_issue', 'arguments': {}, 'dependencies': ['list'], 'reuse': {'nodeId': 'list', 'collectionPath': ['records'], 'fields': ['state']}, 'sourceEventSeqs': []},
+    ]
+    calls, states = [], []
+    async def invoke(name, args, node):
+        calls.append((name, args))
+        return {'records': [{'id': '1', 'state': 'open'}], 'mayHaveMore': False}
+    outputs = await run_read_graph(nodes, tools, invoke, lambda key, state: states.append((key, state)))
+    assert calls == [('list_issues', {'page': 1, 'pageSize': 50})]
+    assert outputs['state'] == outputs['list']
+    assert ('state', 'reused') in states
+
+
 async def test_store_restore_and_quality_rejection(tmp_path):
     tools = sandbox_tools('finance')
     source = await trace(tools, OPS)
@@ -103,6 +120,13 @@ async def test_store_restore_and_quality_rejection(tmp_path):
     bad['evaluation'] = {'status': 'failed'}
     with pytest.raises(ValueError, match='结果校验'):
         await store.learn(bad, tools)
+
+
+def test_contract_hash_changes_when_declared_outputs_change():
+    schema = object_schema()
+    first = Tool('read', 'read', 'read', schema, lambda a, c: None, outputs=['id'])
+    second = Tool('read', 'read', 'read', schema, lambda a, c: None, outputs=['id', 'state'])
+    assert contract_hash([first]) != contract_hash([second])
 
 
 def test_cycles_missing_dependencies_writes_and_paths_rejected():

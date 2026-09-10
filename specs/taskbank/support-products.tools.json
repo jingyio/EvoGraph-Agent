@@ -21,7 +21,11 @@
         "pageSize"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "product"
+    ]
   },
   {
     "name": "support_get_complaint",
@@ -39,7 +43,16 @@
         "complaintId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "product",
+      "sub_product",
+      "issue",
+      "sub_issue",
+      "company",
+      "submitted_via"
+    ]
   },
   {
     "name": "support_get_response",
@@ -57,7 +70,13 @@
         "complaintId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "company_response",
+      "company_public_response",
+      "timely"
+    ]
   },
   {
     "name": "support_get_dates",
@@ -75,7 +94,12 @@
         "complaintId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "date_received",
+      "date_sent_to_company"
+    ]
   },
   {
     "name": "support_get_narrative",
@@ -93,7 +117,11 @@
         "complaintId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "narrative"
+    ]
   },
   {
     "name": "support_get_task_scope",
@@ -104,7 +132,13 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "asOf",
+      "recordCount",
+      "acceptance"
+    ]
   },
   {
     "name": "support_sum_values",
@@ -125,7 +159,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "sum"
+    ]
   },
   {
     "name": "support_count_values",
@@ -146,7 +183,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "counts"
+    ]
   },
   {
     "name": "support_rank_values",
@@ -194,7 +234,10 @@
         "limit"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "ids"
+    ]
   },
   {
     "name": "support_publish_report",

@@ -67,7 +67,10 @@ def create_app(service=None):
     def task_run_get(key: str):
         if key not in task_runner.runs:
             raise HTTPException(404, 'Task run not found')
-        return task_runner.runs[key]
+        result = dict(task_runner.runs[key])
+        result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
+        result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') == 'autotool' else None
+        return result
 
     @app.post('/api/taskbank/runs/{key}/cancel')
     async def task_run_cancel(key: str):

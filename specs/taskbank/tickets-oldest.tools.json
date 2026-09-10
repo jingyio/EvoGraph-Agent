@@ -21,7 +21,12 @@
         "pageSize"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "state",
+      "title"
+    ]
   },
   {
     "name": "tickets_get_issue",
@@ -39,7 +44,14 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "title",
+      "state",
+      "created_at",
+      "updated_at"
+    ]
   },
   {
     "name": "tickets_get_labels",
@@ -57,7 +69,11 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "labels"
+    ]
   },
   {
     "name": "tickets_get_assignment",
@@ -75,7 +91,11 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "assignee_count"
+    ]
   },
   {
     "name": "tickets_get_milestone",
@@ -93,7 +113,11 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "milestone"
+    ]
   },
   {
     "name": "tickets_get_activity",
@@ -111,7 +135,12 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "comments",
+      "updated_at"
+    ]
   },
   {
     "name": "tickets_get_resolution",
@@ -129,7 +158,13 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "state",
+      "created_at",
+      "closed_at"
+    ]
   },
   {
     "name": "tickets_get_body",
@@ -147,7 +182,12 @@
         "issueId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "body",
+      "url"
+    ]
   },
   {
     "name": "tickets_get_task_scope",
@@ -158,7 +198,13 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "asOf",
+      "recordCount",
+      "acceptance"
+    ]
   },
   {
     "name": "tickets_sum_values",
@@ -179,7 +225,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "sum"
+    ]
   },
   {
     "name": "tickets_count_values",
@@ -200,7 +249,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "counts"
+    ]
   },
   {
     "name": "tickets_rank_values",
@@ -248,7 +300,10 @@
         "limit"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "ids"
+    ]
   },
   {
     "name": "tickets_publish_report",

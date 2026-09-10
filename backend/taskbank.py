@@ -101,8 +101,8 @@ class TaskBank:
             raise ValueError('Task records are not installed; run npm run taskbank:build with the frozen source cache')
         scenario, parameter = task['scenario'], PARAMS[task['scenario']]
         tools = []
-        def add(name, description, schema, handler, effect='read'):
-            tools.append(Tool(scenario + '_' + name, description, effect, schema, handler))
+        def add(name, description, schema, handler, effect='read', outputs=None):
+            tools.append(Tool(scenario + '_' + name, description, effect, schema, handler, outputs=outputs))
         def read(key, fields, ctx):
             row = self.record(task, key)
             ref = scenario + ':' + key
@@ -114,23 +114,24 @@ class TaskBank:
             field = ['status'] if scenario == 'finance' else ['product'] if scenario == 'support' else ['state', 'title']
             return dict(records=[read(key, field, ctx) for key in keys], page=args['page'], mayHaveMore=start + len(keys) < len(task['recordIds']))
         label = dict(finance='订单', support='投诉', tickets='技术工单')[scenario]
-        add(LISTS[scenario], f'分页列出本任务{label}记录及 ID；返回 records 数组（id、概要字段）、page、mayHaveMore。', object_schema({'page': {'type': 'integer', 'minimum': 1}, 'pageSize': {'type': 'integer', 'minimum': 1, 'maximum': 50}}), listing)
+        list_outputs = dict(finance=['id', 'status'], support=['id', 'product'], tickets=['id', 'state', 'title'])[scenario]
+        add(LISTS[scenario], f'分页列出本任务{label}记录及 ID；返回 records 数组（id、概要字段）、page、mayHaveMore。', object_schema({'page': {'type': 'integer', 'minimum': 1}, 'pageSize': {'type': 'integer', 'minimum': 1, 'maximum': 50}}), listing, outputs=list_outputs)
         for name, fields in SECTIONS[scenario].items():
             add(name, DESCRIPTIONS[scenario + '_' + name],
-                object_schema({parameter: {'type': 'string', 'minLength': 1}}), lambda args, ctx, fields=fields: read(args[parameter], fields, ctx))
+                object_schema({parameter: {'type': 'string', 'minLength': 1}}), lambda args, ctx, fields=fields: read(args[parameter], fields, ctx), outputs=['id', *fields])
         add('get_task_scope', '读取当前任务范围、参考时间及输出字段名称；不返回参考答案。', object_schema(),
-            lambda args, ctx: {k: task[k] for k in ['id', 'asOf', 'recordCount', 'acceptance']})
-        add('sum_values', '整数求和，不做币种换算。输入值需来自已读取记录。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'integer'}}}), lambda args, ctx: {'sum': sum(args['values'])})
+            lambda args, ctx: {k: task[k] for k in ['id', 'asOf', 'recordCount', 'acceptance']}, outputs=['id', 'asOf', 'recordCount', 'acceptance'])
+        add('sum_values', '整数求和，不做币种换算。输入值需来自已读取记录。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'integer'}}}), lambda args, ctx: {'sum': sum(args['values'])}, outputs=['sum'])
         def count(args, ctx):
             from collections import Counter
             return dict(counts=dict(Counter(args['values'])))
-        add('count_values', '按精确字符串分组计数；缺失字段使用 (missing)。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'string'}}}), count)
+        add('count_values', '按精确字符串分组计数；缺失字段使用 (missing)。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'string'}}}), count, outputs=['counts'])
         def rank(args, ctx):
             if any(r['id'] not in task['recordIds'] for r in args['records']):
                 raise ValueError('Record is outside this task scope')
             direction = -1 if args['direction'] == 'desc' else 1
             return {'ids': [r['id'] for r in sorted(args['records'], key=lambda r: (direction * r['value'], r['id']))[:args['limit']]]}
-        add('rank_values', '按整数值排序，并列按记录 ID 字符串升序。', object_schema({'records': {'type': 'array', 'maxItems': 100, 'items': object_schema({'id': {'type': 'string'}, 'value': {'type': 'integer'}})}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}), rank)
+        add('rank_values', '按整数值排序，并列按记录 ID 字符串升序。', object_schema({'records': {'type': 'array', 'maxItems': 100, 'items': object_schema({'id': {'type': 'string'}, 'value': {'type': 'integer'}})}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}), rank, outputs=['ids'])
         def publish(args, ctx):
             evaluation = compare(task, self.gold[task_id], args, ctx.evidence)
             ctx.run['submission'] = deepcopy(args)

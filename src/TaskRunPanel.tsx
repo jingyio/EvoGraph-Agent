@@ -2,7 +2,19 @@ import { useEffect, useState } from 'react';
 import { Play, Square } from 'lucide-react';
 import { api } from './api';
 type ReadGraph = { status: string; nodes: { id: string; tool: string; dependencies: string[] }[]; nodeStates: Record<string, string> };
-type Run = { id: string; taskId: string; status: string; phase: string; models: { planner: string; executor: string; distinctModels: boolean }; metrics: { modelRequests: number; toolCalls: number; toolErrors: number; controlErrors?: number; inputTokens: number; outputTokens: number; usageComplete: boolean; peakReads: number; queueMs: number }; phaseMetrics?: Record<string, { requests: number; inputTokens: number; outputTokens: number }>; evaluation: { status: string; issues: string[] }; plan?: unknown; graph?: ReadGraph; retrieval?: unknown; submission?: unknown; error?: string; fallback?: string };
+type ToolDifference = { tool: string; arguments: unknown; effect?: string; count: number };
+type Comparison = { baselineRunId: string; baselineStrategy: string; baselineToolCalls: number; candidateToolCalls: number; netToolCallReduction: number; fewerToolCalls: number; fewerReadCalls: number; fewerByTool: { tool: string; effect?: string; count: number }[]; moreByTool: { tool: string; effect?: string; count: number }[]; modelRequestReduction: number; inputTokenReduction: number; outputTokenReduction: number; durationMsReduction: number; sharedToolCalls: number; skippedToolCalls: number; addedToolCalls: number; skipped: ToolDifference[]; added: ToolDifference[] };
+type Run = { id: string; taskId: string; strategy: string; status: string; phase: string; models: { planner: string; executor: string; distinctModels: boolean }; metrics: { modelRequests: number; toolCalls: number; toolErrors: number; controlErrors?: number; elidedToolCalls?: number; inputTokens: number; outputTokens: number; usageComplete: boolean; peakReads: number; queueMs: number }; phaseMetrics?: Record<string, { requests: number; inputTokens: number; outputTokens: number }>; evaluation: { status: string; issues: string[] }; plan?: unknown; graph?: ReadGraph; graphSelection?: unknown; retrieval?: unknown; submission?: unknown; comparison?: Comparison | null; planReactComparison?: Comparison | null; error?: string; fallback?: string };
+
+function ComparisonView({ value, label }: { value: Comparison; label: string }) {
+  return <div className="taskbank-comparison">
+    <strong>{label}：工具调用净减少 {value.netToolCallReduction} 次，按工具名确认少执行 {value.fewerToolCalls} 次</strong>
+    <p>基线 {value.baselineToolCalls} 次 · 当前 {value.candidateToolCalls} 次 · 少执行的读取 {value.fewerReadCalls} 次</p>
+    <p>LLM 少 {value.modelRequestReduction} 次 · 输入 token 少 {value.inputTokenReduction} · 输出 token 少 {value.outputTokenReduction} · 耗时少 {value.durationMsReduction} ms</p>
+    <p>{value.fewerByTool.map(row => `${row.tool} × ${row.count}`).join(' · ') || '没有少执行的工具'}</p>
+    <details><summary>查看精确参数签名差异</summary><pre>{JSON.stringify({ baselineRunId: value.baselineRunId, fewerByTool: value.fewerByTool, moreByTool: value.moreByTool, baselineOnlySignatures: value.skipped, candidateOnlySignatures: value.added }, null, 2)}</pre></details>
+  </div>;
+}
 
 function ReadGraphView({ graph }: { graph: ReadGraph }) {
   const depth = new Map<string, number>();
@@ -31,6 +43,7 @@ export default function TaskRunPanel({ taskId }: { taskId: string }) {
         const data = await api<{ runs: Run[]; scheduler: typeof scheduler }>('/api/taskbank/runs');
         if (!stopped) { setRuns(data.runs); setScheduler(data.scheduler); }
         if (current) { const run = await api<Run>('/api/taskbank/runs/' + current); if (!stopped) setDetail(run); }
+        if (!stopped) setError('');
       } catch (e) { if (!stopped) setError((e as Error).message); }
       if (!stopped) timer = setTimeout(poll, 1500);
     }
@@ -51,11 +64,15 @@ export default function TaskRunPanel({ taskId }: { taskId: string }) {
       <p>{detail.phase} · {detail.status} · 结构化评分 {detail.evaluation.status}</p>
       <p>规划模型：{detail.models.planner} · 执行模型：{detail.models.executor} · {detail.models.distinctModels ? '不同模型' : '同模型（未配置独立规划模型）'}</p>
       <p>LLM {detail.metrics.modelRequests} 次 · 工具 {detail.metrics.toolCalls} 次 · 工具错误 {detail.metrics.toolErrors} 次 · 输入/输出 token {detail.metrics.inputTokens}/{detail.metrics.outputTokens}{!detail.metrics.usageComplete && '（统计不完整）'} · 读取峰值 {detail.metrics.peakReads}</p>
+      {detail.strategy === 'autotool' && <p>图复用上游字段，实际消除 {detail.metrics.elidedToolCalls ?? 0} 次工具调用</p>}
       <p>Plan/图格式错误 {detail.metrics.controlErrors ?? '未记录'} · 排队 {detail.metrics.queueMs} ms</p>
+      {detail.strategy === 'autotool' && <p>图工具选择：本地检索 + 契约编译 · 图阶段 LLM {detail.phaseMetrics?.graph?.requests ?? 0} 次</p>}
+      {detail.comparison && <ComparisonView value={detail.comparison} label="同任务 ReAct 对照" />}
+      {detail.planReactComparison && <ComparisonView value={detail.planReactComparison} label="AutoTool 消融：同任务 Plan + ReAct 对照" />}
       {detail.graph && <ReadGraphView graph={detail.graph} />}
       {['running', 'queued'].includes(detail.status) && <button className="button" onClick={() => { void api(`/api/taskbank/runs/${detail.id}/cancel`, { method: 'POST', body: '{}' }).catch(e => setError(e.message)); }}><Square size={14} />取消</button>}
       {detail.error && <p>{detail.error}</p>}{detail.fallback && <p>回退：{detail.fallback}</p>}
-      {Object.entries({ '阶段计量': detail.phaseMetrics, 'Plan': detail.plan, '意图与工具召回': detail.retrieval, '读取 DAG': detail.graph, '报告与评分': { submission: detail.submission, evaluation: detail.evaluation } }).map(([label, value]) => <details key={label}><summary>{label}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>)}
+      {Object.entries({ '阶段计量': detail.phaseMetrics, 'Plan': detail.plan, '意图与工具召回': detail.retrieval, '本地图选择': detail.graphSelection, '读取 DAG': detail.graph, '报告与评分': { submission: detail.submission, evaluation: detail.evaluation } }).map(([label, value]) => <details key={label}><summary>{label}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>)}
     </>}
   </section>;
 }

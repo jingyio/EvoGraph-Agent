@@ -60,10 +60,11 @@ async def test_phase_routing_queue_isolation_and_bounded_concurrency(tmp_path):
     assert runner.peaks == dict(runs=2, models=1, reads=1)
     assert jobs[-1]['metrics']['queueMs'] > 0
     for run in jobs:
-        assert run['phaseMetrics']['plan']['requests'] == run['phaseMetrics']['graph']['requests'] == 1
-        assert run['metrics']['modelRequests'] == 4 and run['metrics']['inputTokens'] == 40
+        assert run['phaseMetrics']['plan']['requests'] == 1 and run['phaseMetrics']['graph']['requests'] == 0
+        assert run['metrics']['modelRequests'] == 3 and run['metrics']['inputTokens'] == 30
         assert run['models']['distinctModels'] and run['graph']['status'] == 'done'
         assert run['metrics']['toolCalls'] == 2
+        assert run['graphSelection'][0]['selection'] == 'local-retrieval-and-contract'
     assert not runner.tasks
     restored = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
     restored.restore()
@@ -96,6 +97,25 @@ async def test_current_intent_can_refresh_tool_candidates(tmp_path):
     await runner.tasks[run['id']]
     assert run['evaluation']['status'] == 'passed' and run['metrics']['retrievalCalls'] == 1
     assert any(e['type'] == 'retrieval' for e in run['events'])
+
+
+def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
+    runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
+    baseline = dict(id='baseline', taskId='same', strategy='react', status='completed', createdAt='2026-09-10T01:00:00Z',
+                    evaluation={'status': 'passed'}, toolTrace=[
+                        dict(tool='read', arguments={'id': 'a'}, effect='read', signature='a'),
+                        dict(tool='read', arguments={'id': 'b'}, effect='read', signature='b'),
+                        dict(tool='publish', arguments={}, effect='artifact', signature='p')])
+    candidate = dict(id='candidate', taskId='same', strategy='autotool', status='completed', createdAt='2026-09-10T02:00:00Z',
+                     evaluation={'status': 'passed'}, toolTrace=[
+                         dict(tool='read', arguments={'id': 'a'}, effect='read', signature='a'),
+                         dict(tool='publish', arguments={}, effect='artifact', signature='p')])
+    runner.runs = {'baseline': baseline, 'candidate': candidate}
+    comparison = runner.compare_with_baseline(candidate)
+    assert comparison['skippedToolCalls'] == comparison['fewerReadCalls'] == comparison['netToolCallReduction'] == 1
+    assert comparison['fewerByTool'] == [{'tool': 'read', 'effect': 'read', 'count': 1}]
+    assert comparison['modelRequestReduction'] == comparison['inputTokenReduction'] == 0
+    assert comparison['sharedToolCalls'] == 2 and comparison['skipped'][0]['arguments'] == {'id': 'b'}
 
 
 async def test_cancel_queued_and_running_jobs(tmp_path):

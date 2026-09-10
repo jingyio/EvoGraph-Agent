@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 from jsonschema import ValidationError
 from backend.autotool import retrieve_tools
-from backend.intent_graph import compile_intent_graph, execute_graph, validate_plan
+from backend.intent_graph import select_retrieved_graph, compile_intent_graph, execute_graph, validate_plan
 from backend.tools import Tool, object_schema
 
 
@@ -21,6 +21,33 @@ def test_intent_retrieval_uses_meaningful_short_descriptions():
     tools, _, _, _ = fixture()
     assert retrieve_tools('核对支付金额及分期', tools, 1)[0]['name'] == 'get_payments'
     assert retrieve_tools('读取商品和运费', tools, 1)[0]['name'] == 'get_items'
+
+
+def test_local_graph_selection_uses_retrieval_and_contract_shape():
+    tools, plan, _, retrieval = fixture()
+    # A list tool can have a higher lexical score for a dependent record step.
+    retrieval['pay'].insert(0, {'name': 'list_orders', 'score': 99})
+    proposal, diagnostics = select_retrieved_graph(plan, retrieval, tools)
+    selected = {node['id']: node['tool'] for node in proposal['nodes']}
+    assert selected == {'list': 'list_orders', 'pay': 'get_payments', 'items': 'get_items'}
+    assert all(row['selection'] == 'local-retrieval-and-contract' for row in diagnostics)
+
+
+async def test_graph_reuses_upstream_fields_and_elides_record_calls():
+    tools = [Tool('list_issues', '分页列出工单，返回 state', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}),
+                  lambda a, c: None, outputs=['id', 'state']),
+             Tool('get_issue', '读取工单 state', 'read', object_schema({'issueId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'state'])]
+    plan = {'steps': [dict(id='list', intent='分页列出工单', dependencies=[]), dict(id='state', intent='读取每条工单的 state 字段', dependencies=['list'])]}
+    proposal = {'nodes': [dict(id='list', tool='list_issues'), dict(id='state', tool='get_issue')]}
+    retrieval = {step['id']: retrieve_tools(step['intent'], tools) for step in plan['steps']}
+    nodes = compile_intent_graph(plan, proposal, retrieval, tools)
+    assert nodes[1]['reuse']['nodeId'] == 'list' and nodes[1]['reuse']['fields'] == ['state']
+    calls, elided = [], []
+    async def invoke(name, args, node):
+        calls.append((name, args))
+        return {'records': [{'id': '1', 'state': 'open'}, {'id': '2', 'state': 'closed'}], 'mayHaveMore': False}
+    await execute_graph(nodes, tools, invoke, lambda key, state: None, lambda key, count: elided.append((key, count)))
+    assert calls == [('list_issues', {'page': 1, 'pageSize': 50})] and elided == [('state', 2)]
 
 
 async def test_graph_waits_for_pagination_then_overlaps_independent_reads():

@@ -21,6 +21,7 @@ class Tool:
     parameters: dict
     handler: Callable
     origin: Any = None
+    outputs: Any = None
 
     def __post_init__(self):
         Draft7Validator.check_schema(self.parameters)
@@ -30,6 +31,8 @@ class Tool:
         value = {'name': self.name, 'description': self.description, 'effect': self.effect, 'parameters': self.parameters}
         if self.origin:
             value['origin'] = self.origin
+        if self.outputs:
+            value['outputs'] = list(self.outputs)
         return deepcopy(value)
 
     async def execute(self, args, context):

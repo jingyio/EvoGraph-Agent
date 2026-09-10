@@ -21,7 +21,11 @@
         "pageSize"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "status"
+    ]
   },
   {
     "name": "finance_get_order",
@@ -39,7 +43,14 @@
         "orderId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "status",
+      "purchased_at",
+      "delivered_at",
+      "estimated_at"
+    ]
   },
   {
     "name": "finance_get_order_items",
@@ -57,7 +68,11 @@
         "orderId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "items"
+    ]
   },
   {
     "name": "finance_get_order_payments",
@@ -75,7 +90,11 @@
         "orderId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "payments"
+    ]
   },
   {
     "name": "finance_get_customer",
@@ -93,7 +112,13 @@
         "orderId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "customer_id",
+      "customer_unique_id",
+      "customer_state"
+    ]
   },
   {
     "name": "finance_get_order_reviews",
@@ -111,7 +136,11 @@
         "orderId"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "reviews"
+    ]
   },
   {
     "name": "finance_get_task_scope",
@@ -122,7 +151,13 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "id",
+      "asOf",
+      "recordCount",
+      "acceptance"
+    ]
   },
   {
     "name": "finance_sum_values",
@@ -143,7 +178,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "sum"
+    ]
   },
   {
     "name": "finance_count_values",
@@ -164,7 +202,10 @@
         "values"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "counts"
+    ]
   },
   {
     "name": "finance_rank_values",
@@ -212,7 +253,10 @@
         "limit"
       ],
       "additionalProperties": false
-    }
+    },
+    "outputs": [
+      "ids"
+    ]
   },
   {
     "name": "finance_publish_report",
