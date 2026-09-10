@@ -204,6 +204,55 @@ async def test_plan_and_execution_receive_task_derived_inclusive_constraint(tmp_
     assert any('>= 6' in message.get('content', '') for history in histories for message in history if message.get('role') == 'user')
 
 
+async def test_missing_evidence_recovers_by_reading_next_page_not_by_inventing_references(tmp_path):
+    class PagedBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', family='paged', split='train', recordIds=['one', 'two'],
+                        task='读取本任务全部记录并发布结果', suggestedBudget={'toolCalls': 80})
+        def tools(self, key):
+            def listing(args, ctx):
+                record = 'one' if args['page'] == 1 else 'two'
+                ctx.evidence.add('finance:' + record)
+                return {'records': [{'id': record}], 'page': args['page'], 'mayHaveMore': args['page'] == 1}
+            def publish(args, ctx):
+                ctx.run['evaluation'] = dict(status='passed' if args['evidenceIds'] == ['finance:one', 'finance:two'] else 'failed',
+                                              issues=[] if args['evidenceIds'] == ['finance:one', 'finance:two'] else ['evidence_coverage'])
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+            return [Tool('finance_list_orders', '分页列出订单 ID', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), listing,
+                         outputs=['id']),
+                    Tool('finance_publish_report', '发布报告', 'artifact', object_schema({
+                        'metrics': object_schema({'count': {'type': 'integer'}}),
+                        'selectedIds': {'type': 'array', 'items': {'type': 'string'}},
+                        'evidenceIds': {'type': 'array', 'items': {'type': 'string'}},
+                        'summary': {'type': 'string'},
+                    }), publish)]
+    class PagedModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return await super().complete(messages, tools)
+            if any(message.get('tool_call_id') == 'finance_publish_report' and '"status": "passed"' in message.get('content', '')
+                   for message in messages):
+                return result()
+            list_calls = [call for message in messages for call in message.get('tool_calls') or []
+                          if call['function']['name'] == 'finance_list_orders']
+            recovering_missing = any('当前实际观察缺少部分本任务记录' in message.get('content', '') for message in messages)
+            if not list_calls:
+                return result('finance_list_orders', {'page': 1, 'pageSize': 50})
+            if recovering_missing and len(list_calls) == 1:
+                return result('finance_list_orders', {'page': 2, 'pageSize': 50})
+            return result('finance_publish_report', dict(metrics={'count': 2}, selectedIds=[], evidenceIds=['finance:one'], summary='complete scope'))
+    runner = TaskRunner(PagedBank(tmp_path), lambda role: PagedModel(role, []), learning_enabled=False)
+    run = await runner.start(TaskRunRequest(taskId='paged', strategy='plan_react'))
+    await runner.tasks[run['id']]
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['reportEvidenceCoverageGaps'] == 1
+    assert run['metrics']['reportEvidenceFormatFailures'] == 0
+    assert run['metrics']['reportEvidenceCanonicalizations'] == 1
+    assert [trace['arguments']['page'] for trace in run['toolTrace'] if trace['tool'] == 'finance_list_orders'] == [1, 2]
+    assert run['reportRecovery']['attempts'][0]['kind'] == 'missing_evidence'
+    assert run['reportRecovery']['attempts'][0]['missingObservedEvidenceRefs'] == ['finance:two']
+
+
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
     runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
     baseline = dict(id='baseline', taskId='same', strategy='react', status='completed', createdAt='2026-09-10T01:00:00Z',

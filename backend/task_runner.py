@@ -81,6 +81,15 @@ class TaskRunner:
                                 observedEvidenceCount=len(observed))
 
     @staticmethod
+    def missing_task_evidence(task, observed):
+        """Return task-scope evidence not actually observed in this run."""
+        scenario, record_ids = task.get('scenario'), task.get('recordIds')
+        if not scenario or not isinstance(record_ids, list):
+            return []
+        required = {scenario + ':' + str(record_id) for record_id in record_ids}
+        return sorted(required - set(observed))
+
+    @staticmethod
     def tool_trace(run):
         if run.get('toolTrace') is not None:
             return run['toolTrace']
@@ -180,7 +189,7 @@ class TaskRunner:
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0,
-                                semanticConstraintGuards=0),
+                                reportEvidenceCoverageGaps=0, reportEvidenceFormatFailures=0, semanticConstraintGuards=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
@@ -585,14 +594,22 @@ class TaskRunner:
                         metrics['failedReportAttempts'] += 1
                         issues = sorted(run['evaluation'].get('issues') or [])
                         evidence_only = issues == ['evidence_coverage']
-                        kind = 'evidence_format' if evidence_only else 'business_facts' if any(
-                            issue.startswith('metric:') or issue in ['metric_keys', 'selectedIds', 'invalid_selection'] for issue in issues) else 'mixed'
+                        missing_evidence = self.missing_task_evidence(task, context.evidence) if evidence_only else []
+                        if evidence_only and missing_evidence:
+                            kind = 'missing_evidence'
+                            metrics['reportEvidenceCoverageGaps'] += 1
+                        elif evidence_only:
+                            kind = 'evidence_format'
+                            metrics['reportEvidenceFormatFailures'] += 1
+                        else:
+                            kind = 'business_facts' if any(
+                                issue.startswith('metric:') or issue in ['metric_keys', 'selectedIds', 'invalid_selection'] for issue in issues) else 'mixed'
                         signature = canonical(dict(issues=issues, kind=kind))
                         repeated = signature in report_recovery['signatures']
                         report_recovery['signatures'].append(signature)
                         report_recovery.update(kind=kind, attempts=report_recovery['attempts'] + 1)
                         diagnostic = dict(signature=signature, issues=issues, kind=kind, repeated=repeated,
-                                          attempt=report_recovery['attempts'])
+                                          attempt=report_recovery['attempts'], missingObservedEvidenceRefs=missing_evidence)
                         run.setdefault('reportRecovery', dict(attempts=[]))['attempts'].append(diagnostic)
                         event('report_recovery', '报告评分失败', diagnostic)
                         if repeated or report_recovery['attempts'] >= 2:
@@ -603,8 +620,11 @@ class TaskRunner:
                             return
                         report_recovery['active'] = True
                         if evidence_only:
-                            refs = sorted(context.evidence)
-                            messages.append(dict(role='user', content='报告仅缺少或格式错误的 evidenceIds。不要重新读取业务数据；请只调用 publish_report，evidenceIds 必须使用当前观察中的完整引用：' + json.dumps(refs, ensure_ascii=False)))
+                            if missing_evidence:
+                                messages.append(dict(role='user', content='报告尚未覆盖完整任务范围：当前实际观察缺少部分本任务记录。不要补写未观察的 evidenceIds；先根据已有列表的 mayHaveMore 继续分页，或读取当前范围内尚未观察的必要记录。不要重复成功的相同读取，读取完成后再提交报告。'))
+                            else:
+                                refs = sorted(context.evidence)
+                                messages.append(dict(role='user', content='报告仅缺少或格式错误的 evidenceIds。不要重新读取业务数据；请只调用 publish_report，evidenceIds 必须使用当前观察中的完整引用：' + json.dumps(refs, ensure_ascii=False)))
                         else:
                             constraints = run.get('semanticConstraints') or []
                             messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。' +
