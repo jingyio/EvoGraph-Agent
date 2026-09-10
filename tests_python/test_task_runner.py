@@ -120,6 +120,65 @@ async def test_failed_publish_recovery_is_bounded_and_shared_with_baseline(tmp_p
     assert histories == [['finance_publish_report'], ['finance_publish_report']]
 
 
+def test_report_evidence_canonicalization_requires_complete_observations():
+    task = dict(scenario='finance', recordIds=['order-2', 'order-1'])
+    supplied = dict(metrics={'count': 2}, selectedIds=['order-1'], evidenceIds=['typo'], summary='unchanged business result')
+    normalized, detail = TaskRunner.canonical_report_evidence(task, 'finance_publish_report', supplied,
+                                                               {'finance:order-1', 'finance:order-2'})
+    assert normalized['evidenceIds'] == ['finance:order-1', 'finance:order-2']
+    assert normalized['metrics'] == supplied['metrics']
+    assert normalized['selectedIds'] == supplied['selectedIds']
+    assert normalized['summary'] == supplied['summary']
+    assert detail['suppliedEvidenceIds'] == ['typo']
+
+    unchanged, missing = TaskRunner.canonical_report_evidence(task, 'finance_publish_report', supplied, {'finance:order-1'})
+    assert unchanged == supplied
+    assert missing is None
+
+
+async def test_complete_report_evidence_is_canonicalized_for_baseline_and_graph_rsi(tmp_path):
+    class EvidenceBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', family='evidence', split='train', recordIds=['one', 'two'],
+                        task='读取全部记录并发布结果', suggestedBudget={'toolCalls': 80})
+        def tools(self, key):
+            def listing(args, ctx):
+                ctx.evidence.update({'finance:one', 'finance:two'})
+                return {'records': [{'id': 'one'}, {'id': 'two'}], 'mayHaveMore': False}
+            def publish(args, ctx):
+                ctx.run['submission'] = deepcopy(args)
+                ctx.run['evaluation'] = dict(status='passed' if args['evidenceIds'] == ['finance:one', 'finance:two'] else 'failed', issues=[])
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+            return [Tool('finance_list_orders', '分页列出订单 ID', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), listing,
+                         outputs=['id']),
+                    Tool('finance_publish_report', '发布报告', 'artifact', object_schema({
+                        'metrics': object_schema({'count': {'type': 'integer'}}),
+                        'selectedIds': {'type': 'array', 'items': {'type': 'string'}},
+                        'evidenceIds': {'type': 'array', 'items': {'type': 'string'}},
+                        'summary': {'type': 'string'},
+                    }), publish)]
+
+    class EvidenceModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return await super().complete(messages, tools)
+            if any(message.get('tool_call_id') == 'finance_publish_report' for message in messages):
+                return result()
+            if not any(message.get('role') == 'tool' for message in messages):
+                return result('finance_list_orders', {'page': 1, 'pageSize': 50})
+            return result('finance_publish_report', dict(metrics={'count': 2}, selectedIds=['one'], evidenceIds=['mistyped'], summary='kept'))
+
+    for strategy in ['plan_react', 'graph_rsi']:
+        runner = TaskRunner(EvidenceBank(tmp_path / strategy), lambda role: EvidenceModel(role, []), learning_enabled=False)
+        run = await runner.start(TaskRunRequest(taskId='evidence', strategy=strategy))
+        await runner.tasks[run['id']]
+        assert run['evaluation']['status'] == 'passed'
+        assert run['submission'] == dict(metrics={'count': 2}, selectedIds=['one'],
+                                         evidenceIds=['finance:one', 'finance:two'], summary='kept')
+        assert run['metrics']['reportEvidenceCanonicalizations'] == 1
+        assert any(event['type'] == 'report_evidence' for event in run['events'])
+
+
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
     runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
     baseline = dict(id='baseline', taskId='same', strategy='react', status='completed', createdAt='2026-09-10T01:00:00Z',

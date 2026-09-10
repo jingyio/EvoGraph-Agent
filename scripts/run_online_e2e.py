@@ -330,7 +330,14 @@ def result_report(result):
     judge = result.get('judgeSummary') or {}
     selectors, families = family_sections(result)
     delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI - 基线：token {data['allOutcomeTokenDelta']:,}；延迟 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s。负值才表示 RSI 较低。"
-    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1240px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px;vertical-align:top}}th{{background:#f4f7f8}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}a{{color:#086c72}}select{{font:inherit;padding:7px;border:1px solid #9aabb2;background:white}}.family{{margin-top:22px;border-top:2px solid #354a56;padding-top:12px;overflow-x:auto}}svg{{display:block;width:100%;max-width:570px;height:auto;background:#fbfcfc;border:1px solid #dbe3e6}}.axis{{stroke:#9aabb2;stroke-width:1}}.baseline-line{{stroke:#8a4a25;stroke-width:3;fill:none}}.rsi-line{{stroke:#087d64;stroke-width:3;fill:none}}.baseline-label{{fill:#8a4a25}}.rsi-label{{fill:#087d64}}@media(max-width:700px){{main{{margin:0;padding:16px}}table{{font-size:12px}}}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}；比较：{escape((result.get('protocol') or {}).get('comparisonMode', 'unknown'))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>任务族内演进</h2><label>任务族 <select id="family-select">{selectors}</select></label>{families}<h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main><script>document.getElementById('family-select').addEventListener('change',function(){{document.querySelectorAll('.family').forEach((item)=>item.hidden=item.dataset.family!==this.value);}});</script>'''
+    protocol = result.get('protocol') or {}
+    supplements = []
+    if protocol.get('reliabilityExperiment'):
+        supplements.append(f'<a href="/api/online-e2e/{escape(protocol["reliabilityExperiment"])} /report">长尾修复预检</a>'.replace(' /report', '/report'))
+    if protocol.get('scaleExperiment'):
+        supplements.append(f'<a href="/api/efficiency/{escape(protocol["scaleExperiment"])} /report">串行规模与可靠性补验</a>'.replace(' /report', '/report'))
+    supplemental_html = '；'.join(supplements) if supplements else '本实验没有关联补充工件。'
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1240px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px;vertical-align:top}}th{{background:#f4f7f8}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}a{{color:#086c72}}select{{font:inherit;padding:7px;border:1px solid #9aabb2;background:white}}.family{{margin-top:22px;border-top:2px solid #354a56;padding-top:12px;overflow-x:auto}}svg{{display:block;width:100%;max-width:570px;height:auto;background:#fbfcfc;border:1px solid #dbe3e6}}.axis{{stroke:#9aabb2;stroke-width:1}}.baseline-line{{stroke:#8a4a25;stroke-width:3;fill:none}}.rsi-line{{stroke:#087d64;stroke-width:3;fill:none}}.baseline-label{{fill:#8a4a25}}.rsi-label{{fill:#087d64}}@media(max-width:700px){{main{{margin:0;padding:16px}}table{{font-size:12px}}}}</style><main><small>固定 manifest、独立经验库，run/model/read 均为 1；Agent 成本与 Judge 成本分开。</small><h1>RSI 串行在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}；比较：{escape(protocol.get('comparisonMode', 'unknown'))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>任务族内演进</h2><label>任务族 <select id="family-select">{selectors}</select></label>{families}<h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>补充可靠性工件</h2><p>{supplemental_html}</p><h2>录制顺序</h2><ol><li>选择一个任务族，展示首个任务形成 G0 和后续任务实际 Fast 使用。</li><li>点击同一任务的 baseline/RSI trace 与 report，对照业务结果、模型和工具成本。</li><li>查看族内累计 token 曲线，冷启动已计入；没有回本的 family 保持可见。</li><li>打开补充工件核查长尾和大记录范围；它们不替代本页的全量串行结论。</li><li>最后展示 Judge 成本、失败记录及尚未观察到 G1/G2/Composition 的限制。</li></ol><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main><script>document.getElementById('family-select').addEventListener('change',function(){{document.querySelectorAll('.family').forEach((item)=>item.hidden=item.dataset.family!==this.value);}});</script>'''
 
 
 def write_report(root, result):
@@ -352,7 +359,8 @@ def checkpoint(root, result_path, result, rsi=None):
     write_report(root, result)
 
 
-async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None, rsi_source=None):
+async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None, rsi_source=None,
+               skip_judge=False, reliability_experiment=None, scale_experiment=None):
     if not 1 <= through_round <= 6:
         raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
@@ -396,6 +404,8 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
                       revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                       startFromEmpty=True, shadowRollouts=0, singleAgentConcurrency=True,
                       judge='anonymous dual order after all agent runs; judge cost is separate',
+                      judgeDeferredDuringPrecheck=skip_judge,
+                      reliabilityExperiment=reliability_experiment, scaleExperiment=scale_experiment,
                       comparisonMode='time_separated_matched' if rsi_source else 'same_session_interleaved',
                       rsiSourceExperiment=rsi_source,
                       rsiSourceRevision=(source_result.get('protocol') or {}).get('revision') if source_result else None))
@@ -447,8 +457,10 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
         checkpoint(root, result_path, result, rsi)
         print(root)
         return
-    if completed_status(through_round, rsi_only):
+    if completed_status(through_round, rsi_only) or skip_judge:
         result['status'] = 'completed'; result['finishedAt'] = result.get('finishedAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+        if skip_judge:
+            result['judgeStatus'] = 'deferred_until_agent_protocol_is_stable'
         checkpoint(root, result_path, result, rsi)
         print(root)
         return
@@ -479,6 +491,10 @@ if __name__ == '__main__':
     parser.add_argument('--rsi-only', action='store_true', help='Run only Graph RSI for isolated mechanism prechecks; no baseline or Judge calls.')
     parser.add_argument('--rsi-source', help='Reuse a completed RSI-only experiment by ID and run only a protocol-matched baseline in this new experiment directory.')
     parser.add_argument('--task-ids', help='Comma-separated subset of the fixed train manifest, preserving the supplied order.')
+    parser.add_argument('--skip-judge', action='store_true', help='Complete Agent execution without Judge requests; a later compatible resume judges after all Agent runs.')
+    parser.add_argument('--reliability-experiment', help='Optional linked serial long-tail precheck experiment ID for the report page.')
+    parser.add_argument('--scale-experiment', help='Optional linked serial scale/reliability experiment ID for the report page.')
     args = parser.parse_args()
     task_ids = args.task_ids.split(',') if args.task_ids else None
-    asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids, args.rsi_source))
+    asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids, args.rsi_source,
+                     args.skip_judge, args.reliability_experiment, args.scale_experiment))

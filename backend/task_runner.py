@@ -53,6 +53,33 @@ class TaskRunner:
                     queued=sum(r['status'] == 'queued' for r in self.runs.values()))
 
     @staticmethod
+    def canonical_report_evidence(task, tool_name, args, observed):
+        """Normalize only complete, already-observed task evidence for a report.
+
+        The taskbank evaluator requires one reference for every scoped record.
+        Those references are deterministic once all records have actually been
+        observed, so the runtime can avoid report failures caused solely by the
+        model copying that list. It must never invent a reference for data that
+        was not read in this run.
+        """
+        if not tool_name.endswith('publish_report') or not isinstance(args, dict):
+            return args, None
+        scenario, record_ids = task.get('scenario'), task.get('recordIds')
+        if not scenario or not isinstance(record_ids, list):
+            return args, None
+        required = {scenario + ':' + str(record_id) for record_id in record_ids}
+        if not required or not required.issubset(observed):
+            return args, None
+        normalized = deepcopy(args)
+        evidence_ids = sorted(required)
+        if normalized.get('evidenceIds') == evidence_ids:
+            return args, None
+        supplied = normalized.get('evidenceIds')
+        normalized['evidenceIds'] = evidence_ids
+        return normalized, dict(requiredEvidenceIds=evidence_ids, suppliedEvidenceIds=supplied,
+                                observedEvidenceCount=len(observed))
+
+    @staticmethod
     def tool_trace(run):
         if run.get('toolTrace') is not None:
             return run['toolTrace']
@@ -151,7 +178,7 @@ class TaskRunner:
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
-                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0),
+                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
@@ -298,6 +325,11 @@ class TaskRunner:
                     raise ValueError('工具不在当前可用集合；可使用 request_tools 更新当前意图')
                 tool = known[name]
                 args = json.loads(call['function']['arguments'])
+                args, canonicalization = self.canonical_report_evidence(task, name, args, context.evidence)
+                if canonicalization:
+                    metrics['reportEvidenceCanonicalizations'] += 1
+                    event('report_evidence', '已规范化完整观察的报告证据引用', dict(
+                        tool=name, executor=owner, nodeId=node_id, **canonicalization))
                 trace['arguments'] = deepcopy(args)
                 trace['signature'] = canonical([name, args])
                 if (report_recovery['active'] and owner == 'model' and tool.effect == 'read'
