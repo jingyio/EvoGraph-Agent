@@ -65,6 +65,7 @@ function RunLane({ label, strategy, run, cursor, live, timelineDuration, onInspe
       <div className="demo-trace" ref={bodyRef} role="log" aria-label={`${strategyNames[strategy]} 执行事件`} aria-live="off">{view.events.map(e => <TimelineEvent key={e.seq} event={e} run={run} onInspect={() => onInspect(e)} />)}{!view.events.length && <p className="demo-empty">尚无事件。回放从原始执行开始时刻播放。</p>}</div>
       <details className="demo-report"><summary>报告与评分 · {view.evaluation.status === 'passed' ? '通过' : view.evaluation.status === 'failed' ? '未通过' : '尚未评分'}</summary>{view.submission ? <><p>{view.submission.summary}</p><pre>{pretty({ metrics: view.submission.metrics, selectedIds: view.submission.selectedIds, evidenceIds: view.submission.evidenceIds })}</pre></> : <p>当前时刻尚未发布报告。</p>}{view.evaluation.issues?.length ? <p className="demo-inline-error">{view.evaluation.issues.join(' · ')}</p> : null}</details>
       {view.finished && run.evolution && <p className="demo-evolution-note"><GitBranch size={13} />{run.evolution.usedVersionId ? `使用 G${run.evolution.generation} · ${run.evolution.usedVersionId.slice(0, 6)}` : '冷启动'} · 图维护 {run.evolution.maintenanceMs ?? 0} ms · {run.evolution.note}</p>}
+      {view.finished && <p className="demo-evolution-note"><a href={`/api/taskbank/runs/${run.id}/report`} target="_blank" rel="noreferrer">打开业务报告与逐条证据 ↗</a></p>}
       <footer><span>记录 {run.id.slice(0, 8)}{!run.traceVersion && ' · 旧记录缺少部分起止时间'}</span><a href={`/api/taskbank/runs/${run.id}`} target="_blank" rel="noreferrer">原始 JSON <ArrowDownToLine size={12} /></a></footer>
     </>}
     {!run && <div className="demo-empty"><Activity size={30} /><p>这里将显示实际模型请求、工具执行和结果。</p></div>}
@@ -72,6 +73,9 @@ function RunLane({ label, strategy, run, cursor, live, timelineDuration, onInspe
 }
 
 function readSelection(): { taskId: string; strategies: [Strategy, Strategy] } {
+  const params = new URLSearchParams(window.location.search);
+  const a = params.get('a'), b = params.get('b');
+  if (params.get('taskId') && a && b && a in strategyNames && b in strategyNames) return { taskId: params.get('taskId')!, strategies: [a as Strategy, b as Strategy] };
   try { const s = JSON.parse(localStorage.getItem('rsi-demo-selection') || '{}'); if (s.taskId && s.strategies?.length === 2 && s.strategies.every((x: string) => x in strategyNames)) return s; } catch { /* Use a known public task. */ }
   return { taskId: 'tickets-unassigned-02', strategies: ['react', 'graph_rsi'] };
 }
@@ -107,7 +111,8 @@ export default function ExecutionDemo() {
     api<{ runs: RunSummary[] }>(`/api/taskbank/runs?taskId=${encodeURIComponent(taskId)}&limit=500`).then(data => {
       if (stopped) return;
       setSummaries(data.runs);
-      setIds(strategies.map(s => data.runs.find(r => r.strategy === s)?.id || '') as [string, string]);
+      const params = new URLSearchParams(window.location.search);
+      setIds(strategies.map((s, i) => data.runs.find(r => r.strategy === s && r.id === params.get(i === 0 ? 'left' : 'right'))?.id || data.runs.find(r => r.strategy === s)?.id || '') as [string, string]);
       setPosition(Infinity);
     }).catch(e => { if (!stopped) setError(e.message); });
     return () => { stopped = true; };

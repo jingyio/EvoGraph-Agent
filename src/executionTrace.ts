@@ -1,5 +1,5 @@
-export type Strategy = 'react' | 'plan_react' | 'autotool' | 'graph_rsi';
-export const strategyNames: Record<Strategy, string> = { react: 'ReAct', plan_react: 'Plan + ReAct', autotool: 'Plan + AutoTool', graph_rsi: 'Graph RSI' };
+export type Strategy = 'react' | 'strong_react' | 'plan_react' | 'autotool' | 'graph_rsi';
+export const strategyNames: Record<Strategy, string> = { react: 'ReAct', strong_react: 'Strong ReAct', plan_react: 'Plan + ReAct', autotool: 'Plan + AutoTool', graph_rsi: 'Graph RSI' };
 export type Metrics = { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; toolErrors: number; usageComplete: boolean; durationMs: number; queueMs: number; elidedToolCalls?: number; recoveryToolCalls?: number };
 export type Evaluation = { status: string; issues?: string[] };
 export type TraceEvent = { seq: number; at: string; elapsedMs?: number; type: string; title: string; detail?: any; metrics?: Metrics };

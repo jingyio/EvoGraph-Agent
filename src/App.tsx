@@ -6,6 +6,7 @@ import NegativeMotifPanel from './NegativeMotifPanel';
 import ReliabilityPanel from './ReliabilityPanel';
 import TaskBankPanel from './TaskBankPanel';
 import ExecutionDemo from './ExecutionDemo';
+import EvaluationPanel from './EvaluationPanel';
 import { api } from './api';
 import { PRESETS, type TaskGraph, type EvaluationProfile, type AgentStrategy, type SnapshotVariant, type AgentRun, type DataSource, type PublicConfig, type RunMode, type Scenario, type ToolCard, type World } from '../shared/types';
 
@@ -14,8 +15,8 @@ const names = { finance: '财务运营', support: '客服运营' };
 const statusNames = { running: '执行中', completed: '执行结束', failed: '执行失败', cancelled: '已取消', limited: '达到执行上限' };
 type History = Pick<AgentRun, 'id' | 'request' | 'status' | 'startedAt' | 'metrics'>;
 type ConnectionResult = { platform: string; status: string; message: string; latencyMs?: number };
-type Page = 'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution' | 'negative' | 'reliability' | 'taskbank' | 'demo';
-function pageFromHash(): Page { const page = window.location.hash.slice(1); return ['tools', 'platforms', 'graphs', 'evolution', 'negative', 'reliability', 'taskbank', 'demo'].includes(page) ? page as Page : 'workbench'; }
+type Page = 'workbench' | 'tools' | 'platforms' | 'graphs' | 'evolution' | 'negative' | 'reliability' | 'taskbank' | 'demo' | 'evaluation';
+function pageFromHash(): Page { const page = window.location.hash.slice(1); return ['tools', 'platforms', 'graphs', 'evolution', 'negative', 'reliability', 'taskbank', 'demo', 'evaluation'].includes(page) ? page as Page : 'workbench'; }
 
 export default function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
@@ -142,6 +143,7 @@ export default function App() {
       <button className={`nav-item ${page === 'workbench' && scenario === 'finance' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('finance')}><CircleDollarSign size={19} />财务运营<ChevronRight size={15} /></button>
       <button className={`nav-item ${page === 'workbench' && scenario === 'support' ? 'active' : ''}`} disabled={busy} onClick={() => changeScenario('support')}><Headphones size={19} />客服运营<ChevronRight size={15} /></button>
       <div className="nav-label second">实验管理</div>
+      <button className={`nav-item ${page === 'evaluation' ? 'active' : ''}`} onClick={() => setPage('evaluation')}><ShieldCheck size={18} />成对评测与成果</button>
       <button className={`nav-item ${page === 'demo' ? 'active' : ''}`} onClick={() => setPage('demo')}><Play size={18} />Agent 执行演示</button>
       <button className={`nav-item ${page === 'taskbank' ? 'active' : ''}`} onClick={() => setPage('taskbank')}><Database size={18} />真实数据任务库</button>
       <button className={`nav-item ${page === 'reliability' ? 'active' : ''}`} onClick={() => setPage('reliability')}><Activity size={18} />长程稳定性对照</button>
@@ -158,8 +160,9 @@ export default function App() {
       <div className="sidebar-bottom"><div className="small-logo">R</div><div>{config?.backend === 'python' ? 'Python 执行器' : 'ReAct 执行器'}<small>选择工具 → 观察 → 继续执行</small></div><span className="dot green" /></div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'demo' ? 'Agent 执行演示' : page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
+      <header className="topbar"><div><span>工作空间</span><ChevronRight size={14} />{page === 'evaluation' ? '成对评测与成果' : page === 'demo' ? 'Agent 执行演示' : page === 'tools' ? '工具目录' : page === 'platforms' ? '平台连接' : page === 'graphs' ? '任务图经验库' : names[scenario]}</div><div className="topbar-right"><span className="environment"><span className="dot green" />本地实验环境</span><span className="avatar">OP</span></div></header>
       <main>
+        {page === 'evaluation' && <EvaluationPanel />}
         {page === 'demo' && <ExecutionDemo />}
         {page === 'taskbank' && <TaskBankPanel />}
         {page === 'reliability' && <ReliabilityPanel />}

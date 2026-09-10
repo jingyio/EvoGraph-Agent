@@ -4,7 +4,7 @@ import json
 from copy import deepcopy
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi.responses import JSONResponse, FileResponse, Response, HTMLResponse
 from pydantic import ValidationError, BaseModel, ConfigDict, Field
 from . import config
 from .domain import seed, markdown
@@ -15,6 +15,16 @@ from .evolution import EvolutionService, EvolutionRequest
 from .reliability import ReliabilityService, ReliabilityRequest
 from .taskbank import TaskBank
 from .task_runner import TaskRunner, TaskRunRequest
+from .paired_evaluation import PairedEvaluation, EvaluationRequest
+from .business_report import render_report
+
+
+class ReportReview(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    factualConsistency: int = Field(ge=0, le=2)
+    requirementCoverage: int = Field(ge=0, le=2)
+    readability: int = Field(ge=0, le=2)
+    note: str = Field(default='', max_length=2000)
 
 
 class TaskSessionRequest(BaseModel):
@@ -34,6 +44,7 @@ def create_app(service=None):
     reliability = ReliabilityService(service)
     taskbank = TaskBank()
     task_runner = TaskRunner(taskbank)
+    paired = PairedEvaluation(task_runner)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
@@ -41,9 +52,11 @@ def create_app(service=None):
         reliability.restore()
         taskbank.load()
         task_runner.restore()
+        paired.restore()
         try:
             yield
         finally:
+            await paired.shutdown()
             await task_runner.shutdown()
             await reliability.shutdown()
             await evolution.shutdown()
@@ -54,6 +67,31 @@ def create_app(service=None):
     app.state.reliability = reliability
     app.state.taskbank = taskbank
     app.state.task_runner = task_runner
+    app.state.paired = paired
+
+    @app.get('/api/evaluations')
+    async def evaluation_list():
+        return [{k: item.get(k) for k in ['id', 'status', 'createdAt', 'split', 'protocol', 'summary', 'byScenario', 'historicalSetupTokens']}
+                for item in sorted(paired.items.values(), key=lambda x: x['createdAt'], reverse=True)]
+
+    @app.post('/api/evaluations', status_code=202)
+    async def evaluation_start(request: EvaluationRequest):
+        return {'id': (await paired.start(request))['id']}
+
+    @app.get('/api/evaluations/{key}')
+    async def evaluation_get(key: str):
+        if key not in paired.items:
+            raise HTTPException(404, 'Evaluation not found')
+        return deepcopy(paired.items[key])
+
+    @app.post('/api/evaluations/{key}/cancel')
+    async def evaluation_cancel(key: str):
+        if key not in paired.items:
+            raise HTTPException(404, 'Evaluation not found')
+        task = paired.tasks.get(key)
+        if task:
+            task.cancel()
+        return {'cancelled': bool(task)}
 
     @app.get('/api/taskbank/evolution')
     async def online_evolution_list():
@@ -70,6 +108,8 @@ def create_app(service=None):
 
     @app.post('/api/taskbank/runs', status_code=202)
     async def task_run_start(request: TaskRunRequest):
+        if paired.tasks:
+            raise ValueError('冻结成对评测正在运行，请等待评测结束或取消评测')
         return {'id': (await task_runner.start(request))['id']}
 
     @app.get('/api/taskbank/runs/{key}')
@@ -80,6 +120,25 @@ def create_app(service=None):
         result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
         result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi'] else None
         return result
+
+    @app.get('/api/taskbank/runs/{key}/report', response_class=HTMLResponse)
+    async def task_report(key: str):
+        if key not in task_runner.runs:
+            raise HTTPException(404, 'Task run not found')
+        run = task_runner.runs[key]
+        return HTMLResponse(render_report(run, taskbank.task(run['taskId'])), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
+    @app.post('/api/taskbank/runs/{key}/review')
+    async def task_review(key: str, request: ReportReview):
+        if key not in task_runner.runs:
+            raise HTTPException(404, 'Task run not found')
+        run = task_runner.runs[key]
+        if run['status'] in ['running', 'queued']:
+            raise ValueError('请等待任务结束后复核报告')
+        from .domain import now
+        run['manualReview'] = dict(request.model_dump(), status='reviewed', at=now(), source='human')
+        task_runner.save(run)
+        return run['manualReview']
 
     @app.post('/api/taskbank/runs/{key}/cancel')
     async def task_run_cancel(key: str):

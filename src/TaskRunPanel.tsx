@@ -56,7 +56,7 @@ export default function TaskRunPanel({ taskId, defaultStrategy = 'autotool' }: {
   }
   return <section style={{ borderTop: '1px solid #ccd4da', marginTop: 18, paddingTop: 12 }}>
     <h2>Agent 执行 · Plan / AutoTool</h2>
-    <div className="taskbank-toolbar"><select aria-label="任务执行策略" value={strategy} onChange={e => setStrategy(e.target.value)}><option value="react">ReAct 基线</option><option value="plan_react">Plan + ReAct</option><option value="autotool">Plan + AutoTool DAG</option><option value="graph_rsi">Graph RSI · 在线进化</option></select><button className="button primary" disabled={pending} onClick={() => void start()}><Play size={14} />提交任务</button></div>
+    <div className="taskbank-toolbar"><select aria-label="任务执行策略" value={strategy} onChange={e => setStrategy(e.target.value)}><option value="react">ReAct 基线</option><option value="strong_react">Strong ReAct</option><option value="plan_react">Plan + ReAct</option><option value="autotool">Plan + AutoTool DAG</option><option value="graph_rsi">Graph RSI · 在线进化</option></select><button className="button primary" disabled={pending} onClick={() => void start()}><Play size={14} />提交任务</button></div>
     {scheduler && <p>排队 {scheduler.queued} · 执行 {scheduler.active.runs} · 模型请求并发 {scheduler.active.models} · 读取并发 {scheduler.active.reads}</p>}
     {error && <p role="alert">{error}</p>}
     <label>执行记录 <select value={current} onChange={e => { setCurrent(e.target.value); setDetail(null); }}><option value="">选择运行</option>{runs.map(r => <option key={r.id} value={r.id}>{r.taskId} · {r.id.slice(0, 6)} · {r.status}</option>)}</select></label>
