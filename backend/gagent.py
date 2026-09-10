@@ -16,6 +16,27 @@ async def build_data_plan(task, tools, submit):
     return plan
 
 
+def coarse_plan_tool():
+    subgoal = object_schema({'id': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,30}$'},
+                             'intent': {'type': 'string', 'minLength': 1, 'maxLength': 240},
+                             'dependencies': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}},
+                            required=['id', 'intent', 'dependencies'])
+    return Tool('submit_coarse_plan', '提交有序的粗粒度读取子目标，不选择工具或历史片段。', 'read',
+                object_schema({'subgoals': {'type': 'array', 'minItems': 2, 'maxItems': 6, 'items': subgoal}}), lambda args, ctx: args)
+
+
+async def build_coarse_plan(task, submit):
+    tool = coarse_plan_tool()
+    plan = await submit([
+        {'role': 'system', 'content': '只把当前任务拆成两个到六个有序的粗粒度数据读取子目标。每个目标必须描述所需事实或字段，不能写记录 ID、工具名、答案、执行步骤或历史经验。dependencies 只能引用此前子目标；独立读取保持独立。必须调用 submit_coarse_plan 一次，不输出内部推理。'},
+        {'role': 'user', 'content': json.dumps({'task': task['task']}, ensure_ascii=False)}], tool)
+    tool.validator.validate(plan)
+    ids = [item['id'] for item in plan['subgoals']]
+    if len(ids) != len(set(ids)) or any(dep not in ids for item in plan['subgoals'] for dep in item['dependencies']):
+        raise ValueError('粗计划存在重复或缺失依赖')
+    return plan
+
+
 def grams(text):
     text = ''.join(c for c in text.lower() if c.isalnum())
     return {text[i:i + 2] for i in range(len(text) - 1)}

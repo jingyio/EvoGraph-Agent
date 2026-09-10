@@ -17,7 +17,7 @@ backend/app.py → TaskRunner
                  ├─ ReAct / Strong ReAct
                  ├─ Plan + ReAct
                  ├─ Plan + AutoTool DAG（每次规划）
-                 └─ Graph RSI（优先复用保存的 Plan + 图）
+                         └─ Graph RSI：Fast 完整 Workflow → Composition Persistent TinyEdge → Fallback 完整 Plan
                          ↓
         工具观察 → 模型计算/报告 → 确定性评分
                          ↓
@@ -33,7 +33,7 @@ backend/app.py → TaskRunner
 | `backend/autotool.py` | 本地 BM25 工具检索；另有旧 OpenAPI 工具获取能力 | BM25 不是嵌入检索，不消耗 LLM token |
 | `backend/intent_graph.py` | 本地选择、契约绑定、分页/foreach 编译、依赖分层执行 | 不编译任意代码，不自动执行业务写入 |
 | `backend/graph.py` | 共用 DAG/绑定校验、字段复用与缺失补查；另有旧轨迹编译器 | 有图不等于业务语义已证明正确 |
-| `backend/online_evolution.py` | 保存版本、Plan、Patch、来源与自然任务证据，选择后继版本 | 无 provider 或额外工具 rollout；不是通用反思搜索器 |
+| `backend/online_evolution.py` / `tinyedge.py` | 保存完整 Workflow、从正常 train 图连续读取链挖掘 Persistent TinyEdge、确定性组合与来源记录 | 无 provider 或额外工具 rollout；不做向量检索、LRU 或 Transient TinyEdge Group |
 | `backend/paired_evaluation.py` | 固定验证/测试任务与图，运行明确的两臂对照，保留失败成本 | 不从评测结果生成经验 |
 | `backend/llm_judge.py` | 匿名双顺序报告评分、reward、独立裁判计量 | 不执行 Agent，不改写事实评分，不训练图 |
 | `backend/business_report.py` | 所有 Agent 共用 HTML 报告与实际工具证据展示 | 不读取 gold 来补写业务结果 |
@@ -47,6 +47,8 @@ Graph RSI 命中版本时同时复用保存的 Plan 和读取图，规划请求�
 当前图节点沿用 Python dict：`tool/arguments/dependencies/foreach/paginate`，可加 `reuse` 和 `defer`。`foreach.filter` 是由 Plan `selection.kind=match` 绑定到已声明列表字段的精确相等筛选：图先读取当前列表、复用筛选字段，只对入选记录调用详情。无法可靠绑定的 Plan 使用 `selection.kind=model`，该详情子图交给模型；当前字段缺失或类型变化也失败关闭并保留上游观察。`reuse.onMissing=detail` 逐条检查并补查缺失字段。没有独立 IR 框架；准确协议见 [graph-ir.md](graph-ir.md)。
 
 当前 Patch 有保存来源图、带恢复的字段复用、已获模型有效恢复的失败子图交接、后续正常任务重新规划。未知失败不能凭空生成新图，结构相同不能虚增版本。`probation/family-supported/needs-repair` 表示适用证据与修订状态；不是全场景推广或统计显著性证明。
+
+Graph RSI 的规划路由是 Fast（同任务模板/工具契约/执行器的完整图，Plan 请求为零）、Composition（Fast 未命中而有 support>=2 的 Persistent TinyEdge 时，composition 角色只生成粗子目标，本地确定性选择/组合）和 Fallback（覆盖、来源或契约校验不足时生成完整 Plan）。TinyEdge identity 共享 tool、输入输出契约和绑定槽，连续读取链以 `defer`、扇入/扇出与非连续依赖为边界；执行器消费已选 ID 而不再调用模型重选。当前候选检索是本地字元重叠而非论文 embedding，详细差异与实证边界见 [g-agent-local-composition-design-2026-09-10.md](g-agent-local-composition-design-2026-09-10.md)。
 
 ## 数据与评测
 

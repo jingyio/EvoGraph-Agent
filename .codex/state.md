@@ -7,11 +7,11 @@
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 本轮已实现筛选后补查 Motif，待本地提交；磁盘运行记录在本轮结束时无 queued/running 项。旧 `4317` 服务不是热重载，`f6d572dd` 使用旧代码但保留原始轨迹；本轮证据使用当前代码的 `4318` 临时服务，已完成后应停止。
+- 本轮已实现 G-Agent 式 Fast / Composition / Fallback、Persistent TinyEdge 与前端观测，待本地提交；临时当前代码服务 `4319` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
 
 ## 已完成
 
-任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 增加 Plan 语义接口 `selection` 与 `foreach.filter` Motif、`plan_react_reuse` 对照、前端来源/绑定/执行/修订展示。详细边界和实验数字见 [motif-filter-then-enrich-validation-2026-09-10.md](../docs/motif-filter-then-enrich-validation-2026-09-10.md)。
+任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 加入 Persistent TinyEdge 规范化 identity、train-only 连续读取片段挖掘、Fast/Composition/Fallback 路由、composition 模型角色和片段来源/绑定/执行 UI；不做 Transient TinyEdge Group。详细边界和实证见 [g-agent-local-composition-design-2026-09-10.md](../docs/g-agent-local-composition-design-2026-09-10.md) 与 [g-agent-local-composition-validation-2026-09-10.md](../docs/g-agent-local-composition-validation-2026-09-10.md)。
 
 最近功能提交：`9520ae7` Judge/reward/Plan对照；`e9e9df1` 强基线评测/报告；`e15d7c1` 执行回放；`f50d97d` 在线图进化。
 
@@ -29,7 +29,7 @@ npm run build
 
 页面：`/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`（开发基址 `http://127.0.0.1:5173`）。FastAPI文档：`http://127.0.0.1:4317/docs`。
 
-清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。本轮为64个Python测试、4个前端回放测试、类型检查和构建通过；300条契约校验（10,400 次工具调用、0 次模型调用）通过。本轮模型正常 train 证据：`b5abdd11` 冷启动保存 Motif G0，`fa813841` 热启动复用，`7c32fa3e` 为不回写经验的复用 Plan ReAct 对照；均通过结构化评分。
+清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。本轮为67个Python测试、4个前端回放测试、类型检查和构建通过；300条契约校验（10,400 次工具调用、0 次模型调用）通过。真实 train 尝试 `800f792f`、`9ef504a8`、`acfa3b5e`、`504f58d7`、`982d7e44` 未 materialize 可组合 TinyEdge：保留编译歧义/模型超时/网络失败，不声称 Composition 收益。
 
 ## 配置与私有状态
 
@@ -39,7 +39,7 @@ npm run build
 
 - `artifacts/taskbank/records.sqlite3`、`gold.json`：冻结记录/仅供硬评分的参考答案。
 - `artifacts/taskbank-runs/<id>.json`：原始运行。
-- `artifacts/online-graphs.json`：原三份 G0 加 finance/cancelled_payments Motif G0 `b13e00e4` 与证据。
+- `artifacts/online-graphs.json`：已有图版本加本轮 schema 2 的 `workflows` / `tinyEdges`；当前真实训练未形成 support>=2 的可组合片段，不能假设其中存在 TinyEdge。
 - `artifacts/paired-evaluations/<id>.json`、`sources/`：成对实验与新实验源码快照。
 - `artifacts/llm-judgements/<id>.json`、`inputs/`：裁判与输入。
 
@@ -47,7 +47,7 @@ npm run build
 
 ## 下一步
 
-执行入口见 `docs/EXECUTION_HANDOFF.md`。下一项应冻结当前 Motif/Plan 版本，运行已实现的 `plan_react_reuse` 对照评测并保留全部结果；之后才可进行最终 test，test 反馈不得回写 Motif。
+执行入口见 `docs/EXECUTION_HANDOFF.md`。下一项优先用正常 train 流量解决图编译歧义并积累两个以上不同可执行来源，再运行一次真实 Composition；冻结方案前不扩展 validation/test，test 反馈不得回写 Motif/TinyEdge。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 

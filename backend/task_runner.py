@@ -15,7 +15,7 @@ from .model_client import ModelClient, ModelOptions
 from .tools import Tool, ToolContext, object_schema
 from .autotool import canonical, retrieve_tools
 from .intent_graph import select_retrieved_graph, compile_intent_graph, execute_graph
-from .gagent import build_data_plan
+from .gagent import build_data_plan, build_coarse_plan
 from .online_evolution import OnlineEvolution
 from .agent_prompts import STRONG_REACT_GUIDANCE
 
@@ -129,20 +129,27 @@ class TaskRunner:
         return (ModelClient(ModelOptions(config.PLANNER_BASE_URL, config.PLANNER_API_KEY, config.PLANNER_MODEL, config.MODEL_TIMEOUT)),
                 ModelClient(ModelOptions(config.BASE_URL, config.API_KEY, config.MODEL, config.MODEL_TIMEOUT)))
 
+    def composition_provider(self):
+        if self.provider_factory:
+            return self.provider_factory('composition')
+        return ModelClient(ModelOptions(config.COMPOSITION_BASE_URL, config.COMPOSITION_API_KEY, config.COMPOSITION_MODEL, config.MODEL_TIMEOUT))
+
     async def start(self, request, *, evaluation_context=None):
         if len(self.tasks) >= 32:
             raise ValueError('任务队列已满（32），请等待或取消')
         task = deepcopy(self.bank.task(request.taskId))
         tools = self.bank.tools(task['id'])
         planner, executor = self.providers()
+        composition = self.composition_provider()
         run = dict(id=str(uuid4()), taskId=task['id'], scenario=task['scenario'], split=task['split'], strategy=request.strategy,
                    status='queued', phase='排队', createdAt=now(), events=[], toolTrace=[], plan=None, graph=None, retrieval=[], graphSelection=[],
-                   models=dict(planner=planner.model, executor=executor.model, distinctModels=planner.model != executor.model),
-                   modelSettings=dict(planner=getattr(planner, 'settings', {}), executor=getattr(executor, 'settings', {})),
+                   models=dict(planner=planner.model, composition=composition.model, executor=executor.model,
+                               distinctModels=planner.model != executor.model, compositionDistinct=composition.model != planner.model),
+                   modelSettings=dict(planner=getattr(planner, 'settings', {}), composition=getattr(composition, 'settings', {}), executor=getattr(executor, 'settings', {})),
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0),
-                   phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'graph', 'execute']},
+                   phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
@@ -157,7 +164,7 @@ class TaskRunner:
                     self.peaks['runs'] = max(self.peaks['runs'], self.active_runs)
                     try:
                         run.update(status='running', phase='开始执行', startedAt=now(), traceVersion=2)
-                        await self.execute(run, task, tools, planner, executor)
+                        await self.execute(run, task, tools, planner, composition, executor)
                     finally:
                         self.active_runs -= 1
             except asyncio.CancelledError:
@@ -189,7 +196,7 @@ class TaskRunner:
         background.add_done_callback(cleanup)
         return run
 
-    async def execute(self, run, task, tools, planner, executor):
+    async def execute(self, run, task, tools, planner, composition, executor):
         started, active_reads = time.monotonic(), 0
         context = ToolContext(run)
         known = {t.name: t for t in tools}
@@ -331,12 +338,13 @@ class TaskRunner:
             if run['strategy'] not in ['react', 'strong_react']:
                 run['phase'] = 'Plan'
                 try:
-                    selected = None
+                    selected, composed = None, None
                     if run['strategy'] in ['graph_rsi', 'plan_react_reuse']:
                         lookup_start = time.perf_counter()
                         selected = deepcopy(run['evaluationContext'].get('graphSnapshot')) if 'evaluationContext' in run else self.evolution.select(task, tools)
                         reuse = dict(usedVersionId=selected['id'] if selected else None, sourceGraphId=selected['id'] if selected else None, generation=selected['generation'] if selected else None,
-                                     lookupMs=round((time.perf_counter() - lookup_start) * 1000, 3), execution='saved-plan' if selected else 'cold-plan')
+                                     lookupMs=round((time.perf_counter() - lookup_start) * 1000, 3), execution='saved-plan' if selected else 'cold-plan',
+                                     planningPath='fast' if selected else 'fallback')
                         if run['strategy'] == 'graph_rsi':
                             run['evolution'] = dict(reuse, execution='saved-graph' if selected else 'cold-plan')
                             if 'evaluationContext' in run:
@@ -345,7 +353,32 @@ class TaskRunner:
                             run['planReuse'] = reuse
                             if 'evaluationContext' in run:
                                 run['planReuse']['note'] = '冻结成对评测：复用与 RSI 相同的已保存 Plan；不学习'
-                    plan = deepcopy(selected['plan']) if selected else await build_data_plan(task, acquisition, lambda history, tool: structured(planner, 'plan', history, tool))
+                    if run['strategy'] == 'graph_rsi' and not selected and 'evaluationContext' not in run:
+                        candidates = self.evolution.composition_candidates(task, tools)
+                        if candidates:
+                            run['phase'] = 'Composition 粗计划与局部片段选择'
+                            composition_start = time.perf_counter()
+                            try:
+                                coarse = await build_coarse_plan(task, lambda history, tool: structured(composition, 'composition', history, tool))
+                                composed = self.evolution.compose(task, tools, coarse)
+                                elapsed = round((time.perf_counter() - composition_start) * 1000, 3)
+                                run['compositionPlan'] = dict(coarsePlan=coarse, selectedTinyEdgeIds=composed['selectedTinyEdgeIds'],
+                                                              retrieval=composed['retrieval'], origins=composed['origins'], localMs=elapsed)
+                                run['evolution'].update(execution='composition', planningPath='composition',
+                                                        selectedTinyEdgeIds=composed['selectedTinyEdgeIds'], compositionLocalMs=elapsed,
+                                                        note='Fast 未命中；粗计划覆盖后直接绑定已选 Persistent TinyEdge 并执行')
+                                event('composition', '局部 TinyEdge 组合已校验', run['compositionPlan'])
+                            except Exception as error:
+                                elapsed = round((time.perf_counter() - composition_start) * 1000, 3)
+                                run['compositionPlan'] = dict(status='fallback', reason=str(error)[:500], localMs=elapsed,
+                                                              candidateCount=len(candidates))
+                                run['evolution'].update(planningPath='fallback', compositionLocalMs=elapsed,
+                                                        note='Composition 覆盖或组合不足；完整 Plan 生成成本计入本次任务')
+                                event('composition', '局部 TinyEdge 组合不足，转完整 Plan', run['compositionPlan'])
+                        else:
+                            run['evolution'].update(planningPath='fallback', note='Fast 未命中且没有已 materialize 的 Persistent TinyEdge；生成完整 Plan')
+                    plan = (deepcopy(selected['plan']) if selected else deepcopy(composed['plan']) if composed
+                            else await build_data_plan(task, acquisition, lambda history, tool: structured(planner, 'plan', history, tool)))
                     run['plan'] = plan
                     event('plan', '数据获取计划', plan)
                     messages.append(dict(role='user', content='当前数据获取计划：' + json.dumps(plan, ensure_ascii=False)))
@@ -354,6 +387,12 @@ class TaskRunner:
                         if selected:
                             nodes = deepcopy(selected['nodes'])
                             selection = [dict(stepId=n['id'], tool=n['tool'], selection='persisted-graph') for n in nodes]
+                        elif composed:
+                            nodes = deepcopy(composed['nodes'])
+                            selection = [dict(stepId=item['nodeId'], tool=next(node['tool'] for node in nodes if node['id'] == item['nodeId']),
+                                                  selection='persistent-tinyedge', tinyEdgeId=item['tinyEdgeId'],
+                                                  sourceWorkflowIds=item['sourceWorkflowIds'], sourceRunIds=item['sourceRunIds'])
+                                         for item in composed['origins']]
                         else:
                             retrieval = {s['id']: retrieve_tools(s['intent'], acquisition) for s in plan['steps']}
                             run['retrieval'] = [dict(stepId=s['id'], intent=s['intent'], candidates=retrieval[s['id']]) for s in plan['steps']]

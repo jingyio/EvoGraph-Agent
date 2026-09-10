@@ -10,6 +10,7 @@ from .domain import now
 from .graph import ordered_nodes, contract_hash
 from .graph_store import write_private
 from .intent_graph import compile_intent_graph
+from .tinyedge import mine as mine_tinyedges, candidate_rows, compose as compose_tinyedges
 
 
 class OnlineEvolution:
@@ -17,13 +18,19 @@ class OnlineEvolution:
         self.bank = bank
         self.path = bank.root / 'artifacts/online-graphs.json'
         self.versions = []
+        self.workflows = []
+        self.tiny_edges = []
 
     def restore(self):
         if self.path.exists():
-            self.versions = json.loads(self.path.read_text())['versions']
+            payload = json.loads(self.path.read_text())
+            self.versions = payload.get('versions', [])
+            self.workflows = payload.get('workflows', [])
+            self.tiny_edges = payload.get('tinyEdges', [])
 
     def save(self):
-        write_private(self.path, dict(schemaVersion=1, versions=self.versions))
+        write_private(self.path, dict(schemaVersion=2, versions=self.versions,
+                                      workflows=self.workflows, tinyEdges=self.tiny_edges))
 
     def context_key(self, task, tools):
         # Only the taskbank's explicit record-count/clock slots are generalized.
@@ -48,6 +55,39 @@ class OnlineEvolution:
         ordered_nodes(version['nodes'], tools)
         return deepcopy(version)
 
+    def composition_candidates(self, task, tools):
+        rows = []
+        for edge in self.tiny_edges:
+            if edge.get('scenario') == task['scenario'] and edge.get('contractHash') == contract_hash(tools):
+                rows.append(deepcopy(edge))
+        return rows
+
+    def compose(self, task, tools, coarse_plan):
+        candidates = self.composition_candidates(task, tools)
+        if not candidates:
+            raise ValueError('no_materialized_tinyedges')
+        selected, retrieval = [], []
+        for subgoal in coarse_plan['subgoals']:
+            rows = candidate_rows(task, candidates, tools, subgoal['intent'])
+            retrieval.append(dict(subgoalId=subgoal['id'], intent=subgoal['intent'], candidates=rows))
+            if not rows:
+                raise ValueError('composition_uncovered_subgoal:' + subgoal['id'])
+            choice = next((row for row in rows if row['tinyEdgeId'] not in selected), rows[0])
+            selected.append(choice['tinyEdgeId'])
+        if len(set(selected)) < 2:
+            raise ValueError('composition_requires_two_distinct_tinyedges')
+        assembled = compose_tinyedges(selected, candidates, tools)
+        known = {tool.name: tool for tool in tools}
+        plan_steps = []
+        for node in assembled['nodes']:
+            step = dict(id=node['id'], intent=known[node['tool']].description, dependencies=deepcopy(node['dependencies']))
+            condition = (node.get('foreach') or {}).get('filter')
+            if condition:
+                step['selection'] = dict(kind='match', sourceStepId=node['foreach']['nodeId'], **deepcopy(condition))
+            plan_steps.append(step)
+        return dict(plan=dict(steps=plan_steps), nodes=assembled['nodes'], origins=assembled['origins'],
+                    selectedTinyEdgeIds=selected, retrieval=retrieval)
+
     def create(self, task, tools, run, nodes, plan, parent, patches):
         ordered_nodes(nodes, tools)
         version = dict(id=str(uuid4()), parentGraphId=parent['id'] if parent else None,
@@ -58,6 +98,23 @@ class OnlineEvolution:
                        scope='匹配工具契约与任务模板的同类任务试用')
         self.versions.append(version)
         return version
+
+    def record_workflow(self, run, task, tools, info):
+        """Only completed training graph executions contribute TinyEdge support."""
+        graph = run.get('graph') or {}
+        if task['split'] != 'train' or graph.get('status') != 'done' or run.get('evaluation', {}).get('status') != 'passed':
+            return
+        if any(item['id'] == run['id'] for item in self.workflows):
+            return
+        nodes = deepcopy(graph['nodes'])
+        plan = self.safe_plan(run['plan'], nodes, tools)
+        workflow = dict(id=run['id'], sourceRunId=run['id'], sourceGraphId=info.get('usedVersionId'),
+                        sourceTaskId=task['id'], scenario=task['scenario'], family=task.get('family', task['id']),
+                        sourceSplit='train', contractHash=contract_hash(tools), nodes=nodes, plan=plan)
+        self.workflows.append(workflow)
+        self.tiny_edges = mine_tinyedges(self.workflows, tools)
+        info['tinyEdgeMaintenance'] = dict(recordedWorkflowId=workflow['id'], materializedCount=len(self.tiny_edges),
+                                           supportThreshold=2, extraModelRequests=0, extraToolCalls=0)
 
     @staticmethod
     def safe_plan(plan, nodes, tools):
@@ -109,6 +166,11 @@ class OnlineEvolution:
             graph = run.get('graph')
             if not graph or not run.get('plan') or not passed:
                 info['note'] = '无通过评分的读取图或有效修复，失败保留待分析'
+                self.save()
+                return
+            self.record_workflow(run, task, tools, info)
+            if info.get('execution') == 'composition':
+                info['note'] = 'Composition 正常训练轨迹已纳入 TinyEdge 支持；未从复用结果虚增完整图版本'
                 self.save()
                 return
             latest = self.latest(task, tools)

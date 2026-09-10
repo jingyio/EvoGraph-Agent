@@ -127,7 +127,7 @@ async def test_validation_cannot_create_graph_and_unknown_failure_does_not_inven
     bank = Bank(tmp_path)
     runner = TaskRunner(bank, lambda role: Model(role))
     await run(runner, 'val-1')
-    assert runner.evolution.versions == []
+    assert runner.evolution.versions == [] and runner.evolution.workflows == [] and runner.evolution.tiny_edges == []
     first = await run(runner, 'train-1')
     before = len(runner.evolution.versions)
     fake = deepcopy(first)

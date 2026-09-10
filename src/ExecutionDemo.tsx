@@ -7,7 +7,7 @@ import './execution-demo.css';
 
 type Task = { id: string; scenario: string; family: string; title: string; task: string; split: string; sourceUrl: string; recordCount: number };
 const sources: Record<string, string> = { tickets: '技术工单 · Zammad GitHub Issues', finance: '财务运营 · Olist', support: '客服运营 · CFPB' };
-const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', graph: '图执行', graph_created: '读取图就绪', motif: '筛选后补查', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
+const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', composition: '局部片段组合', graph: '图执行', graph_created: '读取图就绪', motif: '筛选后补查', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
 const stateNames: Record<string, string> = { pending: '等待依赖', running: '执行中', done: '完成', reused: '复用结果', failed: '失败', 'model-handoff': '交接模型' };
 const n = (value: number) => Math.round(value).toLocaleString('zh-CN');
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;

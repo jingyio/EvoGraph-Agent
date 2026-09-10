@@ -106,7 +106,8 @@ def create_app(service=None):
 
     @app.get('/api/taskbank/evolution')
     async def online_evolution_list():
-        return {'versions': task_runner.evolution.versions,
+        return {'versions': task_runner.evolution.versions, 'tinyEdges': task_runner.evolution.tiny_edges,
+                'workflows': [{key: item.get(key) for key in ['id', 'sourceRunId', 'sourceGraphId', 'sourceTaskId', 'scenario', 'family']} for item in task_runner.evolution.workflows],
                 'runs': [{k: r.get(k) for k in ['id', 'taskId', 'status', 'createdAt', 'split', 'metrics', 'evaluation', 'evolution']}
                          for r in task_runner.runs.values() if r.get('strategy') == 'graph_rsi'],
                 'protocol': {'shadowRollouts': 0, 'learningSplit': 'train', 'validation': 'natural-tasks',
