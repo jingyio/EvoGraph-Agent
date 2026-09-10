@@ -12,6 +12,13 @@ MIN_SUPPORT = 2
 MAX_LENGTH = 3
 
 
+class TinyEdgeMaintenanceError(ValueError):
+    """A machine-readable maintenance failure that does not imply task failure."""
+    def __init__(self, code, detail):
+        super().__init__(f'{code}:{detail}')
+        self.code, self.detail = code, detail
+
+
 def stable(value):
     return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(',', ':'))
 
@@ -105,6 +112,14 @@ def mine(workflows, tools):
     known = {tool.name: tool for tool in tools}
     grouped = {}
     for workflow in workflows:
+        if workflow.get('contractHash') != contract_hash(tools):
+            raise TinyEdgeMaintenanceError('contract_mismatch', workflow.get('id', 'unknown_workflow'))
+        for node in workflow.get('nodes', []):
+            tool = known.get(node.get('tool'))
+            if tool is None:
+                raise TinyEdgeMaintenanceError('unknown_tool', str(node.get('tool')))
+            if tool.effect != 'read':
+                raise TinyEdgeMaintenanceError('non_read_tool', tool.name)
         fragments = extract_fragments(workflow['nodes'], workflow['plan'], tools)
         for signature, fragment in fragments.items():
             key = (workflow['scenario'], workflow['contractHash'], signature)

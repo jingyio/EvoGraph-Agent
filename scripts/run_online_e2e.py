@@ -21,7 +21,7 @@ from backend.task_runner import TaskRunner, TaskRunRequest
 from backend.taskbank import TaskBank
 
 
-EXPERIMENT = 'online-e2e-train-v1'
+DEFAULT_EXPERIMENT = 'online-e2e-train-v1'
 TYPES = [
     ('finance', 'cancelled_payments'), ('finance', 'installments'),
     ('support', 'channels'), ('support', 'timeliness'),
@@ -270,13 +270,15 @@ def checkpoint(root, result_path, result, rsi=None):
     write_report(root, result)
 
 
-async def main(through_round=6):
+async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
     if not 1 <= through_round <= 6:
         raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
     if not bank.gold:
         raise RuntimeError('taskbank_records_missing')
-    root = ROOT / 'artifacts' / 'online-e2e' / EXPERIMENT
+    if not experiment or '/' in experiment or '\\' in experiment or experiment in ['.', '..']:
+        raise ValueError('invalid_experiment_id')
+    root = ROOT / 'artifacts' / 'online-e2e' / experiment
     result_path, manifest_path = root / 'result.json', root / 'manifest.json'
     manifest = task_manifest(bank)
     if manifest_path.exists() and json.loads(manifest_path.read_text()) != manifest:
@@ -286,7 +288,7 @@ async def main(through_round=6):
     rsi = TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1, run_directory=root / 'rsi' / 'runs', evolution_path=root / 'rsi' / 'experience.json', learning_enabled=True)
     base.restore(); rsi.restore()
     result = json.loads(result_path.read_text()) if result_path.exists() else dict(
-        schemaVersion=SCHEMA_VERSION, id=EXPERIMENT, status='running', createdAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), manifest=manifest, pairs=[],
+        schemaVersion=SCHEMA_VERSION, id=experiment, status='running', createdAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), manifest=manifest, pairs=[],
         protocol=dict(baseline='plan_react', rsi='motif_first', baselineLearning=False, rsiLearning=True,
                       learning='RSI only, train only, sequential; baseline has no cross-task learning', executor=config.MODEL,
                       planner=config.PLANNER_MODEL, composition=config.COMPOSITION_MODEL, judgeModel=config.JUDGE_MODEL,
@@ -357,4 +359,6 @@ async def main(through_round=6):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--through-round', type=int, default=6, help='Run through this fixed round; values below 6 retain a resumable formal precheck.')
-    asyncio.run(main(parser.parse_args().through_round))
+    parser.add_argument('--experiment', default=DEFAULT_EXPERIMENT, help='New isolated experiment directory ID; existing manifests cannot change.')
+    args = parser.parse_args()
+    asyncio.run(main(args.through_round, args.experiment))

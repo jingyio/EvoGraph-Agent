@@ -99,6 +99,27 @@ async def test_current_intent_can_refresh_tool_candidates(tmp_path):
     assert any(e['type'] == 'retrieval' for e in run['events'])
 
 
+async def test_failed_publish_recovery_is_bounded_and_shared_with_baseline(tmp_path):
+    histories = []
+    class FailedReportBank(Bank):
+        def tools(self, key):
+            def publish(args, ctx):
+                ctx.run['evaluation'] = dict(status='failed', issues=['evidence_coverage'])
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+            return [Tool('finance_publish_report', '发布报告', 'artifact', object_schema(), publish)]
+    class FailedReportModel(Model):
+        async def complete(self, messages, tools):
+            histories.append([tool.name for tool in tools])
+            return result('finance_publish_report', {})
+    runner = TaskRunner(FailedReportBank(tmp_path), lambda role: FailedReportModel(role, []))
+    run = await runner.start(TaskRunRequest(taskId='bounded', strategy='react'))
+    await runner.tasks[run['id']]
+    assert run['status'] == 'limited' and run['evaluation']['status'] == 'failed'
+    assert run['metrics']['reportAttempts'] == run['metrics']['failedReportAttempts'] == 2
+    assert run['reportRecovery']['termination'] in ['repeated_signature', 'max_failed_publish_attempts']
+    assert histories == [['finance_publish_report'], ['finance_publish_report']]
+
+
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
     runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
     baseline = dict(id='baseline', taskId='same', strategy='react', status='completed', createdAt='2026-09-10T01:00:00Z',

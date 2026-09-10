@@ -8,6 +8,41 @@ from .graph import ordered_nodes
 from .tools import Tool, object_schema
 
 
+def _terms(value):
+    text = str(value).lower()
+    words = set(re.findall(r'[a-z][a-z0-9_]*', text))
+    for sequence in re.findall(r'[\u4e00-\u9fff]+', text):
+        words.update(sequence[index:index + 2] for index in range(max(0, len(sequence) - 1)))
+    return words
+
+
+def _expects_list(intent):
+    text = str(intent).lower()
+    return bool(re.search(r'列表|列出|全部|每[条个]|records?|list', text))
+
+
+def _capability_matches(intent, tool, role):
+    """BM25 ranks candidates; this rejects candidates that cannot fulfill the step."""
+    if role == 'list':
+        return set(tool.parameters.get('required', [])) == {'page', 'pageSize'}
+    intent_terms = _terms(intent)
+    capability = _terms(' '.join([tool.name, tool.description, *map(str, tool.outputs or [])]))
+    meaningful = {term for term in intent_terms if term not in {'读取', '记录', '订单', '当前', '任务', '信息', '字段', '获取'}}
+    return not meaningful or bool(meaningful & capability)
+
+
+def reject_semantic_narrowing(plan, task_text):
+    """Task text is authoritative when a Plan explicitly narrows an inclusive number condition."""
+    inclusive = re.findall(r'(?:至少|达到|不少于|不低于|大于等于)\s*(\d+)', task_text)
+    if not inclusive:
+        return
+    plan_text = ' '.join(str(step.get('intent', '')) for step in plan.get('steps', []))
+    for value in inclusive:
+        if re.search(rf'(?:为|等于|=)\s*{re.escape(value)}(?:\D|$)', plan_text) and not re.search(
+                rf'(?:至少|达到|不少于|不低于|大于等于)\s*{re.escape(value)}', plan_text):
+            raise ValueError('Plan explicitly narrows an inclusive task condition')
+
+
 def plan_tool():
     selection = {
         'type': 'object',
@@ -84,13 +119,16 @@ def select_retrieved_graph(plan, retrieval, tools):
         rows = retrieval.get(key) or []
         candidates = [(row, known.get(row['name'])) for row in rows if row.get('score', 0) > 0]
         candidates = [(row, tool) for row, tool in candidates if tool and tool.effect == 'read' and signature(tool) != 'unsupported']
-        list_ancestor = any(signature(known[selected[parent]]) == 'list' for parent in nx.ancestors(dag, key) if parent in selected)
-        preferred = 'record' if list_ancestor else None
-        eligible = [(row, tool) for row, tool in candidates if preferred is None or signature(tool) == preferred]
+        ancestors = nx.ancestors(dag, key)
+        list_ancestor = any(signature(known[selected[parent]]) == 'list' for parent in ancestors if parent in selected)
+        descendants = nx.descendants(dag, key)
+        requires_list = _expects_list(plan['steps'][next(index for index, step in enumerate(plan['steps']) if step['id'] == key)]['intent']) or bool(descendants)
+        preferred = 'record' if list_ancestor else 'list' if requires_list else None
+        eligible = [(row, tool) for row, tool in candidates
+                    if (preferred is None or signature(tool) == preferred)
+                    and _capability_matches(next(step['intent'] for step in plan['steps'] if step['id'] == key), tool, preferred or signature(tool))]
         if not eligible:
-            eligible = candidates
-        if not eligible:
-            raise ValueError('No positive, compilable AutoTool candidate for ' + key)
+            raise ValueError('No positive, capability-compatible AutoTool candidate for ' + key)
         row, tool = eligible[0]
         selected[key] = tool.name
         diagnostics.append(dict(stepId=key, tool=tool.name, score=row['score'], candidateRank=rows.index(row) + 1,
@@ -116,6 +154,10 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
         tool = known[node['tool']]
         if tool.effect != 'read':
             raise ValueError('Read graph cannot publish or write')
+        required = set(tool.parameters.get('required', []))
+        role = 'list' if required == {'page', 'pageSize'} else 'record' if len(required) == 1 and next(iter(required)).endswith('Id') else 'scope'
+        if not _capability_matches(steps[node['id']]['intent'], tool, role):
+            raise ValueError('Selected tool does not satisfy requested output capability')
         node.update(dependencies=steps[node['id']]['dependencies'], sourceEventSeqs=[])
         ignored = {'id', 'records', 'page', 'mayHaveMore', '_evidenceRef'}
         requested = {field for field in (tool.outputs or []) if field not in ignored and re.search(r'(?<![A-Za-z0-9_])' + re.escape(field) + r'(?![A-Za-z0-9_])', steps[node['id']]['intent'], re.I)}

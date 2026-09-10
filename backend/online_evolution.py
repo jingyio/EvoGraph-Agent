@@ -10,7 +10,7 @@ from .domain import now
 from .graph import ordered_nodes, contract_hash
 from .graph_store import write_private
 from .intent_graph import compile_intent_graph
-from .tinyedge import mine as mine_tinyedges, candidate_rows, compose as compose_tinyedges
+from .tinyedge import TinyEdgeMaintenanceError, mine as mine_tinyedges, candidate_rows, compose as compose_tinyedges
 from . import tool_inertia
 
 
@@ -119,9 +119,25 @@ class OnlineEvolution:
                         sourceTaskId=task['id'], scenario=task['scenario'], family=task.get('family', task['id']),
                         sourceSplit='train', contractHash=contract_hash(tools), nodes=nodes, plan=plan)
         self.workflows.append(workflow)
-        self.tiny_edges = mine_tinyedges(self.workflows, tools)
-        info['tinyEdgeMaintenance'] = dict(recordedWorkflowId=workflow['id'], materializedCount=len(self.tiny_edges),
-                                           supportThreshold=2, extraModelRequests=0, extraToolCalls=0)
+        partition = dict(scenario=task['scenario'], contractHash=workflow['contractHash'])
+        compatible = [item for item in self.workflows if item.get('scenario') == partition['scenario']
+                      and item.get('contractHash') == partition['contractHash']]
+        retained = [item for item in self.tiny_edges if not (item.get('scenario') == partition['scenario']
+                    and item.get('contractHash') == partition['contractHash'])]
+        maintenance = dict(recordedWorkflowId=workflow['id'], workflowStatus='recorded', partition=partition,
+                           partitionWorkflowCount=len(compatible), supportThreshold=2,
+                           extraModelRequests=0, extraToolCalls=0)
+        try:
+            mined = mine_tinyedges(compatible, tools)
+            self.tiny_edges = retained + mined
+            maintenance.update(miningStatus='ok', materializedCount=len(mined), totalMaterializedCount=len(self.tiny_edges))
+        except TinyEdgeMaintenanceError as error:
+            maintenance.update(miningStatus='failed', reasonCode=error.code, reason=error.detail,
+                               materializedCount=0, totalMaterializedCount=len(self.tiny_edges))
+        except Exception as error:
+            maintenance.update(miningStatus='failed', reasonCode='unexpected_error', reason=str(error)[:500],
+                               materializedCount=0, totalMaterializedCount=len(self.tiny_edges))
+        info['tinyEdgeMaintenance'] = maintenance
 
     def observe_tool_inertia(self, run, task, tools):
         """Persist only model-origin, successful normal train trajectories."""

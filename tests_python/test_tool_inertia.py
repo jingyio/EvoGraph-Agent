@@ -117,3 +117,4 @@ async def test_motif_first_executes_one_inertial_read_then_returns_to_model(tmp_
     assert run['metrics']['modelRequests'] == 2
     assert [row['executor'] for row in run['toolTrace']] == ['graph', 'inertia', 'model']
     assert run['toolInertia']['attempts'][0]['bindings'][0]['sourcePath'] == ['records', '*', 'id']
+    assert run['toolInertia']['decisionPoints'][0]['reason'] == 'eligible_graph_handoff'

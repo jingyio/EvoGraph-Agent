@@ -6,6 +6,8 @@
 
 状态：2026-09-10 已完成 `online-e2e-train-v1`：36 对 train 在线执行和36对双顺序 Judge 均保留。RSI 全量 token +27.4%、延迟 +20.7%、35/36 通过，未达到总体收益目标；详情见 `online-e2e-train-results-2026-09-10.md`。
 
+- 修复前的旧流还有跨场景 TinyEdge 维护异常和无界报告重试，不能与修复后结果拼接。先在新隔离 ID 做两轮 train 预检：检查分区维护、后续 Workflow 读取、支持度、报告恢复和 AutoTool 入口日志；通过后才讨论扩大。
+
 - 已观察到 `support-channels-01 → -02...-06` 的 Fast 复用和少 Plan 请求，但没有 Composition、TinyEdge 或 AutoTool 运行时触发；不能把局部热点收益推广为总体结果。
 - 后续只能基于失败原因和正常 train 流量提出新假设；不得重跑同一任务、修改阈值制造 AutoTool 命中，或删除 `finance-installments-06` 的失败。
 

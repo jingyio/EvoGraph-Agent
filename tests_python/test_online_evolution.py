@@ -6,6 +6,7 @@ from backend.tools import Tool, object_schema
 from backend.task_runner import TaskRunner, TaskRunRequest
 from backend.intent_graph import execute_graph
 from backend.graph import ordered_nodes
+from backend.online_evolution import OnlineEvolution
 
 
 class Bank:
@@ -238,3 +239,28 @@ async def test_training_plan_persists_filter_then_enrich_motif_without_shadow_ro
     assert version['plan']['steps'][1]['selection']['value'] == 'canceled'
     assert any(p['operation'] == 'filter_then_enrich' for p in version['patches'])
     assert run['evolution']['shadowRollouts'] == run['evolution']['extraModelRequests'] == run['evolution']['extraToolCalls'] == 0
+
+
+def test_interleaved_scenarios_mine_only_current_partition_and_keep_other_edges(tmp_path):
+    bank = Bank(tmp_path)
+    evolution = OnlineEvolution(bank, tmp_path / 'experience.json')
+    def tools(prefix):
+        return [Tool(prefix + '_list', '分页列出记录', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), lambda a, c: None, outputs=['id']),
+                Tool(prefix + '_detail', '读取明细', 'read', object_schema({'recordId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'value'])]
+    def task(scenario, key):
+        return dict(id=key, scenario=scenario, family='shared', split='train', task='读取明细')
+    def run(key, prefix):
+        return dict(id=key, status='completed', evaluation=dict(status='passed'), plan={'steps': [dict(id='list', intent='列表', dependencies=[]), dict(id='detail', intent='明细', dependencies=['list'])]},
+                    graph=dict(status='done', nodes=[dict(id='list', tool=prefix + '_list', arguments={'page': {'kind': 'literal', 'value': 1}, 'pageSize': {'kind': 'literal', 'value': 50}}, dependencies=[]),
+                                                     dict(id='detail', tool=prefix + '_detail', arguments={'recordId': {'kind': 'item', 'path': ['id']}}, dependencies=['list'], foreach={'nodeId': 'list', 'collectionPath': ['records']})]))
+    finance, tickets = tools('finance'), tools('tickets')
+    for key in ['f1', 'f2']:
+        evolution.record_workflow(run(key, 'finance'), task('finance', key), finance, {})
+    assert any(edge['scenario'] == 'finance' for edge in evolution.tiny_edges)
+    before = deepcopy(evolution.tiny_edges)
+    for key in ['t1', 't2']:
+        evolution.record_workflow(run(key, 'tickets'), task('tickets', key), tickets, {})
+    assert any(edge['scenario'] == 'finance' for edge in evolution.tiny_edges)
+    assert any(edge['scenario'] == 'tickets' for edge in evolution.tiny_edges)
+    assert len({row['id'] for row in evolution.workflows}) == 4
+    assert before[0]['sourceWorkflowIds'] == next(edge for edge in evolution.tiny_edges if edge['scenario'] == 'finance')['sourceWorkflowIds']

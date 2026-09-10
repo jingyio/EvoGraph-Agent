@@ -10,7 +10,7 @@ type Version = {
   nodes: { id: string; tool: string; dependencies: string[]; foreach?: { filter?: { field: string; operator: string; value: unknown } }; reuse?: { fields: string[]; onMissing?: string }; defer?: boolean }[];
   evidence: { runId: string; taskId: string; split: string; passed: boolean; graphFallback: boolean; tokens: number; durationMs: number; modelRequests: number }[];
 };
-type Run = { id: string; taskId: string; split: string; status: string; metrics: { inputTokens: number; outputTokens: number; modelRequests: number; durationMs: number; toolErrors: number }; evaluation: { status: string }; evolution?: { usedVersionId?: string; generation?: number; maintenanceMs?: number; lookupMs?: number; extraModelRequests?: number; extraToolCalls?: number; shadowRollouts?: number; note?: string } };
+type Run = { id: string; taskId: string; split: string; status: string; metrics: { inputTokens: number; outputTokens: number; modelRequests: number; durationMs: number; toolErrors: number }; evaluation: { status: string }; evolution?: { usedVersionId?: string; generation?: number; maintenanceMs?: number; lookupMs?: number; extraModelRequests?: number; extraToolCalls?: number; shadowRollouts?: number; note?: string; maintenanceError?: string; tinyEdgeMaintenance?: { workflowStatus?: string; miningStatus?: string; reasonCode?: string; reason?: string } } };
 type TinyEdge = { id: string; scenario: string; support: number; length: number; intent: string; inputSlots: string[]; outputSlots: string[]; sourceRunIds: string[]; sourceWorkflowIds: string[]; nodeTemplates: { tool: string }[] };
 type ToolInertia = { toolPaths: { tools: string[]; support: number; sourceRunIds: string[] }[]; parameterEdges: { sourceTool: string; sourcePath: string[]; targetTool: string; targetParameter: string; support: number; sourceRunIds: string[] }[] };
 type Task = { id: string; scenario: string; family: string; split: string; title: string };
@@ -41,6 +41,7 @@ export default function OnlineEvolutionPanel() {
   const versions = data.versions.filter(v => v.scenario === scenario && (!family || v.family === family));
   const ids = new Set(scoped.map(t => t.id));
   const runs = data.runs.filter(r => ids.has(r.taskId));
+  const maintenanceFailures = runs.filter(r => r.evolution?.maintenanceError || r.evolution?.tinyEdgeMaintenance?.miningStatus === 'failed');
   const parentName = (id: string | null) => { const v = data.versions.find(x => x.id === id); return v ? `G${v.generation} · ${v.id.slice(0, 6)}` : '冷启动'; };
   return <div className="online-evolution">
     <div className="page-heading"><h1>Graph RSI · 随任务进化</h1><GitBranch size={24} /></div>
@@ -53,6 +54,7 @@ export default function OnlineEvolutionPanel() {
     {error && <p role="alert">{error}</p>}
     <div className="graph-facts"><div><span>结构版本</span><strong>{versions.length}</strong></div><div><span>正常任务执行</span><strong>{runs.length}</strong></div><div><span>额外影子 rollout</span><strong>{runs.reduce((n, r) => n + (r.evolution?.shadowRollouts || 0), 0)}</strong></div><div><span>图维护耗时总计</span><strong>{runs.reduce((n, r) => n + (r.evolution?.maintenanceMs || 0) + (r.evolution?.lookupMs || 0), 0).toFixed(2)} ms</strong></div></div>
     <p>进化维护额外 LLM {runs.reduce((n, r) => n + (r.evolution?.extraModelRequests || 0), 0)} 次 · 额外工具 {runs.reduce((n, r) => n + (r.evolution?.extraToolCalls || 0), 0)} 次。当前任务的恢复调用计入正常执行成本。</p>
+    {maintenanceFailures.length > 0 && <div role="alert" className="taskbank-comparison"><strong>经验维护异常 {maintenanceFailures.length} 次</strong><p>任务即使完成也不会掩盖维护失败；请查看对应运行的原因和原始轨迹。</p><details><summary>维护失败明细</summary><pre>{JSON.stringify(maintenanceFailures.map(run => ({ taskId: run.taskId, runId: run.id, maintenanceError: run.evolution?.maintenanceError, tinyEdgeMaintenance: run.evolution?.tinyEdgeMaintenance })), null, 2)}</pre></details></div>}
     <p>训练集生成 Patch；验证集只累计适用证据；测试集使用已获支持的图且不更新经验。三个不同任务通过是应用门槛，不是统计显著性或成本优势证明。</p>
     {task && <TaskRunPanel taskId={task.id} defaultStrategy="graph_rsi" />}
     <h2>AutoTool 惯性经验</h2>
@@ -76,6 +78,6 @@ export default function OnlineEvolutionPanel() {
     </section>)}
     <h2>运行成本与结果</h2>
     <p>总 token 和延迟包含当前任务恢复成本；图维护耗时另列并计入总延迟。下表是自然任务记录，不是相同任务的因果对照。</p>
-    <div className="reliability-table"><table><thead><tr><th>任务 / 运行</th><th>使用图</th><th>评分</th><th>LLM</th><th>Token</th><th>总延迟 ms</th><th>图维护 ms</th><th>工具错误</th></tr></thead><tbody>{runs.map(r => <tr key={r.id}><td><a href={`/api/taskbank/runs/${r.id}`} target="_blank" rel="noreferrer">{r.taskId} · {r.id.slice(0, 6)}</a></td><td>{r.evolution?.usedVersionId ? `G${r.evolution.generation} · ${r.evolution.usedVersionId.slice(0, 6)}` : '冷启动'}</td><td>{r.evaluation.status}</td><td>{r.metrics.modelRequests}</td><td>{r.metrics.inputTokens + r.metrics.outputTokens}</td><td>{r.metrics.durationMs}</td><td>{((r.evolution?.lookupMs || 0) + (r.evolution?.maintenanceMs || 0)).toFixed(2)}</td><td>{r.metrics.toolErrors}</td></tr>)}</tbody></table></div>
+    <div className="reliability-table"><table><thead><tr><th>任务 / 运行</th><th>使用图</th><th>评分</th><th>LLM</th><th>Token</th><th>总延迟 ms</th><th>图维护</th><th>工具错误</th></tr></thead><tbody>{runs.map(r => <tr key={r.id}><td><a href={`/api/taskbank/runs/${r.id}`} target="_blank" rel="noreferrer">{r.taskId} · {r.id.slice(0, 6)}</a></td><td>{r.evolution?.usedVersionId ? `G${r.evolution.generation} · ${r.evolution.usedVersionId.slice(0, 6)}` : '冷启动'}</td><td>{r.evaluation.status}</td><td>{r.metrics.modelRequests}</td><td>{r.metrics.inputTokens + r.metrics.outputTokens}</td><td>{r.metrics.durationMs}</td><td>{r.evolution?.maintenanceError || r.evolution?.tinyEdgeMaintenance?.miningStatus === 'failed' ? `失败：${r.evolution?.tinyEdgeMaintenance?.reasonCode || r.evolution?.maintenanceError}` : `${((r.evolution?.lookupMs || 0) + (r.evolution?.maintenanceMs || 0)).toFixed(2)} ms`}</td><td>{r.metrics.toolErrors}</td></tr>)}</tbody></table></div>
   </div>;
 }

@@ -33,7 +33,7 @@ backend/app.py → TaskRunner
 | `backend/autotool.py` | 本地 BM25 工具检索；另有旧 OpenAPI 工具获取能力 | BM25 不是嵌入检索，不消耗 LLM token |
 | `backend/intent_graph.py` | 本地选择、契约绑定、分页/foreach 编译、依赖分层执行 | 不编译任意代码，不自动执行业务写入 |
 | `backend/graph.py` | 共用 DAG/绑定校验、字段复用与缺失补查；另有旧轨迹编译器 | 有图不等于业务语义已证明正确 |
-| `backend/online_evolution.py` / `tinyedge.py` / `tool_inertia.py` | 保存完整 Workflow、从正常 train 图连续读取链挖掘 Persistent TinyEdge、确定性组合与来源记录；保存模型来源的 TIG 串行路径/参数契约 | 无 provider 或额外工具 rollout；TIG 不读取 thought、不缓存业务值、不从图/惯性动作自我强化 |
+| `backend/online_evolution.py` / `tinyedge.py` / `tool_inertia.py` | 保存完整 Workflow、按场景和工具契约分区从正常 train 图连续读取链挖掘 Persistent TinyEdge、确定性组合与来源记录；保存模型来源的 TIG 串行路径/参数契约 | 无 provider 或额外工具 rollout；TIG 不读取 thought、不缓存业务值、不从图/惯性动作自我强化 |
 | `backend/paired_evaluation.py` | 固定验证/测试任务与图，运行明确的两臂对照，保留失败成本 | 不从评测结果生成经验 |
 | `backend/llm_judge.py` | 匿名双顺序报告评分、reward、独立裁判计量 | 不执行 Agent，不改写事实评分，不训练图 |
 | `backend/business_report.py` | 所有 Agent 共用 HTML 报告与实际工具证据展示 | 不读取 gold 来补写业务结果 |
@@ -50,7 +50,7 @@ Graph RSI 命中版本时同时复用保存的 Plan 和读取图，规划请求�
 
 Graph RSI 的规划路由是 Fast（同任务模板/工具契约/执行器的完整图，Plan 请求为零）、Composition（Fast 未命中而有 support>=2 的 Persistent TinyEdge 时，composition 角色只生成粗子目标，本地确定性选择/组合）和 Fallback（覆盖、来源或契约校验不足时生成完整 Plan）。TinyEdge identity 共享 tool、输入输出契约和绑定槽，连续读取链以 `defer`、扇入/扇出与非连续依赖为边界；执行器消费已选 ID 而不再调用模型重选。当前候选检索是本地字元重叠而非论文 embedding，详细差异与实证边界见 [g-agent-local-composition-design-2026-09-10.md](g-agent-local-composition-design-2026-09-10.md)。
 
-`motif_only` 与 `motif_first` 是 Graph RSI 的最小 AutoTool 对照。前者执行当前 DAG/历史结构后直接进入原模型循环；后者只在 `defer` 交接的模型读取点，按当前串行工具上下文查询 TIG 一次。候选须同时满足固定支持/置信度、只读工具、当前观察的唯一类型合法参数来源和非重复调用；无论拒绝或工具错误都会回到模型。TIG 查询、更新、持久化耗时和惯性来源工具轨迹均单列；当前 Plan DAG、历史 Motif/TinyEdge 与惯性调用在回放中分别命名。
+`motif_only` 与 `motif_first` 是 Graph RSI 的最小 AutoTool 对照。前者执行当前 DAG/历史结构后直接进入原模型循环；后者只在 `defer` 交接的模型读取点，按当前串行工具上下文查询 TIG 一次。候选须同时满足固定支持/置信度、只读工具、当前观察的唯一类型合法参数来源和非重复调用；无论拒绝或工具错误都会回到模型。每个模型决策点都会保留未尝试原因，避免把没有交接点误读为置信度拒绝。TIG 查询、更新、持久化耗时和惯性来源工具轨迹均单列；当前 Plan DAG、历史 Motif/TinyEdge 与惯性调用在回放中分别命名。
 
 ## 数据与评测
 
