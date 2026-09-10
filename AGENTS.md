@@ -1,12 +1,20 @@
 # 项目协作约定
 
+## 跨 session 读取与更新
+
+- 先读 `.codex/state.md`，再读 `docs/ARCHITECTURE.md`、`docs/DESIGN_DECISIONS.md`、`docs/EXPERIMENT_STATUS.md`、`docs/TODO.md`。执行交接模板在 `docs/EXECUTION_HANDOFF.md`。
+- 当前原 session 用于讨论，用户自行另建执行 session；本次未自动创建新任务。代码只由一个执行者在同一工作树写入。
+- 阶段结束更新状态、TODO与实验索引；目标、已实现行为、证据结论分别记录。常规实现选择无需逐步确认。
+
+## 项目约束
+
 - 用户要求使用 Git 管理本项目。仓库根目录为 `rsi-agent-lab`。
 - 修改前检查 Git 状态，保留用户已有修改；按可审查的功能单元创建本地提交。
 - 后端使用 Python/FastAPI，前端使用 React/TypeScript。TS 后端基线保存在 Git 提交 `e63b138`。
 - 提交前检查 diff，并执行与改动相关的验证。主要命令：`npm test`（pytest）、`npm run build`，真实平台验收使用 `npm run verify:platforms`。
 - 不提交真实 `.env`、密钥、`node_modules`、`dist` 或 `artifacts` 中的运行记录；保留 `.env.example`。
 - 业务平台和真实模型的接入状态必须如实记录；离线固定流程不能作为真实 LLM 或 RSI 实验结果。
-- 后续端到端 pipeline、演示与性能实验默认使用已部署的 ERPNext/Zammad API，不再默认运行合成 JSON 沙箱的稳定性或进化实验。沙箱仅保留为明确标注的单元/回归测试环境；需要合成端到端实验时应由用户明确指定。
+- 后续端到端 pipeline、演示与性能实验默认使用已部署的 ERPNext/Zammad API，不再默认运行已删除的合成 JSON 沙箱实验。用户已要求删除旧业务沙箱，不能恢复旧数据、固定流程或旧沙箱接口；小型注入测试仅验证协议，不构成业务环境。
 - 必须区分“真实平台 API”“本项目初始化的演示记录”“有来源依据的真实企业数据”。当前已部署平台中的 RSI 种子记录由本项目生成；未经来源核验，不得称为真实企业数据，也不得假定开源仓库提供生产数据集。
 - 真实平台不可达或能力不足时如实说明并修复连接，不得静默回退沙箱、重置平台或重新生成数据来伪装真实 pipeline。外部连接目前只读，不能将平台只读报告当作完整业务写入任务验收。
 - 用户另要求三个场景各至少 100 个任务，已建立公开真实历史数据任务库（Olist 财务、CFPB 投诉、Zammad GitHub Issues 技术工单）。它与已部署实例及合成沙箱不同，必须标注来源；只在训练集学习，验证集选型，测试集不得用于学习或反思，gold.json 参考答案不得作为模型输入。300 个任务的工具契约验证不等于 300 次 LLM 成功率测试。

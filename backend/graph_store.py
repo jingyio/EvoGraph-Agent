@@ -15,7 +15,7 @@ from .runtime import create_run
 
 
 def environment_hash(source):
-    return digest({'source': source, 'url': 'synthetic-v1' if source == 'sandbox' else os.getenv(source.upper() + '_BASE_URL', 'unconfigured'), 'runtime': 'python-v1'})
+    return digest({'source': source, 'url': os.getenv(source.upper() + '_BASE_URL', 'unconfigured'), 'runtime': 'python-v1'})
 
 
 def write_private(path, value):
@@ -40,7 +40,7 @@ class GraphStore:
             try:
                 graph = json.loads(path.read_text())
                 UUID(graph['id'])
-                if path.stem == graph['id'] and graph.get('scope') == 'read-prefix' and graph.get('validation', {}).get('status') == 'passed' and isinstance(graph.get('nodes'), list):
+                if graph.get('source') in ['erpnext', 'zammad'] and path.stem == graph['id'] and graph.get('scope') == 'read-prefix' and graph.get('validation', {}).get('status') == 'passed' and isinstance(graph.get('nodes'), list):
                     self.graphs[graph['id']] = graph
             except (ValueError, KeyError, TypeError):
                 continue

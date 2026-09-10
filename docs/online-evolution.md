@@ -1,6 +1,6 @@
 # 用正常任务验证的 Graph RSI
 
-新增任务策略 `graph_rsi` 和 `/api/taskbank/evolution`。前端 `#evolution` 默认展示公开真实历史数据任务库上的在线版本链；旧合成沙箱配对实验记录和旧 API 保留供历史追溯，不是本次默认流程。
+新增任务策略 `graph_rsi` 和 `/api/taskbank/evolution`。前端 `#evolution` 默认展示公开真实历史数据任务库上的在线版本链；旧合成沙箱代码、专用记录与 API 已按用户要求移除；有日期的实验文档只作为历史证据。
 
 ```text
 首次正常训练任务：Plan → 自动读取图（包含已知字段复用优化） → 模型报告 → 结构化评分

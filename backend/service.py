@@ -6,18 +6,15 @@ from uuid import UUID
 from . import config
 from .models import RunRequest
 from .model_client import ModelClient, ModelOptions
-from .fixture_provider import FixtureProvider
-from .tools import sandbox_tools
 from .connectors import platform_tools
 from .runtime import create_run, execute_run
 from .graph_store import GraphStore, write_private
 from .domain import markdown, now
 from .evaluation import evaluate
-from .negative_motif import NegativeMotifStore
 
 
 def tools_for(request):
-    return sandbox_tools(request['scenario']) if request['source'] == 'sandbox' else platform_tools(request['source'])
+    return platform_tools(request['source'])
 
 
 class RunService:
@@ -25,20 +22,18 @@ class RunService:
         self.directory = Path(artifacts or config.ARTIFACTS)
         self.runs, self.tasks = {}, {}
         self.graphs = GraphStore(self.directory / 'graphs-python')
-        self.negative = NegativeMotifStore(self.directory / 'negative-motifs')
         self.provider_factory = provider_factory
 
     def restore(self):
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.graphs.restore()
-        self.negative.restore()
         for folder in self.directory.iterdir():
             if not folder.is_dir():
                 continue
             try:
                 UUID(folder.name)
                 run = json.loads((folder / 'run.json').read_text())
-                if run['id'] == folder.name and run.get('finishedAt') and isinstance(run.get('events'), list):
+                if run['request'].get('source') in ['erpnext', 'zammad'] and run['id'] == folder.name and run.get('finishedAt') and isinstance(run.get('events'), list):
                     self.runs[run['id']] = run
             except (ValueError, KeyError, TypeError, OSError):
                 continue
@@ -62,14 +57,11 @@ class RunService:
         request = RunRequest.model_validate(raw).model_dump()
         if len(self.tasks) >= 2:
             raise ValueError('已有两个任务运行中，请等待或取消。')
-        if request['mode'] == 'fixture':
-            provider = FixtureProvider(request['scenario'])
-        elif self.provider_factory:
+        if self.provider_factory:
             provider = self.provider_factory()
         else:
             provider = ModelClient(ModelOptions(config.BASE_URL, config.API_KEY, config.MODEL, config.MODEL_TIMEOUT))
         tools = tools_for(request)
-        negative_motifs = self.negative.select(request, tools) if request['negativeMotifs'] else []
         run = create_run(request, provider.model)
         selection = self.graphs.select(request, tools) if request['strategy'] == 'graph' else None
         if selection:
@@ -83,7 +75,7 @@ class RunService:
         async def work():
             try:
                 await execute_run(run, provider, tools, max_steps=config.MAX_STEPS, max_tools=config.MAX_TOOLS, timeout=config.RUN_TIMEOUT,
-                                  graph=selection['graph'] if selection else None, candidates=selection['candidates'] if selection else None, negative_motifs=negative_motifs)
+                                  graph=selection['graph'] if selection else None, candidates=selection['candidates'] if selection else None)
                 info = run.get('graph')
                 if run['status'] == 'completed' and info and (info['status'] != 'hit' or info['selection'] == 'adapted'):
                     try:
@@ -94,11 +86,6 @@ class RunService:
                         info['learningError'] = '学习已取消；保留任务执行结果。'
                     except Exception as error:
                         info['learningError'] = str(error)[:1500]
-                if request.get('negativeMotifs') and run['status'] != 'cancelled':
-                    try:
-                        run['negativeReflection'] = await self.negative.learn(run, tools)
-                    except Exception as error:
-                        run['negativeReflection'] = {'error': str(error)[:1000]}
             finally:
                 try:
                     self.persist(run)
@@ -134,12 +121,6 @@ class RunService:
         candidate = deepcopy(run)
         candidate['evaluation'] = evaluate(candidate, candidate['request'].get('evaluationProfile', 'auto'))
         return await self.graphs.learn(candidate, tools_for(candidate['request']))
-
-    async def reflect(self, key):
-        run = self.runs[key]
-        if run['status'] == 'running' or key in self.tasks:
-            raise ValueError('请等待运行结束后分析失败轨迹')
-        return await self.negative.learn(deepcopy(run), tools_for(run['request']))
 
     async def shutdown(self):
         tasks = list(self.tasks.values())

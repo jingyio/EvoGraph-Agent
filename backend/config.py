@@ -31,13 +31,11 @@ TASK_READ_CONCURRENCY = integer('TASK_READ_CONCURRENCY', 8, 1, 32)
 
 
 def public_config():
-    from .domain import PRESETS
     return {'modelConfigured': bool(API_KEY and MODEL), 'model': MODEL or None,
             'maxSteps': MAX_STEPS, 'backend': 'python', 'enableThinking': False,
             'connectors': {
                 'erpnext': all(os.getenv(key) for key in ['ERPNEXT_BASE_URL', 'ERPNEXT_API_KEY', 'ERPNEXT_API_SECRET']),
-                'zammad': all(os.getenv(key) for key in ['ZAMMAD_BASE_URL', 'ZAMMAD_API_TOKEN'])},
-            'presets': PRESETS}
+                'zammad': all(os.getenv(key) for key in ['ZAMMAD_BASE_URL', 'ZAMMAD_API_TOKEN'])}}
 
 # Judge role defaults to the configured executor; report same-model judging explicitly.
 JUDGE_MODEL = os.getenv("JUDGE_MODEL") or MODEL

@@ -79,7 +79,7 @@ async def main():
             task = task_for(source, batch['startedAt'])
             for strategy in ['react', 'graph']:
                 request = dict(scenario='finance' if source == 'erpnext' else 'support', source=source, task=task,
-                               mode='live', strategy=strategy, snapshot='base', negativeMotifs=False)
+                               mode='live', strategy=strategy)
                 run = await service.start(request)
                 print(source + ' ' + strategy + ' ' + run['id'], flush=True)
                 await service.tasks[run['id']]

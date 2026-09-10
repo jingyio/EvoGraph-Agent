@@ -3,8 +3,7 @@ import pytest
 import httpx
 from backend.model_client import ModelClient, ModelOptions, request_body
 from backend.runtime import create_run, execute_run
-from backend.domain import PRESETS
-from backend.tools import ToolContext, sandbox_tools
+from backend.tools import ToolContext, Tool, object_schema
 from backend.connectors import JsonConnector, platform_tools
 from backend.autotool import acquire_tools
 
@@ -22,8 +21,8 @@ async def test_model_boundary_disables_thinking_and_returns_tool_observations():
             message['tool_calls'] = [{'id': 'call1', 'type': 'function', 'function': {'name': 'get_invoice', 'arguments': '{"invoiceId":"INV-001"}'}}]
         return httpx.Response(200, json={'choices': [{'message': message, 'finish_reason': 'tool_calls' if len(requests) == 1 else 'stop'}], 'usage': {'prompt_tokens': 42, 'completion_tokens': 7, 'completion_tokens_details': {'reasoning_tokens': 0}}})
     client = ModelClient(ModelOptions('https://openrouter.ai/api/v1', 'test-secret', 'test-model'), httpx.MockTransport(handler))
-    run = create_run({'scenario': 'finance', 'mode': 'live', 'source': 'sandbox', 'task': 'Read invoice only'}, client.model)
-    await execute_run(run, client, sandbox_tools('finance'))
+    run = create_run({'scenario': 'finance', 'mode': 'live', 'source': 'erpnext', 'task': 'Read invoice only'}, client.model)
+    await execute_run(run, client, [Tool('get_invoice', 'read', 'read', object_schema({'invoiceId': {'type':'string'}}), lambda a,c: {'id':a['invoiceId']})])
     assert run['status'] == 'completed' and run['metrics']['inputTokens'] == 84 and run['metrics']['reasoningTokens'] == 0
     assert json.loads(requests[1]['messages'][-1]['content'])['result']['id'] == 'INV-001'
     assert requests[1]['messages'][-1]['tool_call_id'] == 'call1'
