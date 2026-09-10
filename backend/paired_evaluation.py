@@ -21,6 +21,7 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     split: Literal['validation', 'test'] = 'validation'
     repeats: int = Field(default=1, ge=1, le=3)
+    baseline: Literal['strong_react', 'plan_react'] = 'strong_react'
 
 
 def success(run):
@@ -34,9 +35,9 @@ def percentile(values, q):
     return values[max(0, math.ceil(len(values) * q) - 1)]
 
 
-def summarize(rows):
+def summarize(rows, baseline='strong_react'):
     arms = {}
-    for arm in ['strong_react', 'graph_rsi']:
+    for arm in [baseline, 'graph_rsi']:
         runs = [row['runs'][arm] for row in rows if arm in row.get('runs', {})]
         complete_usage = all(r['metrics'].get('usageComplete') for r in runs)
         tokens = sum((r['metrics'].get('inputTokens') or 0) + (r['metrics'].get('outputTokens') or 0) for r in runs)
@@ -54,11 +55,11 @@ def summarize(rows):
             warmRuns=sum(bool((r.get('evolution') or {}).get('usedVersionId')) for r in runs),
             coldRuns=sum((r.get('evolution') or {}).get('execution') == 'cold-plan' for r in runs))
     both = [row for row in rows if all(arm in row.get('runs', {}) and success(row['runs'][arm]) and row['runs'][arm]['metrics'].get('usageComplete') for arm in arms)]
-    a, b = arms['strong_react'], arms['graph_rsi']
-    regression = sum(success(row['runs']['strong_react']) and not success(row['runs']['graph_rsi']) for row in rows if all(arm in row.get('runs', {}) for arm in arms))
-    improvement = sum(not success(row['runs']['strong_react']) and success(row['runs']['graph_rsi']) for row in rows if all(arm in row.get('runs', {}) for arm in arms))
+    a, b = arms[baseline], arms['graph_rsi']
+    regression = sum(success(row['runs'][baseline]) and not success(row['runs']['graph_rsi']) for row in rows if all(arm in row.get('runs', {}) for arm in arms))
+    improvement = sum(not success(row['runs'][baseline]) and success(row['runs']['graph_rsi']) for row in rows if all(arm in row.get('runs', {}) for arm in arms))
     reduction = (a['totalTokens'] - b['totalTokens']) / a['totalTokens'] if a['totalTokens'] and a['usageComplete'] and b['usageComplete'] else None
-    paired_saving = sum(sum(row['runs']['strong_react']['metrics'][k] - row['runs']['graph_rsi']['metrics'][k] for k in ['inputTokens', 'outputTokens']) for row in both)
+    paired_saving = sum(sum(row['runs'][baseline]['metrics'][k] - row['runs']['graph_rsi']['metrics'][k] for k in ['inputTokens', 'outputTokens']) for row in both)
     return dict(arms=arms, bothPassed=len(both), qualityRegressions=regression, qualityImprovements=improvement,
                 allOutcomeTokenReduction=reduction, bothPassedTokenDifference=paired_saving,
                 note='全部尝试计入总成本；每成功任务 token 包含失败开销。双方通过子集另列，不用成功筛选掩盖失败。报告文字未评分。')
@@ -71,8 +72,8 @@ class PairedEvaluation:
         self.items, self.tasks = {}, {}
 
     def save(self, item):
-        item['summary'] = summarize(item['pairs'])
-        item['byScenario'] = {scenario: summarize([p for p in item['pairs'] if p['scenario'] == scenario]) for scenario in ['finance', 'support', 'tickets']}
+        item['summary'] = summarize(item['pairs'], item['protocol']['arms'][0])
+        item['byScenario'] = {scenario: summarize([p for p in item['pairs'] if p['scenario'] == scenario], item['protocol']['arms'][0]) for scenario in ['finance', 'support', 'tickets']}
         write_private(self.directory / (item['id'] + '.json'), item)
 
     def restore(self):
@@ -118,7 +119,7 @@ class PairedEvaluation:
         pairs = [dict(index=i, taskId=t['id'], scenario=t['scenario'], family=t['family'], repeat=r + 1, status='pending', runIds={}, runs={})
                  for i, (r, t) in enumerate((r, t) for r in range(request.repeats) for t in selected)]
         item = dict(id=str(uuid4()), status='running', createdAt=now(), split=request.split, pairs=pairs,
-                    protocol=dict(arms=['strong_react', 'graph_rsi'], tasksPerScenario=10, repeats=request.repeats, selection='每类型按 ID 排序的首个所选划分任务，结果产生前确定',
+                    protocol=dict(arms=[request.baseline, 'graph_rsi'], tasksPerScenario=10, repeats=request.repeats, selection='每类型按 ID 排序的首个所选划分任务，结果产生前确定',
                         revision=revision, sourceHash=digest(source), corpusHash=digest(self.runner.bank.manifest), taskHash=digest(selected),
                         toolHashes={t['id']: contract_hash(self.runner.bank.tools(t['id'])) for t in selected},
                         planner=planner.model, executor=executor.model, maxSteps=config.MAX_STEPS, timeout=config.RUN_TIMEOUT,
@@ -145,7 +146,7 @@ class PairedEvaluation:
         async def pair_job(pair):
             async with slots:
                 pair['status'] = 'running'
-                order = ['strong_react', 'graph_rsi'] if pair['index'] % 2 == 0 else ['graph_rsi', 'strong_react']
+                order = item['protocol']['arms'] if pair['index'] % 2 == 0 else list(reversed(item['protocol']['arms']))
                 pair['launchOrder'] = order
                 try:
                     for arm in order:

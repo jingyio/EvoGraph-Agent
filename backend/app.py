@@ -17,6 +17,8 @@ from .taskbank import TaskBank
 from .task_runner import TaskRunner, TaskRunRequest
 from .paired_evaluation import PairedEvaluation, EvaluationRequest
 from .business_report import render_report
+from .llm_judge import LLMJudge, JudgeRequest, JUDGE_PROMPT
+from .autotool import digest
 
 
 class ReportReview(BaseModel):
@@ -45,6 +47,7 @@ def create_app(service=None):
     taskbank = TaskBank()
     task_runner = TaskRunner(taskbank)
     paired = PairedEvaluation(task_runner)
+    judge = LLMJudge(paired)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
@@ -53,9 +56,11 @@ def create_app(service=None):
         taskbank.load()
         task_runner.restore()
         paired.restore()
+        judge.restore()
         try:
             yield
         finally:
+            await judge.shutdown()
             await paired.shutdown()
             await task_runner.shutdown()
             await reliability.shutdown()
@@ -68,6 +73,7 @@ def create_app(service=None):
     app.state.taskbank = taskbank
     app.state.task_runner = task_runner
     app.state.paired = paired
+    app.state.judge = judge
 
     @app.get('/api/evaluations')
     async def evaluation_list():
@@ -76,6 +82,8 @@ def create_app(service=None):
 
     @app.post('/api/evaluations', status_code=202)
     async def evaluation_start(request: EvaluationRequest):
+        if judge.tasks:
+            raise ValueError('裁判正在运行，请等待结束后测量 Agent 性能')
         return {'id': (await paired.start(request))['id']}
 
     @app.get('/api/evaluations/{key}')
@@ -93,6 +101,19 @@ def create_app(service=None):
             task.cancel()
         return {'cancelled': bool(task)}
 
+    @app.get('/api/evaluations/{key}/judgements')
+    async def judgements_list(key: str):
+        if key not in paired.items:
+            raise HTTPException(404, 'Evaluation not found')
+        return {'items': [j for j in judge.items.values() if j['experimentId'] == key],
+                'model': config.JUDGE_MODEL, 'rubricHash': digest(JUDGE_PROMPT), 'sameAsExecutor': config.JUDGE_MODEL == paired.items[key]['protocol']['executor']}
+
+    @app.post('/api/evaluations/{key}/judgements', status_code=202)
+    async def judgement_start(key: str, request: JudgeRequest):
+        if key not in paired.items:
+            raise HTTPException(404, 'Evaluation not found')
+        return {'id': (await judge.start(key, request.pairIndex))['id']}
+
     @app.get('/api/taskbank/evolution')
     async def online_evolution_list():
         return {'versions': task_runner.evolution.versions,
@@ -108,6 +129,8 @@ def create_app(service=None):
 
     @app.post('/api/taskbank/runs', status_code=202)
     async def task_run_start(request: TaskRunRequest):
+        if judge.tasks:
+            raise ValueError('裁判正在运行，请等待结束后执行任务')
         if paired.tasks:
             raise ValueError('冻结成对评测正在运行，请等待评测结束或取消评测')
         return {'id': (await task_runner.start(request))['id']}

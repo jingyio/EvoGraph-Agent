@@ -38,3 +38,8 @@ def public_config():
                 'erpnext': all(os.getenv(key) for key in ['ERPNEXT_BASE_URL', 'ERPNEXT_API_KEY', 'ERPNEXT_API_SECRET']),
                 'zammad': all(os.getenv(key) for key in ['ZAMMAD_BASE_URL', 'ZAMMAD_API_TOKEN'])},
             'presets': PRESETS}
+
+# Judge role defaults to the configured executor; report same-model judging explicitly.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL") or MODEL
+JUDGE_BASE_URL = os.getenv("JUDGE_BASE_URL") or BASE_URL
+JUDGE_API_KEY = os.getenv("JUDGE_API_KEY") or API_KEY
