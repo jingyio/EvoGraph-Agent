@@ -9,9 +9,23 @@ from .tools import Tool, object_schema
 
 
 def plan_tool():
+    selection = {
+        'type': 'object',
+        'properties': {
+            'kind': {'type': 'string', 'enum': ['match', 'model']},
+            'sourceStepId': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,30}$'},
+            'field': {'type': 'string', 'pattern': '^[A-Za-z][A-Za-z0-9_]{0,80}$'},
+            'operator': {'type': 'string', 'enum': ['equals']},
+            'value': {'type': ['string', 'integer', 'boolean', 'null']},
+            'reason': {'type': 'string', 'minLength': 1, 'maxLength': 300},
+        },
+        'required': ['kind'],
+        'additionalProperties': False,
+    }
     step = object_schema({'id': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,30}$'},
                           'intent': {'type': 'string', 'minLength': 1, 'maxLength': 300},
-                          'dependencies': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}})
+                          'dependencies': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}},
+                          'selection': selection}, required=['id', 'intent', 'dependencies'])
     return Tool('submit_plan', '提交数据获取子目标和依赖，独立的目标不互相依赖。', 'read',
                 object_schema({'steps': {'type': 'array', 'minItems': 1, 'maxItems': 10, 'items': step}}), lambda args, ctx: args)
 
@@ -22,6 +36,17 @@ def validate_plan(plan):
     ids = [s['id'] for s in steps]
     if len(ids) != len(set(ids)) or any(dep not in ids for s in steps for dep in s['dependencies']):
         raise ValueError('Plan has duplicate IDs or missing dependencies')
+    for step in steps:
+        selection = step.get('selection')
+        if not selection:
+            continue
+        if selection['kind'] == 'match':
+            if set(selection) != {'kind', 'sourceStepId', 'field', 'operator', 'value'}:
+                raise ValueError('Plan match selection must bind one source field and literal value')
+            if selection['sourceStepId'] not in step['dependencies']:
+                raise ValueError('Plan match selection must depend on its source step')
+        elif set(selection) != {'kind', 'reason'}:
+            raise ValueError('Plan model selection must explain the handoff')
     graph = nx.DiGraph()
     graph.add_nodes_from(ids)
     graph.add_edges_from((dep, s['id']) for s in steps for dep in s['dependencies'])
@@ -122,11 +147,22 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
             node['dependencies'] = sorted(set(node['dependencies']) | {source})
         elif parameters:
             raise ValueError('No deterministic binding for this tool signature')
+        selection = steps[node['id']].get('selection')
+        if selection:
+            if selection['kind'] == 'model':
+                node['defer'] = True
+            else:
+                source = selection['sourceStepId']
+                source_tool = known.get(selected.get(source))
+                if (not node.get('foreach') or node['foreach']['nodeId'] != source or not source_tool
+                        or selection['field'] not in set(source_tool.outputs or [])):
+                    raise ValueError('Plan selection cannot be bound to a declared upstream list field')
+                node['foreach']['filter'] = dict(field=selection['field'], operator=selection['operator'], value=deepcopy(selection['value']))
     ordered_nodes(nodes, tools)
     return nodes
 
 
-async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recovery=None):
+async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recovery=None, on_filter=None):
     ordered_nodes(nodes, tools)
     dag = nx.DiGraph()
     dag.add_nodes_from(n['id'] for n in nodes)
@@ -156,6 +192,18 @@ async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recover
                     if not isinstance(rows, list):
                         raise ValueError('Graph foreach source is not a list')
                     items.extend(rows)
+                condition = node['foreach'].get('filter')
+                if condition:
+                    field, expected = condition['field'], condition['value']
+                    if any(field not in row for row in items):
+                        raise ValueError('Motif filter field missing from current list records')
+                    if any(type(row[field]) is not type(expected) for row in items):
+                        raise ValueError('Motif filter value type changed in current list records')
+                    total = len(items)
+                    items = [row for row in items if row[field] == expected]
+                    if on_filter:
+                        on_filter(node['id'], dict(sourceNodeId=node['foreach']['nodeId'], condition=deepcopy(condition),
+                                                    totalRecords=total, selectedRecords=len(items), filteredOutRecords=total - len(items)))
                 if len(items) > 1000:
                     raise ValueError('Graph foreach exceeds 1000 records')
             arguments, seen = [], set()

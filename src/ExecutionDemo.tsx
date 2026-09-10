@@ -7,7 +7,7 @@ import './execution-demo.css';
 
 type Task = { id: string; scenario: string; family: string; title: string; task: string; split: string; sourceUrl: string; recordCount: number };
 const sources: Record<string, string> = { tickets: '技术工单 · Zammad GitHub Issues', finance: '财务运营 · Olist', support: '客服运营 · CFPB' };
-const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', graph: '图执行', graph_created: '读取图就绪', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
+const eventNames: Record<string, string> = { model_start: '请求模型', model: '模型返回', model_error: '模型请求失败', action: '调用工具', observation: '工具返回', plan: '计划', graph: '图执行', graph_created: '读取图就绪', motif: '筛选后补查', evaluation: '结果校验', validation: '格式校验', fallback: '恢复执行', recovery: '补查字段', finished: '执行结束', retrieval: '工具检索' };
 const stateNames: Record<string, string> = { pending: '等待依赖', running: '执行中', done: '完成', reused: '复用结果', failed: '失败', 'model-handoff': '交接模型' };
 const n = (value: number) => Math.round(value).toLocaleString('zh-CN');
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -22,13 +22,13 @@ function TraceGraph({ nodes, states, prefix }: { nodes: GraphNode[]; states: Rec
   return <svg className="demo-dag" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="当前时刻的读取依赖图">
     <defs><marker id={`demo-arrow-${prefix}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8293a4" /></marker></defs>
     {nodes.flatMap(node => node.dependencies.map(dep => { const a = positions.get(dep), b = positions.get(node.id)!; return a ? <path key={dep + node.id} d={`M${a.x + 197} ${a.y + 32} L${b.x} ${b.y + 32}`} stroke="#8293a4" fill="none" markerEnd={`url(#demo-arrow-${prefix})`} /> : null; }))}
-    {nodes.map(node => { const p = positions.get(node.id)!, state = states[node.id] || 'pending'; return <g key={node.id} transform={`translate(${p.x},${p.y})`} className={`demo-node ${state}`}><title>{node.tool} · {node.id} · {stateNames[state]}</title><rect width="197" height="66" rx="9" /><text x="10" y="22" fontSize="11">{node.tool.length > 28 ? node.tool.slice(0, 26) + '…' : node.tool}</text><text x="10" y="43" fontSize="10">{node.reuse ? `复用 ${node.reuse.fields.join(', ')}` : node.defer ? '模型接管子图' : node.id.slice(0, 26)}</text><text x="10" y="58" fontSize="9">{stateNames[state] || state}</text></g>; })}
+    {nodes.map(node => { const p = positions.get(node.id)!, state = states[node.id] || 'pending', filter = node.foreach?.filter; return <g key={node.id} transform={`translate(${p.x},${p.y})`} className={`demo-node ${state}`}><title>{node.tool} · {node.id} · {stateNames[state]}</title><rect width="197" height="66" rx="9" /><text x="10" y="22" fontSize="11">{node.tool.length > 28 ? node.tool.slice(0, 26) + '…' : node.tool}</text><text x="10" y="43" fontSize="10">{filter ? `筛选 ${filter.field}=${String(filter.value)}` : node.reuse ? `复用 ${node.reuse.fields.join(', ')}` : node.defer ? '模型接管子图' : node.id.slice(0, 26)}</text><text x="10" y="58" fontSize="9">{stateNames[state] || state}</text></g>; })}
   </svg>;
 }
 
 function TimelineEvent({ event, run, onInspect }: { event: TraceEvent; run: TraceRun; onInspect: () => void }) {
   const bad = event.type === 'model_error' || event.type === 'fallback' || event.detail?.ok === false || (event.type === 'evaluation' && event.detail?.status === 'failed');
-  const graph = event.detail?.executor === 'graph' || ['graph', 'graph_created', 'recovery'].includes(event.type);
+  const graph = event.detail?.executor === 'graph' || ['graph', 'graph_created', 'motif', 'recovery'].includes(event.type);
   let summary = event.title;
   if (event.type === 'model') summary = (typeof event.detail?.content === 'string' ? event.detail.content.trim() : '') || (Array.isArray(event.detail?.toolCalls) ? event.detail.toolCalls.map((call: any) => call.function?.name).join(' · ') : '') || event.title;
   if (event.type === 'action') summary += ' · ' + String(event.detail?.arguments || '{}');
@@ -56,7 +56,7 @@ function RunLane({ label, strategy, run, cursor, live, timelineDuration, onInspe
     <p className="demo-model-name">{run ? `执行 ${run.models.executor} · Plan ${run.models.planner}` : '选择历史记录或开始真实执行'}</p>
     <div className="demo-kpis">{[['LLM 调用', view?.metrics.modelRequests], ['工具调用', view?.metrics.toolCalls], ['输入 token', view?.metrics.inputTokens], ['输出 token', view?.metrics.outputTokens]].map(([title, value]) => <div key={title}><small>{title}</small><strong>{value === undefined ? '—' : n(value as number)}</strong></div>)}</div>
     {run && view && <>
-      <div className="demo-lane-meta"><span>耗时 {seconds(view.finished ? run.metrics.durationMs : Math.min(cursor, spanWidth))}</span><span>排队 {seconds(run.metrics.queueMs)}</span><span>工具错误 {view.metrics.toolErrors}</span><span>图内消除 {view.metrics.elidedToolCalls || 0}</span>{!view.metrics.usageComplete && <b>用量不完整</b>}</div>
+      <div className="demo-lane-meta"><span>耗时 {seconds(view.finished ? run.metrics.durationMs : Math.min(cursor, spanWidth))}</span><span>排队 {seconds(run.metrics.queueMs)}</span><span>工具错误 {view.metrics.toolErrors}</span><span>图内消除 {view.metrics.elidedToolCalls || 0}</span>{run.metrics.motifSelectedRecords != null && <span>Motif 入选/排除 {view.metrics.motifSelectedRecords}/{view.metrics.motifFilteredOutRecords || 0}</span>}{!view.metrics.usageComplete && <b>用量不完整</b>}</div>
       <div className="demo-activity" aria-label="模型与工具时间分布">
         {(['model', 'graph', 'tool'] as const).map(kind => <div key={kind}><span>{kind === 'model' ? 'LLM' : kind === 'graph' ? '图工具' : '模型工具'}</span><div>{spans.filter(s => s.kind === kind).map(s => <i key={s.key} className={`${kind} ${s.error ? 'error' : ''} ${s.end === undefined ? 'pending' : ''}`} style={{ left: `${s.start / spanWidth * 100}%`, width: `${Math.max(.4, ((s.end ?? (Number.isFinite(cursor) ? cursor : spanWidth)) - s.start) / spanWidth * 100)}%` }} title={`${s.label} · ${seconds(s.start)} → ${s.end === undefined ? '执行中' : seconds(s.end)}`} />)}</div></div>)}
       </div>

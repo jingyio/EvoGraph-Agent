@@ -4,6 +4,22 @@
 
 节点沿用 `id/tool/arguments/dependencies/foreach/paginate`。参数来自本次工具结果，保存的图不包含历史记录 ID、答案或业务快照。`sourceEventSeqs`、版本的 `sourceRunId` 用于追溯。
 
+## 筛选后补查 Motif
+
+详情 Plan 步骤可保存 `selection.kind=match`，其中 `sourceStepId` 必须是该步骤的依赖，`field` 必须是来源列表工具声明的输出，当前仅支持 `operator=equals` 和原始类型字面量。编译器将它写入现有 `foreach.filter`，例如：
+
+```json
+"foreach": {
+  "nodeId": "list_orders",
+  "collectionPath": ["records"],
+  "filter": {"field": "status", "operator": "equals", "value": "canceled"}
+}
+```
+
+执行先收集本次分页列表，验证每条记录都有该字段且类型与字面量一致，再确定性筛选；仅命中的记录绑定详情 ID。实际入选/排除数量写入运行指标和 `motif` 事件。字段缺失、类型变化或无法绑定到声明字段时不扩大读取范围，保留已完成列表观察并交给本任务模型恢复。
+
+当规划角色不能可靠选择列表条件时，使用 `selection.kind=model` 和原因；编译器将详情节点及其下游标为 `defer`。省略 `selection` 仍表示详情需要遍历全部记录，兼容旧保存 Plan。
+
 ## 字段复用与恢复
 
 ```json

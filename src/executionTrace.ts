@@ -1,9 +1,9 @@
-export type Strategy = 'react' | 'strong_react' | 'plan_react' | 'autotool' | 'graph_rsi';
-export const strategyNames: Record<Strategy, string> = { react: 'ReAct', strong_react: 'Strong ReAct', plan_react: 'Plan + ReAct', autotool: 'Plan + AutoTool', graph_rsi: 'Graph RSI' };
-export type Metrics = { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; toolErrors: number; usageComplete: boolean; durationMs: number; queueMs: number; elidedToolCalls?: number; recoveryToolCalls?: number };
+export type Strategy = 'react' | 'strong_react' | 'plan_react' | 'plan_react_reuse' | 'autotool' | 'graph_rsi';
+export const strategyNames: Record<Strategy, string> = { react: 'ReAct', strong_react: 'Strong ReAct', plan_react: 'Plan + ReAct', plan_react_reuse: '复用 Plan + ReAct', autotool: 'Plan + AutoTool', graph_rsi: 'Graph RSI' };
+export type Metrics = { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; toolErrors: number; usageComplete: boolean; durationMs: number; queueMs: number; elidedToolCalls?: number; recoveryToolCalls?: number; motifSelectedRecords?: number; motifFilteredOutRecords?: number };
 export type Evaluation = { status: string; issues?: string[] };
 export type TraceEvent = { seq: number; at: string; elapsedMs?: number; type: string; title: string; detail?: any; metrics?: Metrics };
-export type GraphNode = { id: string; tool: string; dependencies: string[]; reuse?: { fields: string[] }; defer?: boolean };
+export type GraphNode = { id: string; tool: string; dependencies: string[]; reuse?: { fields: string[] }; foreach?: { filter?: { field: string; operator: string; value: unknown } }; defer?: boolean };
 export type TraceRun = { id: string; taskId: string; strategy: Strategy; status: string; phase: string; createdAt: string; startedAt?: string; finishedAt?: string; traceVersion?: number; models: { planner: string; executor: string }; modelSettings?: unknown; metrics: Metrics; events: TraceEvent[]; evaluation: Evaluation; graph?: { nodes: GraphNode[]; nodeStates: Record<string, string> }; submission?: any; evolution?: { usedVersionId?: string; generation?: number; maintenanceMs?: number; note?: string }; error?: string };
 export type RunSummary = Omit<TraceRun, 'events'>;
 export const activeRun = (run?: { status: string } | null) => !!run && ['running', 'queued'].includes(run.status);

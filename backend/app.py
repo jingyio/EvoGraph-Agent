@@ -132,6 +132,7 @@ def create_app(service=None):
         result = deepcopy(task_runner.runs[key])
         result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
         result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi'] else None
+        result['reusedPlanReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react_reuse') if result.get('strategy') == 'graph_rsi' else None
         return result
 
     @app.get('/api/taskbank/runs/{key}/report', response_class=HTMLResponse)

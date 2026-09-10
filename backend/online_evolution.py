@@ -32,7 +32,7 @@ class OnlineEvolution:
         if task.get('asOf'):
             text = text.replace(task['asOf'], '<clock>')
         return digest(dict(scenario=task['scenario'], family=task.get('family', task['id']), template=text,
-                           contract=contract_hash(tools), corpus=getattr(self.bank, 'manifest', None), executor=1))
+                           contract=contract_hash(tools), corpus=getattr(self.bank, 'manifest', None), executor=2))
 
     def latest(self, task, tools):
         key = self.context_key(task, tools)
@@ -69,8 +69,11 @@ class OnlineEvolution:
             tool = known[node['tool']]
             intent = originals[node['id']]['intent']
             fields = [f for f in (tool.outputs or []) if re.search(r'(?<![A-Za-z0-9_])' + re.escape(f) + r'(?![A-Za-z0-9_])', intent)]
-            steps.append(dict(id=node['id'], intent=('读取字段 ' + ', '.join(fields)) if fields else tool.description,
-                              dependencies=deepcopy(node['dependencies'])))
+            step = dict(id=node['id'], intent=('读取字段 ' + ', '.join(fields)) if fields else tool.description,
+                        dependencies=deepcopy(node['dependencies']))
+            if originals[node['id']].get('selection'):
+                step['selection'] = deepcopy(originals[node['id']]['selection'])
+            steps.append(step)
         return dict(steps=steps)
 
     def observe(self, run, task, tools):
@@ -124,8 +127,14 @@ class OnlineEvolution:
                 nodes = graph['nodes']
                 # Cold graphs contain no task-specific literal parameters besides pagination.
                 plan = self.safe_plan(run['plan'], nodes, tools)
-                parent = self.create(task, tools, run, nodes, plan, latest,
-                    [dict(operation='compile_observed_graph' if not latest else 'rebuild_after_failure', reason='正常训练任务完成，保存参数化读取结构')])
+                patches = [dict(operation='compile_observed_graph' if not latest else 'rebuild_after_failure', reason='正常训练任务完成，保存参数化读取结构')]
+                for node in nodes:
+                    condition = (node.get('foreach') or {}).get('filter')
+                    if condition:
+                        patches.append(dict(operation='filter_then_enrich', nodeId=node['id'], sourceNodeId=node['foreach']['nodeId'],
+                                            condition=deepcopy(condition), reason='规划语义绑定到已声明的列表字段；仅对命中记录调用详情工具',
+                                            evidenceRunId=run['id']))
+                parent = self.create(task, tools, run, nodes, plan, latest, patches)
                 info['generatedVersionIds'].append(parent['id'])
                 # Seed is not proof of improvement. A distinct child requires a real patch.
             nodes, patches = deepcopy(parent['nodes']), []

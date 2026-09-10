@@ -6,15 +6,15 @@ import TaskRunPanel from './TaskRunPanel';
 type Version = {
   id: string; parentGraphId: string | null; generation: number; scenario: string; family: string;
   sourceRunId: string; sourceTaskId: string; status: string; scope: string;
-  patches: { operation: string; nodeId?: string; reason: string; fields?: string[] }[];
-  nodes: { id: string; tool: string; dependencies: string[]; reuse?: { fields: string[]; onMissing?: string }; defer?: boolean }[];
+  patches: { operation: string; nodeId?: string; sourceNodeId?: string; condition?: { field: string; operator: string; value: unknown }; reason: string; fields?: string[] }[];
+  nodes: { id: string; tool: string; dependencies: string[]; foreach?: { filter?: { field: string; operator: string; value: unknown } }; reuse?: { fields: string[]; onMissing?: string }; defer?: boolean }[];
   evidence: { runId: string; taskId: string; split: string; passed: boolean; graphFallback: boolean; tokens: number; durationMs: number; modelRequests: number }[];
 };
 type Run = { id: string; taskId: string; split: string; status: string; metrics: { inputTokens: number; outputTokens: number; modelRequests: number; durationMs: number; toolErrors: number }; evaluation: { status: string }; evolution?: { usedVersionId?: string; generation?: number; maintenanceMs?: number; lookupMs?: number; extraModelRequests?: number; extraToolCalls?: number; shadowRollouts?: number; note?: string } };
 type Task = { id: string; scenario: string; family: string; split: string; title: string };
 const names: Record<string, string> = { finance: '财务运营 · Olist', support: '客服运营 · CFPB', tickets: '技术工单 · Zammad GitHub Issues' };
 const states: Record<string, string> = { probation: '同类任务试用', 'family-supported': '适用证据已积累', 'needs-repair': '待修订' };
-const patchNames: Record<string, string> = { compile_observed_graph: '保存轨迹图', rebuild_after_failure: '失败后重新编译', reuse_with_fallback: '字段复用 + 缺失补查', defer_subgraph: '失败子图交接模型' };
+const patchNames: Record<string, string> = { compile_observed_graph: '保存轨迹图', rebuild_after_failure: '失败后重新编译', reuse_with_fallback: '字段复用 + 缺失补查', filter_then_enrich: '筛选后补查 Motif', defer_subgraph: '失败子图交接模型' };
 
 export default function OnlineEvolutionPanel() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -59,8 +59,8 @@ export default function OnlineEvolutionPanel() {
       <h3>{parentName(v.parentGraphId)} → G{v.generation} · {v.id.slice(0, 6)} <span>{states[v.status] || v.status}</span></h3>
       <p>{v.family} · {v.scope}</p>
       <p>来源任务 {v.sourceTaskId} · <a href={`/api/taskbank/runs/${v.sourceRunId}`} target="_blank" rel="noreferrer">查看来源轨迹</a></p>
-      {v.patches.map((p, i) => <p key={i}><strong>{patchNames[p.operation] || p.operation}</strong> {p.nodeId || ''}{p.fields ? ` [${p.fields.join(', ')}]` : ''}：{p.reason}</p>)}
-      <div className="online-nodes">{v.nodes.map(n => <div key={n.id}><strong>{n.tool}</strong><small>{n.dependencies.length ? `依赖 ${n.dependencies.join(', ')}` : '入口'}</small><span>{n.defer ? '交接模型' : n.reuse ? `复用 ${n.reuse.fields.join(', ')}${n.reuse.onMissing ? ' · 缺失时补查' : ''}` : '调用工具'}</span></div>)}</div>
+      {v.patches.map((p, i) => <p key={i}><strong>{patchNames[p.operation] || p.operation}</strong> {p.nodeId || ''}{p.fields ? ` [${p.fields.join(', ')}]` : ''}{p.condition ? ` · ${p.condition.field}=${String(p.condition.value)}` : ''}：{p.reason}</p>)}
+      <div className="online-nodes">{v.nodes.map(n => <div key={n.id}><strong>{n.tool}</strong><small>{n.dependencies.length ? `依赖 ${n.dependencies.join(', ')}` : '入口'}</small><span>{n.defer ? '交接模型' : n.foreach?.filter ? `筛选 ${n.foreach.filter.field}=${String(n.foreach.filter.value)} 后补查` : n.reuse ? `复用 ${n.reuse.fields.join(', ')}${n.reuse.onMissing ? ' · 缺失时补查' : ''}` : '调用工具'}</span></div>)}</div>
       <p>正常任务证据 {v.evidence.length} 次 · 评分通过 {v.evidence.filter(e => e.passed).length} 次 · 图交接恢复 {v.evidence.filter(e => e.graphFallback).length} 次</p>
       <details><summary>完整图与验证证据</summary><pre>{JSON.stringify(v, null, 2)}</pre></details>
     </section>)}

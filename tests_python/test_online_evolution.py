@@ -197,3 +197,44 @@ async def test_observed_unoptimized_graph_can_generate_one_guarded_patch(tmp_pat
     runner.evolution.observe(stale, bank.task('train-2'), bank.tools('train-2'))
     assert len(runner.evolution.versions) == count
     assert runner.evolution.select(bank.task('train-4'), bank.tools('train-4'))['id'] == repaired['id']
+
+
+async def test_training_plan_persists_filter_then_enrich_motif_without_shadow_rollout(tmp_path):
+    class FilterBank(Bank):
+        def task(self, key):
+            task = super().task(key)
+            task['scenario'], task['family'], task['task'] = 'finance', 'cancelled_payments', '筛选 canceled 订单后读取支付记录并发布结果'
+            return task
+        def tools(self, key):
+            def listing(args, ctx):
+                ctx.evidence.add(key)
+                return {'records': [{'id': 'a', 'status': 'canceled'}, {'id': 'b', 'status': 'delivered'}], 'mayHaveMore': False}
+            def payments(args, ctx): return {'id': args['orderId'], 'payments': []}
+            def publish(args, ctx):
+                ctx.run['evaluation'] = dict(status='passed' if key in ctx.evidence else 'failed', issues=[])
+                return {'saved': True}
+            return [Tool('finance_list_orders', '分页列出订单 ID 和状态', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), listing, outputs=['id', 'status']),
+                    Tool('finance_get_order_payments', '读取 payments', 'read', object_schema({'orderId': {'type': 'string'}}), payments, outputs=['id', 'payments']),
+                    Tool('finance_publish_report', '发布', 'artifact', object_schema(), publish)]
+    class FilterModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return dict(message=dict(role='assistant', content='done', tool_calls=[dict(id='plan', type='function', function=dict(name='submit_plan', arguments=json.dumps({'steps': [
+                    dict(id='list', intent='分页列出订单 ID 和 status', dependencies=[]),
+                    dict(id='payments', intent='读取 payments', dependencies=['list'], selection=dict(kind='match', sourceStepId='list', field='status', operator='equals', value='canceled')),
+                ]}))) ]), usage=dict(input=10, output=2, reasoning=0), finishReason='stop')
+            observations = [json.loads(m['content']) for m in messages if m['role'] == 'tool']
+            if not any(o.get('result', {}).get('saved') for o in observations):
+                return dict(message=dict(role='assistant', content='done', tool_calls=[dict(id='publish', type='function', function=dict(name='finance_publish_report', arguments='{}'))]), usage=dict(input=10, output=2, reasoning=0), finishReason='stop')
+            return dict(message=dict(role='assistant', content='done'), usage=dict(input=10, output=2, reasoning=0), finishReason='stop')
+    bank = FilterBank(tmp_path)
+    runner = TaskRunner(bank, lambda role: FilterModel(role))
+    run = await runner.start(TaskRunRequest(taskId='train-filter', strategy='graph_rsi'))
+    await runner.tasks[run['id']]
+    version = runner.evolution.versions[0]
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['motifSelectedRecords'] == run['metrics']['motifFilteredOutRecords'] == 1
+    assert sum(t['tool'] == 'finance_get_order_payments' for t in run['toolTrace']) == 1
+    assert version['plan']['steps'][1]['selection']['value'] == 'canceled'
+    assert any(p['operation'] == 'filter_then_enrich' for p in version['patches'])
+    assert run['evolution']['shadowRollouts'] == run['evolution']['extraModelRequests'] == run['evolution']['extraToolCalls'] == 0

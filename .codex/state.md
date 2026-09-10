@@ -7,11 +7,11 @@
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 无在途实现；整理前 Git 工作区干净，本次另按用户新要求删除旧沙箱代码、数据、入口与专用历史运行目录。磁盘运行记录未发现 queued/running 项；这只是本次快照，执行前仍需核查服务当前状态。
+- 本轮已实现筛选后补查 Motif，待本地提交；磁盘运行记录在本轮结束时无 queued/running 项。旧 `4317` 服务不是热重载，`f6d572dd` 使用旧代码但保留原始轨迹；本轮证据使用当前代码的 `4318` 临时服务，已完成后应停止。
 
 ## 已完成
 
-任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。详细边界和实验数字不要在此复制，见上述文档。
+任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 增加 Plan 语义接口 `selection` 与 `foreach.filter` Motif、`plan_react_reuse` 对照、前端来源/绑定/执行/修订展示。详细边界和实验数字见 [motif-filter-then-enrich-validation-2026-09-10.md](../docs/motif-filter-then-enrich-validation-2026-09-10.md)。
 
 最近功能提交：`9520ae7` Judge/reward/Plan对照；`e9e9df1` 强基线评测/报告；`e15d7c1` 执行回放；`f50d97d` 在线图进化。
 
@@ -29,7 +29,7 @@ npm run build
 
 页面：`/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`（开发基址 `http://127.0.0.1:5173`）。FastAPI文档：`http://127.0.0.1:4317/docs`。
 
-清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具，清理后61个Python测试、4个回放测试、构建与300条契约校验通过。本轮没有调用模型。
+清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。本轮为64个Python测试、4个前端回放测试、类型检查和构建通过；300条契约校验（10,400 次工具调用、0 次模型调用）通过。本轮模型正常 train 证据：`b5abdd11` 冷启动保存 Motif G0，`fa813841` 热启动复用，`7c32fa3e` 为不回写经验的复用 Plan ReAct 对照；均通过结构化评分。
 
 ## 配置与私有状态
 
@@ -39,7 +39,7 @@ npm run build
 
 - `artifacts/taskbank/records.sqlite3`、`gold.json`：冻结记录/仅供硬评分的参考答案。
 - `artifacts/taskbank-runs/<id>.json`：原始运行。
-- `artifacts/online-graphs.json`：当前三份G0与证据。
+- `artifacts/online-graphs.json`：原三份 G0 加 finance/cancelled_payments Motif G0 `b13e00e4` 与证据。
 - `artifacts/paired-evaluations/<id>.json`、`sources/`：成对实验与新实验源码快照。
 - `artifacts/llm-judgements/<id>.json`、`inputs/`：裁判与输入。
 
@@ -47,7 +47,7 @@ npm run build
 
 ## 下一步
 
-执行入口见 `docs/EXECUTION_HANDOFF.md`。首个建议工作是 TODO P0.1 的正常训练轨迹按需读取诊断；不是继续扩大验证集运行数量，也不是自动运行最终测试集。
+执行入口见 `docs/EXECUTION_HANDOFF.md`。下一项应冻结当前 Motif/Plan 版本，运行已实现的 `plan_react_reuse` 对照评测并保留全部结果；之后才可进行最终 test，test 反馈不得回写 Motif。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 

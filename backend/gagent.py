@@ -10,7 +10,7 @@ async def build_data_plan(task, tools, submit):
     """Separate planner role; injected submit keeps HTTP and metering centralized."""
     from .intent_graph import plan_tool, validate_plan
     plan = await submit([
-        {'role': 'system', 'content': '只规划数据获取阶段。每一步描述一种字段读取能力，运行时自动遍历所有记录。严禁按第一条、第二条等逐条规划；每种能力只能出现一次。先列出本任务记录，再获取任务明确要求的必要字段，不得为解释或背景追加任务未要求的字段。如果列表工具的 outputs 已包含所需字段，直接使用列表结果，不要再规划详情读取。独立字段读取仅依赖记录列表，不要串行依赖彼此。不要计算或发布结果，不输出内部推理。steps 必须是 JSON 数组，不能是转义后的字符串。必须调用 submit_plan。'},
+        {'role': 'system', 'content': '只规划数据获取阶段。每一步描述一种字段读取能力，运行时自动遍历所有记录。严禁按第一条、第二条等逐条规划；每种能力只能出现一次。先列出本任务记录，再获取任务明确要求的必要字段，不得为解释或背景追加任务未要求的字段。如果列表工具的 outputs 已包含所需字段，直接使用列表结果，不要再规划详情读取。独立字段读取仅依赖记录列表，不要串行依赖彼此。若详情只对可由上游列表已声明字段确定的一部分记录必要，在详情步骤增加 selection：{kind:"match",sourceStepId:"列表步骤",field:"列表字段",operator:"equals",value:字面量}；筛选只允许精确相等，不能猜记录 ID 或答案。若确有条件但列表字段不能可靠决定，使用 selection：{kind:"model",reason:"具体缺口"}，让执行模型处理该子图；全部记录都需要详情时省略 selection。不要计算或发布结果，不输出内部推理。steps 必须是 JSON 数组，不能是转义后的字符串。必须调用 submit_plan。'},
         {'role': 'user', 'content': json.dumps({'task': task['task'], 'capabilities': [{'name': t.name, 'description': t.description, 'outputs': list(t.outputs or [])} for t in tools]}, ensure_ascii=False)}], plan_tool())
     validate_plan(plan)
     return plan

@@ -21,7 +21,7 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     split: Literal['validation', 'test'] = 'validation'
     repeats: int = Field(default=1, ge=1, le=3)
-    baseline: Literal['strong_react', 'plan_react'] = 'strong_react'
+    baseline: Literal['strong_react', 'plan_react', 'plan_react_reuse'] = 'strong_react'
 
 
 def success(run):
@@ -150,7 +150,7 @@ class PairedEvaluation:
                 pair['launchOrder'] = order
                 try:
                     for arm in order:
-                        context = dict(experimentId=item['id'], pairIndex=pair['index'], graphSnapshot=item['graphSnapshots'][pair['taskId']] if arm == 'graph_rsi' else None)
+                        context = dict(experimentId=item['id'], pairIndex=pair['index'], graphSnapshot=item['graphSnapshots'][pair['taskId']] if arm in ['graph_rsi', 'plan_react_reuse'] else None)
                         run = await self.runner.start(TaskRunRequest(taskId=pair['taskId'], strategy=arm), evaluation_context=context)
                         pair['runIds'][arm] = run['id']
                     self.save(item)

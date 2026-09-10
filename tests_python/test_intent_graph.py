@@ -73,6 +73,48 @@ async def test_graph_waits_for_pagination_then_overlaps_independent_reads():
     assert {a['orderId'] for n, a in calls if n == 'get_payments'} == {'new-a', 'new-b', 'new-c'}
 
 
+async def test_filter_then_enrich_binds_plan_semantics_and_only_reads_selected_records():
+    tools = [Tool('list_orders', '分页列出订单 ID 和状态', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), lambda a, c: None, outputs=['id', 'status']),
+             Tool('get_payments', '读取支付记录', 'read', object_schema({'orderId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'payments'])]
+    plan = {'steps': [
+        dict(id='list', intent='分页列出订单 ID 和 status', dependencies=[]),
+        dict(id='payments', intent='读取 payments', dependencies=['list'], selection=dict(kind='match', sourceStepId='list', field='status', operator='equals', value='canceled')),
+    ]}
+    proposal = {'nodes': [dict(id='list', tool='list_orders'), dict(id='payments', tool='get_payments')]}
+    retrieval = {step['id']: retrieve_tools(step['intent'], tools) for step in plan['steps']}
+    nodes = compile_intent_graph(plan, proposal, retrieval, tools)
+    assert nodes[1]['foreach']['filter'] == {'field': 'status', 'operator': 'equals', 'value': 'canceled'}
+    calls, filters = [], []
+    async def invoke(name, args, node):
+        calls.append((name, args))
+        if name == 'list_orders':
+            return {'records': [{'id': 'a', 'status': 'canceled'}, {'id': 'b', 'status': 'delivered'}], 'mayHaveMore': False}
+        return {'id': args['orderId'], 'payments': []}
+    await execute_graph(nodes, tools, invoke, lambda *args: None, on_filter=lambda node, detail: filters.append((node, detail)))
+    assert calls == [('list_orders', {'page': 1, 'pageSize': 50}), ('get_payments', {'orderId': 'a'})]
+    assert filters == [('payments', {'sourceNodeId': 'list', 'condition': {'field': 'status', 'operator': 'equals', 'value': 'canceled'}, 'totalRecords': 2, 'selectedRecords': 1, 'filteredOutRecords': 1})]
+
+
+async def test_uncertain_condition_defers_detail_subgraph_and_invalid_current_binding_fails_closed():
+    tools = [Tool('list_orders', '分页列出订单 ID 和状态', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), lambda a, c: None, outputs=['id', 'status']),
+             Tool('get_payments', '读取支付记录', 'read', object_schema({'orderId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'payments'])]
+    proposal = {'nodes': [dict(id='list', tool='list_orders'), dict(id='payments', tool='get_payments')]}
+    deferred = {'steps': [dict(id='list', intent='分页列出订单 ID 和 status', dependencies=[]),
+                          dict(id='payments', intent='读取 payments', dependencies=['list'], selection=dict(kind='model', reason='列表字段不足以判断支付条件'))]}
+    retrieval = {step['id']: retrieve_tools(step['intent'], tools) for step in deferred['steps']}
+    nodes = compile_intent_graph(deferred, proposal, retrieval, tools)
+    assert nodes[1]['defer'] is True
+    matched = deepcopy(deferred)
+    matched['steps'][1]['selection'] = dict(kind='match', sourceStepId='list', field='status', operator='equals', value='canceled')
+    nodes = compile_intent_graph(matched, proposal, retrieval, tools)
+    async def invoke(name, args, node):
+        if name == 'list_orders':
+            return {'records': [{'id': 'a', 'status': 1}], 'mayHaveMore': False}
+        return {'id': args['orderId'], 'payments': []}
+    with pytest.raises(ValueError, match='value type changed'):
+        await execute_graph(nodes, tools, invoke, lambda *args: None)
+
+
 def test_cycles_hardcoded_ids_wrong_candidate_and_missing_dependency_rejected():
     tools, plan, proposal, retrieval = fixture()
     cyclic = deepcopy(plan)

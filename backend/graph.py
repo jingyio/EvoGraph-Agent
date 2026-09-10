@@ -156,10 +156,20 @@ def ordered_nodes(nodes, tools):
             else:
                 raise ValueError('未知参数绑定类型')
         if node.get('foreach'):
+            if (not isinstance(node['foreach'], dict) or set(node['foreach']) - {'nodeId', 'collectionPath', 'filter'}
+                    or not {'nodeId', 'collectionPath'}.issubset(node['foreach']) or not isinstance(node['foreach']['nodeId'], str)):
+                raise ValueError('遍历结构无效')
             actual.add(node['foreach']['nodeId'])
             path = node['foreach']['collectionPath']
             if path is not None and (not isinstance(path, list) or any(not isinstance(p, str) or p in UNSAFE for p in path)):
                 raise ValueError('遍历路径无效')
+            condition = node['foreach'].get('filter')
+            if condition is not None:
+                if (not isinstance(condition, dict) or set(condition) != {'field', 'operator', 'value'}
+                        or not isinstance(condition['field'], str) or not re.fullmatch('[A-Za-z][A-Za-z0-9_]{0,80}', condition['field'])
+                        or condition['field'] in UNSAFE or condition['operator'] != 'equals'
+                        or type(condition['value']) not in [str, int, bool, type(None)]):
+                    raise ValueError('筛选 Motif 条件无效')
         if node.get('reuse'):
             reuse = node['reuse']
             if (not isinstance(reuse, dict) or set(reuse) - {'nodeId', 'collectionPath', 'fields', 'onMissing'}
@@ -251,6 +261,14 @@ async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: Non
                         if not isinstance(array, list):
                             raise ValueError('上游集合形状发生变化')
                         items.extend(array)
+                condition = node['foreach'].get('filter')
+                if condition:
+                    field, expected = condition['field'], condition['value']
+                    if any(field not in item for item in items):
+                        raise ValueError('Motif filter field missing from current list records')
+                    if any(type(item[field]) is not type(expected) for item in items):
+                        raise ValueError('Motif filter value type changed in current list records')
+                    items = [item for item in items if item[field] == expected]
                 if len(items) > 1000:
                     raise ValueError('图遍历超过 1000 条记录')
             values, seen = [], set()

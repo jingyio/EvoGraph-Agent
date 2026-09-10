@@ -4,12 +4,12 @@
 
 ## P0.1 按需读取的训练诊断与局部图优化
 
-状态：待执行；方向已讨论，具体 Patch 仍需根据代码和训练轨迹确定。
+状态：2026-09-10 已完成首个受限 Motif；冻结推广评估仍待执行。证据见 [motif-filter-then-enrich-validation-2026-09-10.md](motif-filter-then-enrich-validation-2026-09-10.md)。
 
 - 问题：图可能对全量记录调用详情，Strong/Plan ReAct 能先按列表字段筛选。导师目标是减少真实 token/latency，而不是强行增加图版本。
-- 首先检查 `intent_graph.py`、`graph.py`、`online_evolution.py` 与任务范围契约，阅读既有训练轨迹；不要直接从 validation 失败/优化案例生成经验。
-- 首个实施单元：选择一个明确类型，在正常 train 任务中收集优化所需证据，输出“必要字段、过滤条件、数据依赖、恢复条件”诊断与最小 Patch 设计。可确定时在现有 runtime 中实现；未确定时保留具体缺口，不硬编码任务答案。
-- 验收：读取数据来自本次任务；缺字段和不适用时可恢复；正确性不下降；工具/模型/token/延迟均记账；有结构变化才产生后继图；不得为了进化曲线删除已有优化。
+- 已实现 `selection.kind=match` → `foreach.filter`：`finance-cancelled_payments` 的正常训练 Plan 用当前列表 `status == canceled` 筛选，支付详情只读取入选 ID；当前字段/类型变化失败关闭，无法可靠确定使用 `selection.kind=model` 交回模型。
+- 两条 train 轨迹通过并保存 Motif G0；未从 validation/test 提取经验，维护额外模型/工具/影子 rollout 均为 0。结构未变化未虚增 G1。
+- 后续只在冻结方案后补验证集与最终测试集评估；不得依据这些结果再修改 Motif。
 
 ## P0.2 取得真实反思进化证据
 
@@ -21,10 +21,10 @@
 
 ## P1.1 分离 Plan 复用与图执行贡献
 
-状态：待设计后落实。
+状态：2026-09-10 已部分落实；`plan_react_reuse` 与 UI/冻结评测选项已加入，单条 train 对照已记录，完整冻结评测待执行。
 
-- 现有 Plan + ReAct 与 RSI 是架构对照，两边可能生成不同 Plan，尚非纯执行器消融。
-- 设计同任务、同 Plan 的“模型执行 vs 图执行”，以及“复用 Plan 的 ReAct vs 复用图”的对照，避免把省一次规划请求当作全部收益。
+- `plan_react_reuse` 复用选中版本的 Plan，不执行图、不更新进化证据；冻结评测会把同一图快照传给两臂。
+- 初始 train 对照显示编译 Motif token/模型请求更低而延迟略高；保留该反例，不替代冻结评测。
 - 验收：任务、模型、通用提示、预算、计费范围可比；报告全部尝试与成功子集，独立列冷启动与来源成本。
 
 ## P1.2 Judge 完整性与质量校准
