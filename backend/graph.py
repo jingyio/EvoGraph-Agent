@@ -125,7 +125,7 @@ def ordered_nodes(nodes, tools):
         raise ValueError('任务图节点数量无效')
     graph = nx.DiGraph()
     known = {t.name: t for t in tools}
-    allowed = {'id', 'tool', 'arguments', 'dependencies', 'foreach', 'paginate', 'reuse', 'sourceEventSeqs'}
+    allowed = {'id', 'tool', 'arguments', 'dependencies', 'foreach', 'paginate', 'reuse', 'defer', 'sourceEventSeqs'}
     for node in nodes:
         if not isinstance(node, dict) or set(node) - allowed:
             raise ValueError('无效图节点字段')
@@ -162,14 +162,21 @@ def ordered_nodes(nodes, tools):
                 raise ValueError('遍历路径无效')
         if node.get('reuse'):
             reuse = node['reuse']
-            if set(reuse) != {'nodeId', 'collectionPath', 'fields'} or node['arguments'] or node.get('foreach') or node.get('paginate'):
+            if (not isinstance(reuse, dict) or set(reuse) - {'nodeId', 'collectionPath', 'fields', 'onMissing'}
+                    or not {'nodeId', 'collectionPath', 'fields'}.issubset(reuse) or node['arguments'] or node.get('foreach') or node.get('paginate')):
                 raise ValueError('复用节点结构无效')
+            if 'onMissing' in reuse:
+                required = known[node['tool']].parameters['required']
+                if reuse['onMissing'] != 'detail' or len(required) != 1 or not required[0].endswith('Id'):
+                    raise ValueError('复用恢复必须使用单记录 ID 读取工具')
             path, fields = reuse['collectionPath'], reuse['fields']
             if not isinstance(path, list) or any(not isinstance(p, str) or p in UNSAFE for p in path):
                 raise ValueError('复用路径无效')
             if not isinstance(fields, list) or not fields or any(not isinstance(field, str) or field in UNSAFE for field in fields):
                 raise ValueError('复用字段无效')
             actual.add(reuse['nodeId'])
+        if 'defer' in node and node['defer'] is not True:
+            raise ValueError('无效模型交接标记')
         deps = node['dependencies']
         if not isinstance(deps, list) or not actual.issubset(deps) or any(dep not in by_id for dep in deps):
             raise ValueError('任务图缺少数据依赖')
@@ -178,7 +185,45 @@ def ordered_nodes(nodes, tools):
         graph.add_edges_from((dep, node['id']) for dep in deps)
     if not nx.is_directed_acyclic_graph(graph):
         raise ValueError('任务图存在循环依赖')
+    for node in nodes:
+        if node.get('defer') and any(not by_id[key].get('defer') for key in nx.descendants(graph, node['id'])):
+            raise ValueError('交接子图必须包含全部下游节点')
     return [by_id[key] for key in nx.topological_sort(graph)]
+
+
+async def reuse_output(node, outputs, tools, invoke, on_recovery=None):
+    """Validate every record; optionally repair only missing fields using fresh detail reads."""
+    reuse = node['reuse']
+    pages = deepcopy(outputs[reuse['nodeId']])
+    seen, elided = {}, set()
+    rows = []
+    for page in pages:
+        values = path_value(page, reuse['collectionPath'])
+        if not isinstance(values, list) or any(not isinstance(row, dict) or 'id' not in row for row in values):
+            raise ValueError('复用来源必须是包含 ID 的记录列表')
+        rows.extend(values)
+    if len(rows) > 1000:
+        raise ValueError('复用超过 1000 条记录')
+    for row in rows:
+        identity = canonical(row['id'])
+        missing = [field for field in reuse['fields'] if field not in row]
+        if not missing:
+            elided.add(identity)
+            continue
+        if reuse.get('onMissing') != 'detail':
+            raise ValueError('复用字段缺失：' + ','.join(missing))
+        tool = next(t for t in tools if t.name == node['tool'])
+        if identity not in seen:
+            args = {tool.parameters['required'][0]: row['id']}
+            result = await invoke(tool.name, args, node['id'])
+            if (not isinstance(result, dict) or result.get('id') != row['id']
+                    or any(field not in result for field in reuse['fields'])):
+                raise ValueError('详情读取未修复缺失字段')
+            seen[identity] = result
+            if on_recovery:
+                on_recovery(node['id'], dict(kind='missing_fields', recordId=row['id'], fields=missing, tool=tool.name))
+        row.update({field: seen[identity][field] for field in reuse['fields']})
+    return pages, len(elided - set(seen))
 
 
 async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: None):
@@ -187,8 +232,10 @@ async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: Non
         await asyncio.sleep(0)
         node_event(node['id'], 'running')
         try:
+            if node.get('defer'):
+                raise ValueError('读取子图要求交接模型')
             if node.get('reuse'):
-                outputs[node['id']] = deepcopy(outputs[node['reuse']['nodeId']])
+                outputs[node['id']], _ = await reuse_output(node, outputs, tools, invoke)
                 node_event(node['id'], 'reused')
                 continue
             items = [None]

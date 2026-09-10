@@ -1,4 +1,4 @@
-"""Intent retrieval, model-selected read DAGs, and dependency-aware execution."""
+"""Intent retrieval, locally selected read DAGs, and dependency-aware execution."""
 from copy import deepcopy
 import asyncio
 import re
@@ -73,7 +73,7 @@ def select_retrieved_graph(plan, retrieval, tools):
     return {'nodes': [{'id': step['id'], 'tool': selected[step['id']]} for step in plan['steps']]}, diagnostics
 
 
-def compile_intent_graph(plan, proposal, retrieval, tools):
+def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
     validate_plan(plan)
     graph_tool(plan, retrieval).validator.validate(proposal)
     steps = {s['id']: s for s in plan['steps']}
@@ -97,7 +97,9 @@ def compile_intent_graph(plan, proposal, retrieval, tools):
         reusable = []
         for source in nx.ancestors(dag, node['id']):
             source_tool = known[selected[source]]
-            if requested and requested.issubset(set(source_tool.outputs or [])):
+            if (optimize and set(source_tool.parameters['required']) == {'page', 'pageSize'}
+                    and len(tool.parameters['required']) == 1 and tool.parameters['required'][0].endswith('Id')
+                    and requested and requested.issubset(set(source_tool.outputs or []))):
                 reusable.append(source)
         if len(reusable) == 1:
             source = reusable[0]
@@ -124,7 +126,7 @@ def compile_intent_graph(plan, proposal, retrieval, tools):
     return nodes
 
 
-async def execute_graph(nodes, tools, invoke, on_node, on_elide=None):
+async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recovery=None):
     ordered_nodes(nodes, tools)
     dag = nx.DiGraph()
     dag.add_nodes_from(n['id'] for n in nodes)
@@ -134,10 +136,14 @@ async def execute_graph(nodes, tools, invoke, on_node, on_elide=None):
     async def execute(node):
         on_node(node['id'], 'running')
         try:
+            if node.get('defer'):
+                outputs[node['id']] = []
+                on_node(node['id'], 'model-handoff')
+                return
             if node.get('reuse'):
-                source = outputs[node['reuse']['nodeId']]
-                count = sum(len(path_value(page, node['reuse']['collectionPath'])) for page in source)
-                outputs[node['id']] = source
+                from .graph import reuse_output
+                values, count = await reuse_output(node, outputs, tools, invoke, on_recovery)
+                outputs[node['id']] = values
                 if on_elide:
                     on_elide(node['id'], count)
                 on_node(node['id'], 'reused')

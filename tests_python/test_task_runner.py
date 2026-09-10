@@ -151,5 +151,8 @@ async def test_http_run_endpoints_and_unknown_run(tmp_path, monkeypatch):
             detail = (await client.get('/api/taskbank/runs/' + key)).json()
             assert detail['evaluation']['status'] == 'passed' and detail['graph']['status'] == 'done'
             assert (await client.get('/api/taskbank/runs')).json()['scheduler']['active']['runs'] == 0
+            online = await client.get('/api/taskbank/evolution')
+            assert online.status_code == 200 and online.json()['protocol']['shadowRollouts'] == 0
+            assert online.json()['versions'] == []
             assert (await client.get('/api/taskbank/runs/missing')).status_code == 404
             assert (await client.post('/api/taskbank/runs/' + key + '/cancel', json={})).json()['cancelled'] is False

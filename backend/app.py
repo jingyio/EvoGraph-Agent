@@ -54,6 +54,14 @@ def create_app(service=None):
     app.state.taskbank = taskbank
     app.state.task_runner = task_runner
 
+    @app.get('/api/taskbank/evolution')
+    async def online_evolution_list():
+        return {'versions': task_runner.evolution.versions,
+                'runs': [{k: r.get(k) for k in ['id', 'taskId', 'status', 'createdAt', 'split', 'metrics', 'evaluation', 'evolution']}
+                         for r in task_runner.runs.values() if r.get('strategy') == 'graph_rsi'],
+                'protocol': {'shadowRollouts': 0, 'learningSplit': 'train', 'validation': 'natural-tasks',
+                             'test': 'frozen-no-feedback', 'score': 'structured-facts-and-evidence'}}
+
     @app.get('/api/taskbank/runs')
     def task_run_list():
         rows = sorted(task_runner.runs.values(), key=lambda r: r['createdAt'], reverse=True)[:50]
@@ -69,7 +77,7 @@ def create_app(service=None):
             raise HTTPException(404, 'Task run not found')
         result = dict(task_runner.runs[key])
         result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
-        result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') == 'autotool' else None
+        result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi'] else None
         return result
 
     @app.post('/api/taskbank/runs/{key}/cancel')

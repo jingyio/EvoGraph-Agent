@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Database, FileText, Headphones, Layers3, LoaderCircle, Pause, Play, PlugZap, RefreshCw, Settings2, ShieldCheck, Sparkles, Terminal, TriangleAlert, Wrench, X } from 'lucide-react';
 import GraphPanel from './GraphPanel';
-import EvolutionPanel from './EvolutionPanel';
+import EvolutionPanel from './OnlineEvolutionPanel';
 import NegativeMotifPanel from './NegativeMotifPanel';
 import ReliabilityPanel from './ReliabilityPanel';
 import TaskBankPanel from './TaskBankPanel';

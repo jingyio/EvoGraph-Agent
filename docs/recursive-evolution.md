@@ -1,4 +1,6 @@
-# 递归进化实验
+# 旧版合成沙箱配对进化实验
+
+当前默认实现已切换为 [正常任务驱动的在线进化](online-evolution.md)。本页描述保留的旧实验及额外 rollout 成本，不能代表新实现。
 
 Python `backend/evolution.py` 承担执行、学习、验证、晋升及持久化；React `src/EvolutionPanel.tsx` 展示轮次、父子关系和成本。通过 `/api/evolutions` 交换 JSON。
 

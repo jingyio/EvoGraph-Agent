@@ -16,12 +16,13 @@ from .tools import Tool, ToolContext, object_schema
 from .autotool import canonical, retrieve_tools
 from .intent_graph import select_retrieved_graph, compile_intent_graph, execute_graph
 from .gagent import build_data_plan
+from .online_evolution import OnlineEvolution
 
 
 class TaskRunRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     taskId: str = Field(min_length=1, max_length=120)
-    strategy: Literal['react', 'plan_react', 'autotool'] = 'autotool'
+    strategy: Literal['react', 'plan_react', 'autotool', 'graph_rsi'] = 'autotool'
 
 
 class BudgetExceeded(Exception):
@@ -39,6 +40,7 @@ class TaskRunner:
         self.model_slots = asyncio.Semaphore(self.model_limit)
         self.read_slots = asyncio.Semaphore(self.read_limit)
         self.runs, self.tasks = {}, {}
+        self.evolution = OnlineEvolution(bank)
         self.active_runs = self.active_models = self.active_reads = 0
         self.peaks = dict(runs=0, models=0, reads=0)
 
@@ -106,6 +108,7 @@ class TaskRunner:
         write_private(self.directory / (run['id'] + '.json'), run)
 
     def restore(self):
+        self.evolution.restore()
         for path in self.directory.glob('*.json'):
             try:
                 run = json.loads(path.read_text())
@@ -136,7 +139,7 @@ class TaskRunner:
                    models=dict(planner=planner.model, executor=executor.model, distinctModels=planner.model != executor.model),
                    modelSettings=dict(planner=getattr(planner, 'settings', {}), executor=getattr(executor, 'settings', {})),
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
-                                usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0),
+                                usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         self.runs[run['id']] = run
@@ -158,6 +161,13 @@ class TaskRunner:
             except Exception as error:
                 run.update(status='failed', error=str(error)[:1200])
             finally:
+                if run['strategy'] == 'graph_rsi':
+                    try:
+                        self.evolution.observe(run, task, tools)
+                    except Exception as error:
+                        run.setdefault('evolution', {})['maintenanceError'] = str(error)[:500]
+                    overhead = run.get('evolution', {}).get('maintenanceMs', 0)
+                    run['metrics']['durationMs'] += overhead
                 run['finishedAt'] = now()
                 self.save(run)
                 self.tasks.pop(run['id'], None)
@@ -241,7 +251,7 @@ class TaskRunner:
                     history.append(result['message'])
                     history.append(dict(role='tool', tool_call_id=calls[0]['id'], content='结构不符合 schema：' + detail + '。请重新调用，数组必须使用原生 JSON 数组。'))
 
-        async def invoke(call, owner='model', allowed=None):
+        async def invoke(call, owner='model', allowed=None, node_id=None):
             nonlocal active_reads
             if metrics['toolCalls'] >= task['suggestedBudget']['toolCalls']:
                 raise BudgetExceeded('达到工具调用预算')
@@ -250,8 +260,8 @@ class TaskRunner:
             ledger.append(entry)
             name = call['function']['name']
             effect = known[name].effect if name in known else 'unknown'
-            event('action', name, dict(arguments=call['function']['arguments'], executor=owner, effect=effect, callId=call['id']))
-            trace = dict(tool=name, arguments=None, executor=owner, effect=effect, signature=None, ok=None)
+            event('action', name, dict(arguments=call['function']['arguments'], executor=owner, effect=effect, nodeId=node_id, callId=call['id']))
+            trace = dict(tool=name, arguments=None, executor=owner, effect=effect, signature=None, ok=None, nodeId=node_id)
             run['toolTrace'].append(trace)
             try:
                 if name not in known or (allowed is not None and name not in allowed):
@@ -302,16 +312,35 @@ class TaskRunner:
             if run['strategy'] != 'react':
                 run['phase'] = 'Plan'
                 try:
-                    plan = await build_data_plan(task, acquisition, lambda history, tool: structured(planner, 'plan', history, tool))
+                    selected = None
+                    if run['strategy'] == 'graph_rsi':
+                        lookup_start = time.perf_counter()
+                        selected = self.evolution.select(task, tools)
+                        run['evolution'] = dict(usedVersionId=selected['id'] if selected else None,
+                            generation=selected['generation'] if selected else None,
+                            lookupMs=round((time.perf_counter() - lookup_start) * 1000, 3),
+                            execution='saved-graph' if selected else 'cold-plan')
+                    plan = deepcopy(selected['plan']) if selected else await build_data_plan(task, acquisition, lambda history, tool: structured(planner, 'plan', history, tool))
                     run['plan'] = plan
                     event('plan', '数据获取计划', plan)
                     messages.append(dict(role='user', content='当前数据获取计划：' + json.dumps(plan, ensure_ascii=False)))
-                    if run['strategy'] == 'autotool':
+                    if run['strategy'] in ['autotool', 'graph_rsi']:
                         run['phase'] = 'AutoTool 本地检索与图编译'
-                        retrieval = {s['id']: retrieve_tools(s['intent'], acquisition) for s in plan['steps']}
-                        run['retrieval'] = [dict(stepId=s['id'], intent=s['intent'], candidates=retrieval[s['id']]) for s in plan['steps']]
-                        proposal, selection = select_retrieved_graph(plan, retrieval, acquisition)
-                        nodes = compile_intent_graph(plan, proposal, retrieval, acquisition)
+                        if selected:
+                            nodes = deepcopy(selected['nodes'])
+                            selection = [dict(stepId=n['id'], tool=n['tool'], selection='persisted-graph') for n in nodes]
+                        else:
+                            retrieval = {s['id']: retrieve_tools(s['intent'], acquisition) for s in plan['steps']}
+                            run['retrieval'] = [dict(stepId=s['id'], intent=s['intent'], candidates=retrieval[s['id']]) for s in plan['steps']]
+                            proposal, selection = select_retrieved_graph(plan, retrieval, acquisition)
+                            nodes = compile_intent_graph(plan, proposal, retrieval, acquisition)
+                            if run['strategy'] == 'graph_rsi':
+                                for node in nodes:
+                                    if node.get('reuse'):
+                                        node['reuse']['onMissing'] = 'detail'
+                        if any(n.get('defer') for n in nodes):
+                            run['graphHandoff'] = [n['tool'] for n in nodes if n.get('defer')]
+                            messages.append(dict(role='user', content='历史图中以下读取子图已交给模型，请使用当前观察完成必要读取：' + json.dumps(run['graphHandoff'])))
                         by_id = {node['id']: node for node in nodes}
                         for row in selection:
                             if by_id[row['stepId']].get('reuse'):
@@ -323,7 +352,7 @@ class TaskRunner:
                         start = len(ledger)
                         async def graph_invoke(name, args, node):
                             call = dict(id='graph_' + str(uuid4()), type='function', function=dict(name=name, arguments=json.dumps(args, ensure_ascii=False)))
-                            obs = await invoke(call, 'graph')
+                            obs = await invoke(call, 'graph', node_id=node)
                             if not obs['ok']:
                                 raise ValueError(obs['error'])
                             return obs['result']
@@ -333,8 +362,11 @@ class TaskRunner:
                         def elide_event(key, count):
                             metrics['elidedToolCalls'] += count
                             event('graph', key + ' 复用上游字段，消除工具调用', {'elidedToolCalls': count})
+                        def recovery_event(key, detail):
+                            metrics['recoveryToolCalls'] += 1
+                            event('recovery', key + ' 缺失字段已补查', detail)
                         try:
-                            await execute_graph(nodes, acquisition, graph_invoke, node_event, elide_event)
+                            await execute_graph(nodes, acquisition, graph_invoke, node_event, elide_event, recovery_event)
                             run['graph']['status'] = 'done'
                         finally:
                             # One batch history instead of synthetic one-tool thought turns.
@@ -350,7 +382,7 @@ class TaskRunner:
             discovery = Tool('request_tools', '更新当前简短执行意图，以检索所需工具。', 'read', object_schema({'intent': {'type': 'string', 'minLength': 1, 'maxLength': 300}}), lambda args, ctx: args)
             repair_rounds = 0
             while True:
-                if run['strategy'] == 'autotool' and not run.get('fallback'):
+                if run['strategy'] in ['autotool', 'graph_rsi'] and not run.get('fallback') and not run.get('graphHandoff'):
                     retrieved = retrieve_tools(current_intent, tools)
                     names = {r['name'] for r in retrieved} | {t.name for t in tools if t.effect != 'read' or any(t.name.endswith(s) for s in ['sum_values', 'count_values', 'rank_values'])}
                     available = [t for t in tools if t.name in names] + [discovery]
