@@ -8,6 +8,7 @@
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
 - 旧 `online-e2e-train-v1` 保留为负收益历史。修复后 RSI-only `online-rsi-graph-precheck-v3` 为 36/36、386,813 token、30 次 Fast 复用、0 维护错误；新 Baseline `online-rsi-graph-matched-v4` 为 32/36、509,630 token。分时匹配记录下 RSI token -24.1%，未达到 30% 目标，详情见 `docs/online-rsi-matched-results-2026-09-10.md`。运行 artifacts 不入 Git。
+- 后续 `cancelled_payments` 编译器语义/等价读取修复在独立 `online-rsi-cancelled-optimized-v4` 为 6/6、51,647 token、19 工具，相对兼容历史 Baseline family -36.0%；规模/并发真实工件为 `efficiency-scale-reliability-v1`，包含失败与读取峰值1，详情见 `docs/efficiency-scale-reliability-results-2026-09-10.md`。
 
 ## 已完成
 

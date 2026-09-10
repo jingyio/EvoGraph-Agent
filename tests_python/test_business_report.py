@@ -69,3 +69,21 @@ async def test_online_experiment_trace_and_report_endpoints(tmp_path, monkeypatc
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             assert (await client.get(f'/api/online-e2e/example/runs/baseline/{run_id}')).json()['id'] == run_id
             assert (await client.get(f'/api/online-e2e/example/runs/baseline/{run_id}/report')).status_code == 200
+
+
+async def test_efficiency_experiment_report_endpoint(tmp_path, monkeypatch):
+    import httpx
+    from backend.app import create_app
+    from backend.service import RunService
+    from test_task_runner import Bank
+    bank = Bank(tmp_path)
+    monkeypatch.setattr('backend.app.TaskBank', lambda: bank)
+    path = tmp_path / 'artifacts' / 'efficiency' / 'example'
+    path.mkdir(parents=True)
+    (path / 'result.json').write_text(json.dumps({'id': 'example'}))
+    (path / 'index.html').write_text('<h1>真实效率结果</h1>')
+    app = create_app(RunService(tmp_path / 'legacy'))
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            assert (await client.get('/api/efficiency/example')).json()['id'] == 'example'
+            assert '真实效率结果' in (await client.get('/api/efficiency/example/report')).text

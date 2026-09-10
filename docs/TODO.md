@@ -7,7 +7,7 @@
 状态：2026-09-10 已保留旧负向 `online-e2e-train-v1`，并完成修复后分时匹配对照：`online-rsi-graph-precheck-v3` RSI 36/36、386,813 token；`online-rsi-graph-matched-v4` Baseline 32/36、509,630 token。匹配记录下 RSI token -24.1%，未达到 30% 目标；`cancelled_payments` 为负收益，不能用五个获益 family 掩盖。详情见 `online-rsi-matched-results-2026-09-10.md`。
 
 - AutoTool/TIG 惯性执行已退役，不再进行触发调优或新增实验；旧记录保留。
-- 下一步应只基于已保留的 `cancelled_payments` 负收益和 Baseline evidence 覆盖失败提出正常 train 流量假设；不得重跑同一批任务直到结果好看。
+- `cancelled_payments` 的通用编译器修复已用新 RSI-only six-task 流验证；family 转正但新旧拼接不是严格全量对照。下一步只能冻结后决定是否重跑完整匹配对照，不能用拼接的 -42.1% 当作新 36-task 结论。
 
 ## P0.1 G-Agent Persistent TinyEdge 的真实训练覆盖
 

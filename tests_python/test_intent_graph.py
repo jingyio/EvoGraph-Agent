@@ -50,6 +50,22 @@ def test_selection_requires_list_root_and_requested_detail_capability():
         compile_intent_graph(plan, incompatible, retrieval, tools)
 
 
+def test_compiler_rejects_status_detail_for_payment_intent_and_deduplicates_equivalent_reads():
+    tools = [
+        Tool('list_orders', '分页列出订单 ID 和状态', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), lambda a, c: None, outputs=['id', 'status']),
+        Tool('get_order', '读取订单状态和日期', 'read', object_schema({'orderId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'status']),
+        Tool('get_payments', '读取支付记录和金额', 'read', object_schema({'orderId': {'type': 'string'}}), lambda a, c: None, outputs=['id', 'payments']),
+    ]
+    plan = {'steps': [dict(id='list', intent='列出订单 ID 和状态', dependencies=[]),
+                      dict(id='pay_a', intent='读取支付记录', dependencies=['list']),
+                      dict(id='pay_b', intent='获取支付金额', dependencies=['list'])]}
+    retrieval = {step['id']: retrieve_tools(step['intent'], tools) for step in plan['steps']}
+    proposal, _ = select_retrieved_graph(plan, retrieval, tools)
+    assert {node['id']: node['tool'] for node in proposal['nodes']}['pay_a'] == 'get_payments'
+    nodes = compile_intent_graph(plan, proposal, retrieval, tools)
+    assert [node['id'] for node in nodes] == ['list', 'pay_a']
+
+
 def test_task_authority_rejects_explicit_inclusive_to_exact_narrowing():
     task = '找出支付记录分期数达到 6 的订单'
     with pytest.raises(ValueError, match='narrows'):

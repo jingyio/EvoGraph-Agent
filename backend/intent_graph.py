@@ -11,9 +11,28 @@ from .tools import Tool, object_schema
 def _terms(value):
     text = str(value).lower()
     words = set(re.findall(r'[a-z][a-z0-9_]*', text))
+    # Taskbank tool outputs use stable English contract names while the task
+    # instructions are Chinese. These aliases describe field semantics, not a
+    # task-specific answer or record value.
+    aliases = {
+        'payments': '支付金额分期', 'items': '商品运费', 'reviews': '评价满意度',
+        'labels': '标签', 'assignee_count': '负责人指派', 'milestone': '里程碑',
+        'comments': '评论讨论', 'narrative': '叙述', 'timely': '及时',
+    }
+    for key, meaning in aliases.items():
+        if key in text:
+            text += ' ' + meaning
     for sequence in re.findall(r'[\u4e00-\u9fff]+', text):
         words.update(sequence[index:index + 2] for index in range(max(0, len(sequence) - 1)))
     return words
+
+
+_GENERIC_TERMS = {'读取', '记录', '订单', '当前', '任务', '信息', '字段', '获取', '查看',
+                  '返回', '列表', '全部', '每条', '数据', '结果', '明细', '本次', '工具', '状态'}
+
+
+def _distinct_terms(value):
+    return {term for term in _terms(value) if term not in _GENERIC_TERMS}
 
 
 def _expects_list(intent):
@@ -25,10 +44,37 @@ def _capability_matches(intent, tool, role):
     """BM25 ranks candidates; this rejects candidates that cannot fulfill the step."""
     if role == 'list':
         return set(tool.parameters.get('required', [])) == {'page', 'pageSize'}
-    intent_terms = _terms(intent)
-    capability = _terms(' '.join([tool.name, tool.description, *map(str, tool.outputs or [])]))
-    meaningful = {term for term in intent_terms if term not in {'读取', '记录', '订单', '当前', '任务', '信息', '字段', '获取'}}
+    meaningful = _distinct_terms(intent)
+    capability = _distinct_terms(' '.join([tool.name, tool.description, *map(str, tool.outputs or [])]))
     return not meaningful or bool(meaningful & capability)
+
+
+def prune_unrequested_steps(plan, task_text):
+    """Drop independent detail requests whose semantic field is absent from the task.
+
+    The model remains responsible for the Plan. This is a fail-closed compiler
+    guard over an explicit task instruction: a list root is retained, while an
+    unrelated detail branch is removed before tool selection. It never adds a
+    tool, a condition, an ID, or an answer.
+    """
+    task_terms = _distinct_terms(task_text)
+    kept, removed = [], []
+    for step in plan['steps']:
+        terms = _distinct_terms(step.get('intent', ''))
+        is_root = not step.get('dependencies')
+        if not is_root and terms and not (terms & task_terms):
+            removed.append(dict(id=step['id'], intent=step['intent'], reason='task_semantic_not_required'))
+            continue
+        kept.append(deepcopy(step))
+    kept_ids = {step['id'] for step in kept}
+    for step in kept:
+        step['dependencies'] = [dep for dep in step['dependencies'] if dep in kept_ids]
+        selection = step.get('selection')
+        if selection and selection.get('kind') == 'match' and selection['sourceStepId'] not in kept_ids:
+            raise ValueError('Task-relevance pruning removed a required selection source')
+    result = dict(plan, steps=kept)
+    validate_plan(result)
+    return result, removed
 
 
 def reject_semantic_narrowing(plan, task_text):
@@ -200,11 +246,32 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
                         or selection['field'] not in set(source_tool.outputs or [])):
                     raise ValueError('Plan selection cannot be bound to a declared upstream list field')
                 node['foreach']['filter'] = dict(field=selection['field'], operator=selection['operator'], value=deepcopy(selection['value']))
+    # Two model subgoals can resolve to the exact same current-data read. Keep
+    # the first node and remap consumers rather than issuing duplicate calls.
+    # This is based solely on executable structure, never record values.
+    retained, aliases, fingerprints = [], {}, {}
+    for node in nodes:
+        fingerprint = canonical(dict(tool=node['tool'], arguments=node.get('arguments', {}), foreach=node.get('foreach'),
+                                     paginate=node.get('paginate'), reuse=node.get('reuse'), defer=bool(node.get('defer'))))
+        prior = fingerprints.get(fingerprint)
+        if prior is None:
+            fingerprints[fingerprint] = node['id']
+            retained.append(node)
+        else:
+            aliases[node['id']] = prior
+    if aliases:
+        for node in retained:
+            node['dependencies'] = sorted({aliases.get(dep, dep) for dep in node['dependencies'] if aliases.get(dep, dep) != node['id']})
+            if node.get('foreach'):
+                node['foreach']['nodeId'] = aliases.get(node['foreach']['nodeId'], node['foreach']['nodeId'])
+            if node.get('reuse'):
+                node['reuse']['nodeId'] = aliases.get(node['reuse']['nodeId'], node['reuse']['nodeId'])
+        nodes = retained
     ordered_nodes(nodes, tools)
     return nodes
 
 
-async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recovery=None, on_filter=None):
+async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recovery=None, on_filter=None, on_binding=None):
     ordered_nodes(nodes, tools)
     dag = nx.DiGraph()
     dag.add_nodes_from(n['id'] for n in nodes)
@@ -249,12 +316,16 @@ async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recover
                 if len(items) > 1000:
                     raise ValueError('Graph foreach exceeds 1000 records')
             arguments, seen = [], set()
+            binding_start = asyncio.get_running_loop().time()
             for item in items:
                 args = {key: binding['value'] if binding['kind'] == 'literal' else path_value(item, binding['path']) for key, binding in node['arguments'].items()}
                 signature = canonical(args)
                 if signature not in seen:
                     arguments.append(args)
                     seen.add(signature)
+            if on_binding:
+                on_binding(node['id'], dict(argumentSets=len(arguments), bindingMs=round((asyncio.get_running_loop().time() - binding_start) * 1000, 3),
+                                             emptyBranch=bool(node.get('foreach')) and not arguments))
             async def call(args):
                 result_pages = []
                 for page in range(1, node.get('paginate', {}).get('maxPages', 1) + 1):

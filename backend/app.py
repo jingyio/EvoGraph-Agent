@@ -76,6 +76,25 @@ def create_app(service=None):
             raise HTTPException(404, 'Online experiment not found')
         return taskbank.root / 'artifacts' / 'online-e2e' / key
 
+    def efficiency_path(key):
+        if not key or any(char not in 'abcdefghijklmnopqrstuvwxyz0123456789-_' for char in key):
+            raise HTTPException(404, 'Efficiency experiment not found')
+        return taskbank.root / 'artifacts' / 'efficiency' / key
+
+    @app.get('/api/efficiency/{key}')
+    async def efficiency_get(key: str):
+        path = efficiency_path(key) / 'result.json'
+        if not path.exists():
+            raise HTTPException(404, 'Efficiency experiment not found')
+        return json.loads(path.read_text())
+
+    @app.get('/api/efficiency/{key}/report', response_class=HTMLResponse)
+    async def efficiency_report(key: str):
+        path = efficiency_path(key) / 'index.html'
+        if not path.exists():
+            raise HTTPException(404, 'Efficiency experiment report not found')
+        return HTMLResponse(path.read_text(), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
     @app.get('/api/online-e2e/{key}')
     async def online_e2e_get(key: str):
         path = online_e2e_path(key) / 'result.json'

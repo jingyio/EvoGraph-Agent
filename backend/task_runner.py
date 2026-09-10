@@ -14,7 +14,7 @@ from .graph_store import write_private
 from .model_client import ModelClient, ModelOptions
 from .tools import Tool, ToolContext, object_schema
 from .autotool import canonical, retrieve_tools
-from .intent_graph import reject_semantic_narrowing, select_retrieved_graph, compile_intent_graph, execute_graph
+from .intent_graph import reject_semantic_narrowing, prune_unrequested_steps, select_retrieved_graph, compile_intent_graph, execute_graph
 from .gagent import build_data_plan, build_coarse_plan
 from .online_evolution import OnlineEvolution
 from .agent_prompts import STRONG_REACT_GUIDANCE
@@ -150,7 +150,7 @@ class TaskRunner:
                    modelSettings=dict(planner=getattr(planner, 'settings', {}), composition=getattr(composition, 'settings', {}), executor=getattr(executor, 'settings', {})),
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
-                                motifSelectedRecords=0, motifFilteredOutRecords=0,
+                                motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
@@ -389,6 +389,10 @@ class TaskRunner:
                             run['evolution'].update(planningPath='fallback', note='Fast 未命中且没有已 materialize 的 Persistent TinyEdge；生成完整 Plan')
                     plan = (deepcopy(selected['plan']) if selected else deepcopy(composed['plan']) if composed
                             else await build_data_plan(task, acquisition, lambda history, tool: structured(planner, 'plan', history, tool)))
+                    plan, removed = prune_unrequested_steps(plan, task['task'])
+                    if removed:
+                        run.setdefault('evolution', {}).setdefault('compilerRepair', dict(kind='task_semantic_pruning', removedSteps=[]))['removedSteps'].extend(removed)
+                        event('compiler', '任务语义裁剪无关读取步骤', dict(removedSteps=removed))
                     reject_semantic_narrowing(plan, task['task'])
                     run['plan'] = plan
                     event('plan', '数据获取计划', plan)
@@ -405,10 +409,23 @@ class TaskRunner:
                                                   sourceWorkflowIds=item['sourceWorkflowIds'], sourceRunIds=item['sourceRunIds'])
                                          for item in composed['origins']]
                         else:
+                            compile_start = time.perf_counter()
+                            retrieval_start = time.perf_counter()
                             retrieval = {s['id']: retrieve_tools(s['intent'], acquisition) for s in plan['steps']}
+                            retrieval_ms = round((time.perf_counter() - retrieval_start) * 1000, 3)
                             run['retrieval'] = [dict(stepId=s['id'], intent=s['intent'], candidates=retrieval[s['id']]) for s in plan['steps']]
+                            select_start = time.perf_counter()
                             proposal, selection = select_retrieved_graph(plan, retrieval, acquisition)
+                            select_ms = round((time.perf_counter() - select_start) * 1000, 3)
+                            graph_compile_start = time.perf_counter()
                             nodes = compile_intent_graph(plan, proposal, retrieval, acquisition)
+                            compile_ms = round((time.perf_counter() - graph_compile_start) * 1000, 3)
+                            deduplicated = len(plan['steps']) - len(nodes)
+                            run.setdefault('evolution', {}).update(retrievalMs=retrieval_ms, selectionMs=select_ms, compileMs=compile_ms,
+                                                                     localCompileMs=round((time.perf_counter() - compile_start) * 1000, 3),
+                                                                     deduplicatedGraphNodes=deduplicated)
+                            if deduplicated:
+                                event('compiler', '等价读取节点已合并', dict(planSteps=len(plan['steps']), graphNodes=len(nodes), deduplicatedNodes=deduplicated))
                             if run['strategy'] in graph_strategies:
                                 for node in nodes:
                                     if node.get('reuse'):
@@ -444,9 +461,17 @@ class TaskRunner:
                         def filter_event(key, detail):
                             metrics['motifSelectedRecords'] += detail['selectedRecords']
                             metrics['motifFilteredOutRecords'] += detail['filteredOutRecords']
+                            metrics['filteredOutDetailReads'] += detail['filteredOutRecords']
                             event('motif', key + ' 筛选后补查', dict(nodeId=key, **detail))
+                        def binding_event(key, detail):
+                            metrics['deterministicBindings'] += detail['argumentSets']
+                            metrics['bindingMs'] += detail['bindingMs']
+                            if detail['emptyBranch']:
+                                metrics['emptyDetailBranches'] += 1
+                            run.setdefault('evolution', {})['bindingMs'] = round(run.get('evolution', {}).get('bindingMs', 0) + detail['bindingMs'], 3)
+                            event('binding', key + ' 确定性参数绑定', dict(nodeId=key, **detail))
                         try:
-                            await execute_graph(nodes, acquisition, graph_invoke, node_event, elide_event, recovery_event, filter_event)
+                            await execute_graph(nodes, acquisition, graph_invoke, node_event, elide_event, recovery_event, filter_event, binding_event)
                             run['graph']['status'] = 'done'
                         finally:
                             # One batch history instead of synthetic one-tool thought turns.

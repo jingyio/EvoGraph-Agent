@@ -9,7 +9,7 @@ from .autotool import digest
 from .domain import now
 from .graph import ordered_nodes, contract_hash
 from .graph_store import write_private
-from .intent_graph import compile_intent_graph
+from .intent_graph import compile_intent_graph, prune_unrequested_steps
 from .tinyedge import TinyEdgeMaintenanceError, mine as mine_tinyedges, candidate_rows, compose as compose_tinyedges
 
 
@@ -53,6 +53,15 @@ class OnlineEvolution:
     def select(self, task, tools):
         version = self.latest(task, tools)
         if not version or version['status'] == 'needs-repair':
+            return None
+        # A compiler correctness upgrade may invalidate an over-reading saved
+        # Plan. Keep the parent immutable and let a passing normal train run
+        # create the auditable child version.
+        _, removed = prune_unrequested_steps(version['plan'], task['task'])
+        if removed:
+            version['status'] = 'needs-repair'
+            version['scope'] = '旧图包含与当前任务无关的读取；等待重新编译后的正常训练证据'
+            version['compilerInvalidation'] = dict(kind='task_semantic_pruning', removedSteps=removed)
             return None
         # Tests consume a frozen, previously supported version; never collect test evidence.
         if task['split'] == 'test' and version['status'] != 'family-supported':
@@ -206,7 +215,10 @@ class OnlineEvolution:
                 nodes = graph['nodes']
                 # Cold graphs contain no task-specific literal parameters besides pagination.
                 plan = self.safe_plan(run['plan'], nodes, tools)
-                patches = [dict(operation='compile_observed_graph' if not latest else 'rebuild_after_failure', reason='正常训练任务完成，保存参数化读取结构')]
+                compiler_repair = info.get('compilerRepair')
+                patches = [dict(operation='compile_observed_graph' if not latest else 'rebuild_after_failure',
+                                reason='通用编译器语义/契约修复后重新保存读取结构' if compiler_repair else '正常训练任务完成，保存参数化读取结构',
+                                origin='compiler_correctness_fix' if compiler_repair else 'normal_train_observation')]
                 for node in nodes:
                     condition = (node.get('foreach') or {}).get('filter')
                     if condition:
