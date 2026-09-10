@@ -7,7 +7,7 @@
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 本轮已完成隔离的 36-task 在线训练对照 `online-e2e-train-v1`，源码提交见后续 Git log；运行 artifacts 不入 Git。临时验证服务 `4320` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
+- 本轮已完成隔离的 36-task 在线训练对照 `online-e2e-train-v1`，源码提交见后续 Git log；运行 artifacts 不入 Git。只读审计确认跨场景 TinyEdge 维护异常、能力/语义偏移与重复报告长尾；修复代码待新的隔离 train 预检验证，不能与旧结果拼接。临时验证服务 `4320` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
 
 ## 已完成
 

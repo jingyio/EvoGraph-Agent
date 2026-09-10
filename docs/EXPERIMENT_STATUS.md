@@ -16,6 +16,8 @@
 | 36-task 在线训练对照 | `online-e2e-train-v1`；36 个固定 train 任务 × `plan_react` / `motif_first`，六轮串行 | 基线 36/36、601,435 token、737.62s；RSI 35/36、766,076 token、890.26s。RSI Fast 5 次，Composition/AutoTool 运行时调用均为 0；双顺序 Judge 平均 reward 两臂同为 0.9714，另耗 339,938 token | 历史 Workflow 在 `support-channels-02...06` 实际复用且跳过 Plan，但全量 RSI token +27.4%、延迟 +20.7%，并有一次确定性失败；不能主张总体净收益。完整协议、审计修复和结果见 `online-e2e-train-results-2026-09-10.md`。 |
 | 当前 Judge 协议 | Plan 对照中的四对；固定对象输出、双顺序 | 财务顺序分歧；客服渠道/工单讨论平局；失败的近期投诉样例 RSI reward 更高 | 四对不是全30对；同模型 Judge；失败样例是目的性选择，不是随机总体质量样本 |
 
+`online-e2e-train-v1` 的只读审计确认 25 次跨场景 TinyEdge 维护异常、两条能力/Plan 语义偏移轨迹以及无界重复报告失败。修复设计见 [online-rsi-repair-design-2026-09-10.md](online-rsi-repair-design-2026-09-10.md)。该实验保留为负向结果；共享报告恢复修复也会影响基线，不能把它与修复后的新实验连续累计。
+
 两轮评测重复使用同一批验证任务，不是60个独立任务。测试集尚未用于最终性能测试。旧沙箱执行代码与专用运行记录已按用户要求删除；有日期的旧实验文档仍只代表历史结果，平台记录单独保留，不能混入此表。
 
 来源：
