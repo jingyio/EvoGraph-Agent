@@ -4,12 +4,10 @@
 
 ## P0.0 端到端在线对照
 
-状态：2026-09-10 已完成 `online-e2e-train-v1`：36 对 train 在线执行和36对双顺序 Judge 均保留。RSI 全量 token +27.4%、延迟 +20.7%、35/36 通过，未达到总体收益目标；详情见 `online-e2e-train-results-2026-09-10.md`。
+状态：2026-09-10 已保留旧负向 `online-e2e-train-v1`，并完成修复后分时匹配对照：`online-rsi-graph-precheck-v3` RSI 36/36、386,813 token；`online-rsi-graph-matched-v4` Baseline 32/36、509,630 token。匹配记录下 RSI token -24.1%，未达到 30% 目标；`cancelled_payments` 为负收益，不能用五个获益 family 掩盖。详情见 `online-rsi-matched-results-2026-09-10.md`。
 
-- 修复前的旧流还有跨场景 TinyEdge 维护异常和无界报告重试，不能与修复后结果拼接。先在新隔离 ID 做两轮 train 预检：检查分区维护、后续 Workflow 读取、支持度、报告恢复和 AutoTool 入口日志；通过后才讨论扩大。
-
-- 已观察到 `support-channels-01 → -02...-06` 的 Fast 复用和少 Plan 请求，但没有 Composition、TinyEdge 或 AutoTool 运行时触发；不能把局部热点收益推广为总体结果。
-- 后续只能基于失败原因和正常 train 流量提出新假设；不得重跑同一任务、修改阈值制造 AutoTool 命中，或删除 `finance-installments-06` 的失败。
+- AutoTool/TIG 惯性执行已退役，不再进行触发调优或新增实验；旧记录保留。
+- 下一步应只基于已保留的 `cancelled_payments` 负收益和 Baseline evidence 覆盖失败提出正常 train 流量假设；不得重跑同一批任务直到结果好看。
 
 ## P0.1 G-Agent Persistent TinyEdge 的真实训练覆盖
 
@@ -61,13 +59,9 @@
 - 改动稳定后冻结方案，另做 test 评估，测试反馈不得回流学习。
 - 最终视频应包括相同业务成果、真实成本对照、真实图修改及后续受益。使用 `#demo` 回放与业务报告，不制作虚构时间线。
 
-## P1.5 AutoTool 惯性补充的有效性
+## P1.5 AutoTool / TIG
 
-状态：2026-09-10 已完成最小 `motif_only` / `motif_first` 机制、协议回归和真实 train 预检；未观察到接受调用或净收益。
-
-- 只在新产生的正常 train 模型轨迹积累足够的串行支持和参数契约后，再冻结同一 TIG/图快照做小规模 `motif_only` / `motif_first` 成对评测。
-- 不得降低固定门槛、把并发批次当依赖、从 validation/test 更新 TIG，或以接受次数替代净收益。
-- 验收：报告实际接受/拒绝、参数来源、恢复模型成本、总 token/工具/延迟和确定性评分；若仍无净收益，保持 AutoTool 默认关闭。
+状态：退役。历史负向机制与回放字段保留，但不再实施惯性执行、学习更新、触发调优或新对照。
 
 ## 暂不扩展
 

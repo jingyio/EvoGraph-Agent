@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 import json
+import re
 from copy import deepcopy
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
@@ -87,7 +88,27 @@ def create_app(service=None):
         path = online_e2e_path(key) / 'index.html'
         if not path.exists():
             raise HTTPException(404, 'Online experiment report not found')
-        return HTMLResponse(path.read_text(), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+        return HTMLResponse(path.read_text(), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
+    def online_e2e_run(key, arm, run_id):
+        if arm not in ['baseline', 'rsi'] or not re.fullmatch(r'[0-9a-f-]{36}', run_id):
+            raise HTTPException(404, 'Online experiment run not found')
+        path = online_e2e_path(key) / arm / 'runs' / (run_id + '.json')
+        if not path.exists():
+            raise HTTPException(404, 'Online experiment run not found')
+        run = json.loads(path.read_text())
+        if run.get('id') != run_id:
+            raise HTTPException(404, 'Online experiment run not found')
+        return run
+
+    @app.get('/api/online-e2e/{key}/runs/{arm}/{run_id}')
+    async def online_e2e_run_trace(key: str, arm: str, run_id: str):
+        return online_e2e_run(key, arm, run_id)
+
+    @app.get('/api/online-e2e/{key}/runs/{arm}/{run_id}/report', response_class=HTMLResponse)
+    async def online_e2e_run_report(key: str, arm: str, run_id: str):
+        run = online_e2e_run(key, arm, run_id)
+        return HTMLResponse(render_report(run, taskbank.task(run['taskId'])), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
 
     @app.post('/api/evaluations', status_code=202)
     async def evaluation_start(request: EvaluationRequest):

@@ -21,3 +21,9 @@
 ## 验收
 
 注入回归覆盖跨场景交错分区、能力/语义拒绝、报告失败有界恢复和 AutoTool 入口日志。通过后才建立新的隔离小规模 train 预检；它不得与旧实验的经验或结果拼接。
+
+## 修复后验证
+
+`online-rsi-graph-precheck-v3` 以独立空经验运行 36 条正常 train：36/36 结构化通过、0 工具错误、0 维护错误、30 次 Fast Workflow 复用；两个旧长尾任务均保留原任务语义并一次有界报告完成。随后在 `online-rsi-graph-matched-v4` 补跑不学习的匹配 Baseline：Baseline 有四个 `evidence_coverage` 有界失败，RSI 仍为 36/36。完整成本、质量和分时匹配边界见 `online-rsi-matched-results-2026-09-10.md`。
+
+AutoTool/TIG 惯性执行在验证前已退役；本节的旧入口审计仅用于解释历史 `online-e2e-train-v1`，不表示当前 runtime 仍执行该分支。

@@ -67,6 +67,31 @@ def selected_manifest(bank, task_ids=None):
     return selected
 
 
+def completed_status(through_round, rsi_only):
+    """RSI-only full runs are complete without scheduling Judge requests."""
+    return through_round == 6 and rsi_only
+
+
+def rsi_source_pairs(source_result, manifest):
+    """Return audited, compact RSI runs from a completed isolated source run."""
+    if source_result.get('schemaVersion') != SCHEMA_VERSION:
+        raise RuntimeError('rsi_source_schema_changed')
+    if source_result.get('manifest') != manifest:
+        raise RuntimeError('rsi_source_manifest_changed')
+    protocol = source_result.get('protocol') or {}
+    if protocol.get('rsi') != 'graph_rsi' or not protocol.get('rsiLearning') or not protocol.get('startFromEmpty'):
+        raise RuntimeError('rsi_source_protocol_incompatible')
+    source = {row.get('taskId'): row for row in source_result.get('pairs') or []}
+    selected = {}
+    for item in manifest:
+        pair = source.get(item['taskId'])
+        run = (pair or {}).get('runs', {}).get('rsi')
+        if not run or not success(run):
+            raise RuntimeError('rsi_source_run_missing_or_failed:' + item['taskId'])
+        selected[item['taskId']] = deepcopy(pair)
+    return selected
+
+
 SCHEMA_VERSION = 2
 
 
@@ -95,7 +120,7 @@ def diagnostics(runs):
         planningPaths=paths,
         graphReuse=sum(bool(item.get('usedVersionId')) for item in evolution),
         compositionRuns=sum(item.get('execution') == 'composition' for item in evolution),
-        graphFallbacks=sum(bool(run.get('fallback')) for run in runs),
+        graphFallbacks=sum(bool(run.get('fallback')) and run.get('strategy') == 'graph_rsi' for run in runs),
         graphLookupMs=round(aggregate(evolution, 'lookupMs'), 3),
         compositionLocalMs=round(sum(item.get('compositionLocalMs', composition[index].get('localMs', 0)) or 0 for index, item in enumerate(evolution)), 3),
         evolutionMaintenanceMs=round(aggregate(evolution, 'maintenanceMs'), 3),
@@ -174,7 +199,8 @@ def reconstructed_timeline(rows, runner):
 
 
 def judge_summary(rows):
-    judges = [row.get('judge') or {} for row in rows]
+    # An absent Judge is pending, not a failed judging attempt.
+    judges = [row['judge'] for row in rows if row.get('judge') is not None]
     completed = [row for row in judges if row.get('status') == 'completed']
     metrics = [row.get('metrics') or {} for row in judges]
     rewards = {arm: [] for arm in ['baseline', 'rsi']}
@@ -247,6 +273,52 @@ async def judge_pair(payload, reports, provider):
                 sameAsExecutor=provider.model == config.MODEL)
 
 
+def run_url(experiment, arm, run_id, report=False):
+    return f'/api/online-e2e/{experiment}/runs/{arm}/{run_id}' + ('/report' if report else '')
+
+
+def family_sections(result):
+    """Render six-record family comparisons only from recorded run data."""
+    groups = {}
+    for pair in sorted(result.get('pairs') or [], key=lambda row: row.get('index', 0)):
+        groups.setdefault((pair.get('scenario', ''), pair.get('family', '')), []).append(pair)
+    options, sections = [], []
+    for number, ((scenario, family), pairs) in enumerate(sorted(groups.items())):
+        identifier = f'family-{number}'
+        options.append(f'<option value="{identifier}">{escape(scenario + "/" + family)}</option>')
+        base_total = rsi_total = 0
+        rows, base_points, rsi_points = [], [], []
+        for position, pair in enumerate(sorted(pairs, key=lambda row: row.get('round', 0)), 1):
+            runs = pair.get('runs') or {}
+            baseline, rsi = runs.get('baseline') or {}, runs.get('rsi') or {}
+            bm, rm = baseline.get('metrics') or {}, rsi.get('metrics') or {}
+            total = lambda metrics: (metrics.get('inputTokens') or 0) + (metrics.get('outputTokens') or 0)
+            base_total += total(bm); rsi_total += total(rm)
+            saving = 1 - rsi_total / base_total if base_total else None
+            evolution = rsi.get('evolution') or {}
+            timeline = pair.get('experienceTimeline') or {}
+            source = (pair.get('rsiSource') or {}).get('experiment', result.get('id'))
+            links = []
+            for arm, run, experiment in [('baseline', baseline, result.get('id')), ('rsi', rsi, source)]:
+                if run.get('id'):
+                    links.append(f'<a href="{run_url(experiment, arm, run["id"])}">{arm} trace</a>')
+                    links.append(f'<a href="{run_url(experiment, arm, run["id"], True)}">{arm} report</a>')
+            before = (timeline.get('before') or pair.get('experienceBefore') or {}).get('versions', 0)
+            after = (timeline.get('after') or pair.get('experienceAfter') or {}).get('versions', 0)
+            rows.append(f'''<tr><td>{position}</td><td>{escape(pair.get('taskId', ''))}<br><small>{pair.get('recordCount', 0)} records</small></td>
+<td>{before} → {after}<br><small>created {escape(', '.join(evolution.get('generatedVersionIds') or []) or '—')}<br>used {escape(evolution.get('usedVersionId') or '—')}</small></td>
+<td>{escape(evolution.get('planningPath', '—'))}</td>
+<td>{'pass' if success(baseline) else escape(baseline.get('status', '—'))}<br>{total(bm):,} token / {bm.get('modelRequests', 0)} LLM / {bm.get('toolCalls', 0)} tools<br>{(bm.get('durationMs') or 0) / 1000:.2f}s</td>
+<td>{'pass' if success(rsi) else escape(rsi.get('status', '—'))}<br>{total(rm):,} token / {rm.get('modelRequests', 0)} LLM / {rm.get('toolCalls', 0)} tools<br>{(rm.get('durationMs') or 0) / 1000:.2f}s</td>
+<td>{base_total:,} / {rsi_total:,}<br>{'—' if saving is None else f'{saving:.1%}'}</td><td>{' · '.join(links)}</td></tr>''')
+            base_points.append(base_total); rsi_points.append(rsi_total)
+        maximum = max(base_points + rsi_points + [1])
+        points = lambda values: ' '.join(f'{18 + 105 * index},{154 - 125 * value / maximum:.1f}' for index, value in enumerate(values))
+        chart = f'<svg viewBox="0 0 570 174" role="img" aria-label="{escape(scenario + "/" + family)} cumulative token"><line x1="18" y1="154" x2="550" y2="154" class="axis"/><polyline points="{points(base_points)}" class="baseline-line"/><polyline points="{points(rsi_points)}" class="rsi-line"/><text x="20" y="18">cumulative token</text><text x="420" y="38" class="baseline-label">baseline</text><text x="420" y="58" class="rsi-label">RSI</text></svg>'
+        sections.append(f'''<section class="family" data-family="{identifier}"{' hidden' if number else ''}><h2>{escape(scenario + "/" + family)} · online experience accumulation and reuse</h2><p>Six distinct records in arrival order. Cumulative savings include the cold start and recorded maintenance. A new G0 is not a structural revision.</p>{chart}<table><thead><tr><th>#</th><th>Task / scope</th><th>Experience / graph</th><th>Path</th><th>Baseline</th><th>RSI</th><th>Cumulative tokens<br>base / RSI / saving</th><th>Replay</th></tr></thead><tbody>{''.join(rows)}</tbody></table></section>''')
+    return ''.join(options), ''.join(sections)
+
+
 def result_report(result):
     data = result.get('summary') or {}
     arms = data.get('arms') or {}
@@ -256,8 +328,9 @@ def result_report(result):
     rounds = ''.join(f"<tr><td>{row['round']}</td><td>{row['summary']['arms']['baseline']['totalTokens']:,}</td><td>{row['summary']['arms']['rsi']['totalTokens']:,}</td><td>{row['summary']['arms']['baseline']['passed']}</td><td>{row['summary']['arms']['rsi']['passed']}</td></tr>" for row in result.get('rounds', []))
     chains = ''.join(f"<li><b>{escape(item['taskId'])}</b>: used={escape(str(item['usedGraphId'] or 'none'))}, created={escape(', '.join(item['createdGraphIds']) or 'none')}</li>" for item in result.get('evolutionChain', [])) or '<li>尚未观察到经验变化。</li>'
     judge = result.get('judgeSummary') or {}
+    selectors, families = family_sections(result)
     delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI - 基线：token {data['allOutcomeTokenDelta']:,}；延迟 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s。负值才表示 RSI 较低。"
-    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1100px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main>'''
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1240px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px;vertical-align:top}}th{{background:#f4f7f8}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}a{{color:#086c72}}select{{font:inherit;padding:7px;border:1px solid #9aabb2;background:white}}.family{{margin-top:22px;border-top:2px solid #354a56;padding-top:12px;overflow-x:auto}}svg{{display:block;width:100%;max-width:570px;height:auto;background:#fbfcfc;border:1px solid #dbe3e6}}.axis{{stroke:#9aabb2;stroke-width:1}}.baseline-line{{stroke:#8a4a25;stroke-width:3;fill:none}}.rsi-line{{stroke:#087d64;stroke-width:3;fill:none}}.baseline-label{{fill:#8a4a25}}.rsi-label{{fill:#087d64}}@media(max-width:700px){{main{{margin:0;padding:16px}}table{{font-size:12px}}}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}；比较：{escape((result.get('protocol') or {}).get('comparisonMode', 'unknown'))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>任务族内演进</h2><label>任务族 <select id="family-select">{selectors}</select></label>{families}<h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main><script>document.getElementById('family-select').addEventListener('change',function(){{document.querySelectorAll('.family').forEach((item)=>item.hidden=item.dataset.family!==this.value);}});</script>'''
 
 
 def write_report(root, result):
@@ -279,7 +352,7 @@ def checkpoint(root, result_path, result, rsi=None):
     write_report(root, result)
 
 
-async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None):
+async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None, rsi_source=None):
     if not 1 <= through_round <= 6:
         raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
@@ -290,11 +363,29 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
     root = ROOT / 'artifacts' / 'online-e2e' / experiment
     result_path, manifest_path = root / 'result.json', root / 'manifest.json'
     manifest = selected_manifest(bank, task_ids)
+    source_root = ROOT / 'artifacts' / 'online-e2e' / rsi_source if rsi_source else None
+    source_result = None
+    source_pairs = {}
+    if rsi_source:
+        if rsi_only:
+            raise ValueError('rsi_source_cannot_be_combined_with_rsi_only')
+        source_path = source_root / 'result.json'
+        if not source_path.exists():
+            raise RuntimeError('rsi_source_result_missing')
+        source_result = json.loads(source_path.read_text())
+        source_pairs = rsi_source_pairs(source_result, manifest)
+        source_protocol = source_result.get('protocol') or {}
+        for key, current in [('executor', config.MODEL), ('planner', config.PLANNER_MODEL), ('composition', config.COMPOSITION_MODEL),
+                             ('maxSteps', config.MAX_STEPS), ('timeout', config.RUN_TIMEOUT), ('taskHash', digest(manifest)),
+                             ('shadowRollouts', 0), ('singleAgentConcurrency', True)]:
+            if source_protocol.get(key) != current:
+                raise RuntimeError('rsi_source_current_protocol_mismatch:' + key)
     if manifest_path.exists() and json.loads(manifest_path.read_text()) != manifest:
         raise RuntimeError('manifest_changed')
     write(manifest_path, manifest)
     base = TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1, run_directory=root / 'baseline' / 'runs', evolution_path=root / 'baseline' / 'experience.json', learning_enabled=False)
-    rsi = TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1, run_directory=root / 'rsi' / 'runs', evolution_path=root / 'rsi' / 'experience.json', learning_enabled=True)
+    rsi_root = source_root if source_root else root
+    rsi = TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1, run_directory=rsi_root / 'rsi' / 'runs', evolution_path=rsi_root / 'rsi' / 'experience.json', learning_enabled=True)
     base.restore(); rsi.restore()
     result = json.loads(result_path.read_text()) if result_path.exists() else dict(
         schemaVersion=SCHEMA_VERSION, id=experiment, status='running', createdAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), manifest=manifest, pairs=[],
@@ -304,15 +395,25 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
                       maxSteps=config.MAX_STEPS, timeout=config.RUN_TIMEOUT, taskHash=digest(manifest),
                       revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                       startFromEmpty=True, shadowRollouts=0, singleAgentConcurrency=True,
-                      judge='anonymous dual order after all agent runs; judge cost is separate'))
+                      judge='anonymous dual order after all agent runs; judge cost is separate',
+                      comparisonMode='time_separated_matched' if rsi_source else 'same_session_interleaved',
+                      rsiSourceExperiment=rsi_source,
+                      rsiSourceRevision=(source_result.get('protocol') or {}).get('revision') if source_result else None))
     if result.get('schemaVersion') != SCHEMA_VERSION or result.get('manifest') != manifest:
         raise RuntimeError('experiment_checkpoint_protocol_changed')
     by_task = {row['taskId']: row for row in result['pairs']}
     for index, item in enumerate(manifest):
         if item['round'] > through_round:
             break
-        launch = ['rsi'] if rsi_only else ['baseline', 'rsi'] if index % 2 == 0 else ['rsi', 'baseline']
+        launch = ['rsi'] if rsi_only else ['baseline'] if rsi_source else ['baseline', 'rsi'] if index % 2 == 0 else ['rsi', 'baseline']
         pair = by_task.setdefault(item['taskId'], dict(index=index, **item, launchOrder=launch, runs={}, experienceBefore=None, experienceAfter=None))
+        if rsi_source and 'rsi' not in pair['runs']:
+            source_pair = source_pairs[item['taskId']]
+            pair['runs']['rsi'] = deepcopy(source_pair['runs']['rsi'])
+            pair['experienceBefore'] = deepcopy(source_pair.get('experienceBefore'))
+            pair['experienceAfter'] = deepcopy(source_pair.get('experienceAfter'))
+            pair['experienceTimeline'] = deepcopy(source_pair.get('experienceTimeline'))
+            pair['rsiSource'] = dict(experiment=rsi_source, runId=pair['runs']['rsi']['id'])
         if pair['experienceBefore'] is None:
             pair['experienceBefore'] = experience_summary(rsi)
             result['pairs'] = list(by_task.values())
@@ -340,9 +441,14 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
             pair['experienceAfter'] = experience_summary(rsi)
         result['pairs'] = list(by_task.values())
         checkpoint(root, result_path, result, rsi)
-    if through_round < 6 or rsi_only:
+    if through_round < 6 or (rsi_only and not completed_status(through_round, rsi_only)):
         result['status'] = 'running'
         result['precheckThroughRound'] = through_round
+        checkpoint(root, result_path, result, rsi)
+        print(root)
+        return
+    if completed_status(through_round, rsi_only):
+        result['status'] = 'completed'; result['finishedAt'] = result.get('finishedAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         checkpoint(root, result_path, result, rsi)
         print(root)
         return
@@ -371,7 +477,8 @@ if __name__ == '__main__':
     parser.add_argument('--through-round', type=int, default=6, help='Run through this fixed round; values below 6 retain a resumable formal precheck.')
     parser.add_argument('--experiment', default=DEFAULT_EXPERIMENT, help='New isolated experiment directory ID; existing manifests cannot change.')
     parser.add_argument('--rsi-only', action='store_true', help='Run only Graph RSI for isolated mechanism prechecks; no baseline or Judge calls.')
+    parser.add_argument('--rsi-source', help='Reuse a completed RSI-only experiment by ID and run only a protocol-matched baseline in this new experiment directory.')
     parser.add_argument('--task-ids', help='Comma-separated subset of the fixed train manifest, preserving the supplied order.')
     args = parser.parse_args()
     task_ids = args.task_ids.split(',') if args.task_ids else None
-    asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids))
+    asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids, args.rsi_source))

@@ -1,4 +1,4 @@
-from scripts.run_online_e2e import TYPES, judge_summary, result_report, selected_manifest, summary, task_manifest
+from scripts.run_online_e2e import TYPES, completed_status, judge_summary, result_report, rsi_source_pairs, selected_manifest, summary, task_manifest
 
 
 class Bank:
@@ -46,3 +46,18 @@ def test_judge_cost_stays_separate_from_agent_summary():
     report = judge_summary(rows)
     assert report['totalTokens'] == 24 and report['modelRequests'] == 2
     assert report['rewards'] == dict(baseline=.8, rsi=.9)
+
+
+def test_completed_rsi_only_run_does_not_remain_running_or_need_judge():
+    assert completed_status(6, True) is True
+    assert completed_status(5, True) is False
+    assert completed_status(6, False) is False
+
+
+def test_rsi_source_requires_matching_manifest_and_successful_isolated_runs():
+    manifest = selected_manifest(Bank(), ['finance-cancelled_payments-01'])
+    source = dict(schemaVersion=2, manifest=manifest,
+                  protocol=dict(rsi='graph_rsi', rsiLearning=True, startFromEmpty=True),
+                  pairs=[dict(taskId='finance-cancelled_payments-01', runs=dict(rsi=run('finance-cancelled_payments-01')))])
+    selected = rsi_source_pairs(source, manifest)
+    assert selected['finance-cancelled_payments-01']['runs']['rsi']['taskId'] == 'finance-cancelled_payments-01'

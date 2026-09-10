@@ -1,3 +1,5 @@
+import json
+
 from backend.business_report import evidence_rows, render_report
 
 
@@ -44,3 +46,26 @@ async def test_report_and_human_review_endpoints(tmp_path, monkeypatch):
             report = await client.get('/api/taskbank/runs/' + key + '/report')
             assert 'reviewed' in report.text and '协议测试' in report.text
             assert (await client.post('/api/taskbank/runs/' + key + '/review', json={'factualConsistency': 3, 'requirementCoverage': 1, 'readability': 2})).status_code == 400
+
+
+async def test_online_experiment_trace_and_report_endpoints(tmp_path, monkeypatch):
+    import httpx
+    from backend.app import create_app
+    from backend.service import RunService
+    from test_task_runner import Bank
+    class ReportBank(Bank):
+        def task(self, key):
+            return dict(super().task(key), title='在线实验报告', recordCount=1, asOf='2026-09-10', sourceUrl='https://example.org')
+    bank = ReportBank(tmp_path)
+    monkeypatch.setattr('backend.app.TaskBank', lambda: bank)
+    run_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    run = dict(id=run_id, taskId='sample', status='completed', evaluation=dict(status='passed', issues=[]),
+               submission=dict(metrics=dict(count=1), selectedIds=['sample'], summary='saved'), events=[])
+    path = tmp_path / 'artifacts' / 'online-e2e' / 'example' / 'baseline' / 'runs'
+    path.mkdir(parents=True)
+    (path / (run_id + '.json')).write_text(json.dumps(run))
+    app = create_app(RunService(tmp_path / 'legacy'))
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            assert (await client.get(f'/api/online-e2e/example/runs/baseline/{run_id}')).json()['id'] == run_id
+            assert (await client.get(f'/api/online-e2e/example/runs/baseline/{run_id}/report')).status_code == 200

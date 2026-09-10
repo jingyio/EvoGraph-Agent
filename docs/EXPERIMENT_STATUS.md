@@ -14,6 +14,7 @@
 | G-Agent 式三路径 / Persistent TinyEdge | 注入协议回归 + 五条正常 train 尝试，见 `g-agent-local-composition-validation` | 回归实际执行两个片段组合；真实 train 未形成 support>=2 的可组合片段，未触发 Composition | 不把注入机制测试说成模型性能结果；真实尝试含编译歧义和模型超时，未观察到成本、延迟或大小模型协同收益 |
 | 最小 AutoTool / TIG 惯性预检 | 三条正常 train 模型轨迹 `35234b93`、`e8312d69`、`f24650ef`；`motif_first` `381f3fa5` | 三条 train 均通过，产生模型来源路径/参数契约；预检通过且惯性尝试 1 次，`finance_get_order_payments` 支持 2、CIPS 0.1348 < 0.55，拒绝且回到模型 | 没有实际惯性调用、没有模型/token/工具/延迟净收益；不扩大成对评测、不降低阈值制造命中。较早 `3ae50cb8` 暴露并发上下文误用，已保留并用串行边规则修正，不能作为机制收益证据。 |
 | 36-task 在线训练对照 | `online-e2e-train-v1`；36 个固定 train 任务 × `plan_react` / `motif_first`，六轮串行 | 基线 36/36、601,435 token、737.62s；RSI 35/36、766,076 token、890.26s。RSI Fast 5 次，Composition/AutoTool 运行时调用均为 0；双顺序 Judge 平均 reward 两臂同为 0.9714，另耗 339,938 token | 历史 Workflow 在 `support-channels-02...06` 实际复用且跳过 Plan，但全量 RSI token +27.4%、延迟 +20.7%，并有一次确定性失败；不能主张总体净收益。完整协议、审计修复和结果见 `online-e2e-train-results-2026-09-10.md`。 |
+| 修复后 36-task 分时匹配对照 | RSI source `online-rsi-graph-precheck-v3` + 新 Baseline `online-rsi-graph-matched-v4`；同一固定 train manifest | Baseline 32/36、509,630 token、648.18s；RSI 36/36、386,813 token、502.10s；RSI token -24.1%，模型请求 -93，工具 +65；Judge 72 请求/336,757 token，平均 reward 0.9768/0.9746 | 记录模型名、预算、契约和源码 runtime revision 均匹配，但 provider endpoint 历史指纹未保存，且为分时执行；可主张匹配记录下 token/结构化质量结果，不能称严格同时段或独立 Judge 结论。30% token 目标未达到；六 family 中 `cancelled_payments` +77.7% 为负收益，其余五个获益。详见 `online-rsi-matched-results-2026-09-10.md`。 |
 | 当前 Judge 协议 | Plan 对照中的四对；固定对象输出、双顺序 | 财务顺序分歧；客服渠道/工单讨论平局；失败的近期投诉样例 RSI reward 更高 | 四对不是全30对；同模型 Judge；失败样例是目的性选择，不是随机总体质量样本 |
 
 `online-e2e-train-v1` 的只读审计确认 25 次跨场景 TinyEdge 维护异常、两条能力/Plan 语义偏移轨迹以及无界重复报告失败。修复设计见 [online-rsi-repair-design-2026-09-10.md](online-rsi-repair-design-2026-09-10.md)。该实验保留为负向结果；共享报告恢复修复也会影响基线，不能把它与修复后的新实验连续累计。
@@ -46,8 +47,8 @@
 4. 全任务报告质量等价或更好；独立 Judge 与人工校准尚不足。
 5. 完整训练摊销、美元成本、真实企业写入流程完成能力。
 6. Persistent TinyEdge 在真实 train 流量中的可组合覆盖、质量与成本收益；本轮只有注入机制验证，不能替代。
-7. AutoTool 在真实任务上接受惯性调用后的质量、净成本和重复可靠性。当前只证明保守学习、拒绝和恢复路径正确；默认不能宣称收益。
-8. 整体在线 RSI 的累计成本收益。本轮完整训练流得到负收益，下一步必须先诊断失败/覆盖边界，不能通过重跑或调阈值追逐正结果。
+7. 多代结构进化：新 36-task 流证明 G0 形成和 Fast 复用，但没有正常反馈产生的 G1/G2。
+8. 独立/同时段的质量与延迟结论：新对照的 Judge 与执行器同模型且分时执行，不能替代独立裁判、重复实验或同时段性能测量。
 
 ## 当前问题
 

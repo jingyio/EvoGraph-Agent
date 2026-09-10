@@ -7,15 +7,15 @@
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 本轮已完成隔离的 36-task 在线训练对照 `online-e2e-train-v1`，源码提交见后续 Git log；运行 artifacts 不入 Git。只读审计确认跨场景 TinyEdge 维护异常、能力/语义偏移与重复报告长尾；修复代码待新的隔离 train 预检验证，不能与旧结果拼接。临时验证服务 `4320` 已停止。旧 `4317` 服务不是热重载，不能用它验证新路径。
+- 旧 `online-e2e-train-v1` 保留为负收益历史。修复后 RSI-only `online-rsi-graph-precheck-v3` 为 36/36、386,813 token、30 次 Fast 复用、0 维护错误；新 Baseline `online-rsi-graph-matched-v4` 为 32/36、509,630 token。分时匹配记录下 RSI token -24.1%，未达到 30% 目标，详情见 `docs/online-rsi-matched-results-2026-09-10.md`。运行 artifacts 不入 Git。
 
 ## 已完成
 
 任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 加入 Persistent TinyEdge 规范化 identity、train-only 连续读取片段挖掘、Fast/Composition/Fallback 路由、composition 模型角色和片段来源/绑定/执行 UI；不做 Transient TinyEdge Group。详细边界和实证见 [g-agent-local-composition-design-2026-09-10.md](../docs/g-agent-local-composition-design-2026-09-10.md) 与 [g-agent-local-composition-validation-2026-09-10.md](../docs/g-agent-local-composition-validation-2026-09-10.md)。
 
-本轮追加最小 AutoTool：`backend/tool_inertia.py` 持久化模型来源、通过评分的 train 串行工具路径与无业务值参数契约；`motif_first` 在 `defer` 读取交接处至多尝试一次只读惯性调用，`motif_only` 是关闭对照。真实预检三条 train 均通过，`motif_first` 一次尝试因 CIPS 0.1348 低于 0.55 拒绝，未实际调用工具、未观察到收益；并发批不形成惯性上下文。详情见 [autotool-inertia-design-2026-09-10.md](../docs/autotool-inertia-design-2026-09-10.md)。
+AutoTool/TIG 惯性执行已退役；保留 `backend/autotool.py` 的 BM25、参数契约和历史轨迹兼容，但不再调优触发或把历史拒绝写成收益。
 
-本轮端到端在线实验固定 36 个不同 train 实例，基线 `plan_react` 不学习、RSI `motif_first` 从独立空经验串行更新。实际结果：基线 36/36、601,435 token、737.62s；RSI 35/36、766,076 token、890.26s。唯一 RSI 失败为 `finance-installments-06` 的绑定歧义恢复后模型预算耗尽。历史图由 `support-channels-01` 产生并在后续五条同 family 任务 Fast 复用，确实省掉完整 Plan；Composition、TinyEdge 和 AutoTool 运行时调用均未触发。Judge 为同一模型，36 对双顺序额外 339,938 token，平均 reward 两臂同为 0.9714。完整结论、失败和审计修复见 [online-e2e-train-results-2026-09-10.md](../docs/online-e2e-train-results-2026-09-10.md)。
+修复后对照复用 RSI-only 的完整原始运行，检查 frozen manifest、36 条成功/usage、空经验与 train-only 顺序、模型名、预算、工具契约、任务哈希和 runtime revision 后，在新目录仅补跑 Baseline。Baseline 四个 `cancelled_payments` 样本有 `evidence_coverage` 有界失败；RSI 36/36。六个 G0 首次保存后实际被后续各五条同 family 任务使用；没有 G1/G2 或 Composition。Judge 72 请求、336,757 token，平均 reward Baseline/RSI 0.9768/0.9746，但同模型且 18 对顺序分歧，不作质量优劣证明。
 
 最近功能提交：`9520ae7` Judge/reward/Plan对照；`e9e9df1` 强基线评测/报告；`e15d7c1` 执行回放；`f50d97d` 在线图进化。
 
@@ -43,7 +43,7 @@ npm run build
 
 - `artifacts/taskbank/records.sqlite3`、`gold.json`：冻结记录/仅供硬评分的参考答案。
 - `artifacts/taskbank-runs/<id>.json`：原始运行。
-- `artifacts/online-graphs.json`：已有图版本、`workflows` / `tinyEdges` 和 schema 3 的 `toolInertia`；TIG 仅保存路径/参数契约，不保存旧业务值。
+- `artifacts/online-graphs.json`：已有图版本、`workflows` / `tinyEdges` 与历史兼容字段；不再更新或执行 TIG 惯性动作。
 - `artifacts/paired-evaluations/<id>.json`、`sources/`：成对实验与新实验源码快照。
 - `artifacts/llm-judgements/<id>.json`、`inputs/`：裁判与输入。
 
@@ -51,7 +51,7 @@ npm run build
 
 ## 下一步
 
-在线实验未显示总体收益，默认保持 AutoTool 关闭。下一项应以 `finance-installments-06` 的绑定歧义、Composition 覆盖不足和局部 Fast 命中未摊销为明确问题，先在正常 train 流量中修复/积累证据；不得重跑本轮任务直到结果好看，冻结方案前不扩展 validation/test，test 反馈不得回写 Motif/TinyEdge/TIG。
+当前可展示结论是在线经验积累与 Fast 复用，并在五个 family 降低成本；`cancelled_payments` 是真实负收益，30% 全量目标未达到。下一项只能从这个负收益和 Baseline evidence 覆盖失败提出正常 train 假设；不得重跑本轮任务直到结果好看，冻结方案前不扩展 validation/test，test 反馈不得回写 Workflow/TinyEdge。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 
