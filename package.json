@@ -19,7 +19,8 @@
     "demo": ".venv/bin/python -m backend demo",
     "platforms": ".venv/bin/python -m backend platforms",
     "pipeline:platforms": ".venv/bin/python -m backend.platform_pipeline",
-    "verify:platforms": ".venv/bin/python -m backend.verify_platforms"
+    "verify:platforms": ".venv/bin/python -m backend.verify_platforms",
+    "test:frontend": "node --experimental-strip-types --test tests_frontend/*.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

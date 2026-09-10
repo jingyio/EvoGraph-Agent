@@ -156,3 +156,38 @@ async def test_http_run_endpoints_and_unknown_run(tmp_path, monkeypatch):
             assert online.json()['versions'] == []
             assert (await client.get('/api/taskbank/runs/missing')).status_code == 404
             assert (await client.post('/api/taskbank/runs/' + key + '/cancel', json={})).json()['cancelled'] is False
+
+
+async def test_trace_captures_pending_model_and_concurrent_tool_correlation(tmp_path):
+    entered, release = asyncio.Event(), asyncio.Event()
+    class Gated(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                entered.set()
+                await release.wait()
+            return await super().complete(messages, tools)
+    runner = TaskRunner(Bank(tmp_path), lambda role: Gated(role, []))
+    run = await runner.start(TaskRunRequest(taskId='trace'))
+    await entered.wait()
+    assert run['traceVersion'] == 2 and run['startedAt']
+    start = next(e for e in run['events'] if e['type'] == 'model_start')
+    assert start['detail']['availableTools'] == ['submit_plan']
+    assert start['metrics']['modelRequests'] == 1
+    assert not any(e['type'] == 'model' for e in run['events'])
+    release.set()
+    await runner.tasks[run['id']]
+    response = next(e for e in run['events'] if e['type'] == 'model')
+    assert response['detail']['requestId'] == start['detail']['requestId']
+    assert response['detail']['toolCalls'][0]['function']['name'] == 'submit_plan'
+    assert start['metrics']['inputTokens'] == 0  # Snapshot did not mutate.
+    actions = {e['detail']['callId']: e for e in run['events'] if e['type'] == 'action'}
+    for e in run['events']:
+        if e['type'] == 'observation':
+            assert e['detail']['callId'] in actions
+            assert e['elapsedMs'] >= actions[e['detail']['callId']]['elapsedMs']
+    graph_event = next(e for e in run['events'] if e['type'] == 'graph_created')
+    assert graph_event['detail']['nodes'] == run['graph']['nodes']
+    assert run['events'][-1]['type'] == 'finished'
+    assert run['events'][-1]['metrics'] == run['metrics']
+    assert run['events'][-1]['detail']['evaluation']['status'] == 'passed'
+    assert run['metrics']['modelRequests'] == 3 and run['metrics']['toolCalls'] == 2

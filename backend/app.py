@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 import json
+from copy import deepcopy
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, FileResponse, Response
@@ -63,19 +64,19 @@ def create_app(service=None):
                              'test': 'frozen-no-feedback', 'score': 'structured-facts-and-evidence'}}
 
     @app.get('/api/taskbank/runs')
-    def task_run_list():
-        rows = sorted(task_runner.runs.values(), key=lambda r: r['createdAt'], reverse=True)[:50]
-        return {'scheduler': task_runner.status(), 'runs': [{k: r[k] for k in ['id', 'taskId', 'status', 'strategy', 'phase', 'models', 'metrics', 'evaluation']} for r in rows]}
+    async def task_run_list(taskId: Optional[str] = None, limit: int = Query(50, ge=1, le=500)):
+        rows = sorted((r for r in task_runner.runs.values() if not taskId or r['taskId'] == taskId), key=lambda r: r['createdAt'], reverse=True)[:limit]
+        return {'scheduler': task_runner.status(), 'runs': [{k: r[k] for k in ['id', 'taskId', 'status', 'strategy', 'phase', 'createdAt', 'models', 'metrics', 'evaluation']} for r in rows]}
 
     @app.post('/api/taskbank/runs', status_code=202)
     async def task_run_start(request: TaskRunRequest):
         return {'id': (await task_runner.start(request))['id']}
 
     @app.get('/api/taskbank/runs/{key}')
-    def task_run_get(key: str):
+    async def task_run_get(key: str):
         if key not in task_runner.runs:
             raise HTTPException(404, 'Task run not found')
-        result = dict(task_runner.runs[key])
+        result = deepcopy(task_runner.runs[key])
         result['comparison'] = task_runner.compare_with_baseline(task_runner.runs[key])
         result['planReactComparison'] = task_runner.compare_with_strategy(task_runner.runs[key], 'plan_react') if result.get('strategy') in ['autotool', 'graph_rsi'] else None
         return result

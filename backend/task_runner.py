@@ -152,7 +152,7 @@ class TaskRunner:
                     self.active_runs += 1
                     self.peaks['runs'] = max(self.peaks['runs'], self.active_runs)
                     try:
-                        run.update(status='running', phase='开始执行')
+                        run.update(status='running', phase='开始执行', startedAt=now(), traceVersion=2)
                         await self.execute(run, task, tools, planner, executor)
                     finally:
                         self.active_runs -= 1
@@ -169,6 +169,10 @@ class TaskRunner:
                     overhead = run.get('evolution', {}).get('maintenanceMs', 0)
                     run['metrics']['durationMs'] += overhead
                 run['finishedAt'] = now()
+                run['events'].append(dict(seq=len(run['events']) + 1, at=run['finishedAt'],
+                    elapsedMs=run['metrics']['durationMs'], type='finished', title=run['phase'],
+                    detail=dict(status=run['status'], evaluation=deepcopy(run['evaluation']), evolution=deepcopy(run.get('evolution'))),
+                    metrics=deepcopy(run['metrics'])))
                 self.save(run)
                 self.tasks.pop(run['id'], None)
         background = asyncio.create_task(work())
@@ -192,9 +196,10 @@ class TaskRunner:
                     dict(role='user', content=task['task'])]
 
         def event(kind, title, detail=None):
-            run['events'].append(dict(seq=len(run['events']) + 1, at=now(), type=kind, title=title, detail=deepcopy(detail)))
             metrics['durationMs'] = round((time.monotonic() - started) * 1000)
-            if kind in ['model', 'plan', 'fallback', 'validation']:
+            run['events'].append(dict(seq=len(run['events']) + 1, at=now(), elapsedMs=metrics['durationMs'],
+                type=kind, title=title, detail=deepcopy(detail), metrics=deepcopy(metrics)))
+            if kind in ['model_start', 'model_error', 'model', 'plan', 'fallback', 'validation']:
                 self.save(run)
 
         async def complete(provider, phase, history, available):
@@ -208,10 +213,13 @@ class TaskRunner:
                 metrics['modelRequests'] += 1
                 pm = run['phaseMetrics'][phase]
                 pm['requests'] += 1
+                request_id = 'model_' + str(uuid4())
                 try:
+                    event('model_start', phase, dict(requestId=request_id, model=provider.model, availableTools=[t.name for t in available]))
                     result = await provider.complete(history, available)
-                except BaseException:
+                except BaseException as error:
                     metrics['usageComplete'] = pm['usageComplete'] = False
+                    event('model_error', phase, dict(requestId=request_id, error=type(error).__name__))
                     raise
                 finally:
                     self.active_models -= 1
@@ -226,7 +234,9 @@ class TaskRunner:
                         metrics['reasoningTokens'] = None
                 else:
                     metrics['usageComplete'] = pm['usageComplete'] = False
-                event('model', phase, dict(model=provider.model, usage=usage))
+                message = result.get('message') or {}
+                event('model', phase, dict(requestId=request_id, model=provider.model, usage=usage,
+                    content=message.get('content'), toolCalls=message.get('tool_calls') or []))
                 if result.get('finishReason') in ['length', 'content_filter']:
                     raise ValueError('模型响应未完整结束')
                 return result
@@ -297,7 +307,9 @@ class TaskRunner:
                     trace['signature'] = canonical([name, trace['arguments']])
             entry['observation'] = deepcopy(observation)
             trace['ok'] = observation['ok']
-            event('observation', name, observation)
+            event('observation', name, dict(observation, callId=call['id'], nodeId=node_id, executor=owner))
+            if isinstance(observation.get('result'), dict) and 'evaluation' in observation['result']:
+                event('evaluation', '结果校验', observation['result']['evaluation'])
             return observation
 
         def append_observations(entries, include_assistant):
@@ -348,6 +360,7 @@ class TaskRunner:
                         run['graphSelection'] = selection
                         event('graph', '本地工具图选择', selection)
                         run['graph'] = dict(status='running', nodes=nodes, nodeStates={n['id']: 'pending' for n in nodes})
+                        event('graph_created', '读取图已就绪', dict(nodes=nodes, evolution=run.get('evolution')))
                         run['phase'] = '并发读取图执行'
                         start = len(ledger)
                         async def graph_invoke(name, args, node):
@@ -358,10 +371,10 @@ class TaskRunner:
                             return obs['result']
                         def node_event(key, state):
                             run['graph']['nodeStates'][key] = state
-                            event('graph', key + ' ' + state)
+                            event('graph', key + ' ' + state, dict(nodeId=key, state=state))
                         def elide_event(key, count):
                             metrics['elidedToolCalls'] += count
-                            event('graph', key + ' 复用上游字段，消除工具调用', {'elidedToolCalls': count})
+                            event('graph', key + ' 复用上游字段，消除工具调用', {'elidedToolCalls': count, 'nodeId': key})
                         def recovery_event(key, detail):
                             metrics['recoveryToolCalls'] += 1
                             event('recovery', key + ' 缺失字段已补查', detail)
