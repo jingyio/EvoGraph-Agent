@@ -14,7 +14,8 @@ from .graph_store import write_private
 from .model_client import ModelClient, ModelOptions
 from .tools import Tool, ToolContext, object_schema
 from .autotool import canonical, retrieve_tools
-from .intent_graph import reject_semantic_narrowing, prune_unrequested_steps, select_retrieved_graph, compile_intent_graph, execute_graph
+from .intent_graph import (inclusive_task_constraints, reject_semantic_narrowing, prune_unrequested_steps,
+                           select_retrieved_graph, compile_intent_graph, execute_graph)
 from .gagent import build_data_plan, build_coarse_plan
 from .online_evolution import OnlineEvolution
 from .agent_prompts import STRONG_REACT_GUIDANCE
@@ -178,7 +179,8 @@ class TaskRunner:
                    metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
-                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0),
+                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0,
+                                semanticConstraintGuards=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
@@ -429,6 +431,12 @@ class TaskRunner:
                     run['plan'] = plan
                     event('plan', '数据获取计划', plan)
                     messages.append(dict(role='user', content='当前数据获取计划：' + json.dumps(plan, ensure_ascii=False)))
+                    constraints = inclusive_task_constraints(task['task'])
+                    if constraints:
+                        run['semanticConstraints'] = constraints
+                        metrics['semanticConstraintGuards'] += len(constraints)
+                        event('semantic_constraint', '任务包含式条件已固定', constraints)
+                        messages.append(dict(role='user', content='执行时必须保留原任务条件，不得以计划或观察改写：' + ' '.join(constraints)))
                     if run['strategy'] in ['autotool', *graph_strategies]:
                         run['phase'] = 'AutoTool 本地检索与图编译'
                         if selected:
@@ -598,7 +606,9 @@ class TaskRunner:
                             refs = sorted(context.evidence)
                             messages.append(dict(role='user', content='报告仅缺少或格式错误的 evidenceIds。不要重新读取业务数据；请只调用 publish_report，evidenceIds 必须使用当前观察中的完整引用：' + json.dumps(refs, ensure_ascii=False)))
                         else:
-                            messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。'))
+                            constraints = run.get('semanticConstraints') or []
+                            messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。' +
+                                                 ('原任务条件仍然有效：' + ' '.join(constraints) if constraints else '')))
         try:
             await asyncio.wait_for(workflow(), timeout=config.RUN_TIMEOUT)
         except BudgetExceeded as error:

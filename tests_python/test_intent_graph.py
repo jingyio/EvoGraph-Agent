@@ -3,7 +3,8 @@ from copy import deepcopy
 import pytest
 from jsonschema import ValidationError
 from backend.autotool import retrieve_tools
-from backend.intent_graph import reject_semantic_narrowing, select_retrieved_graph, compile_intent_graph, execute_graph, validate_plan
+from backend.intent_graph import (inclusive_task_constraints, reject_semantic_narrowing, select_retrieved_graph,
+                                  compile_intent_graph, execute_graph, validate_plan)
 from backend.tools import Tool, object_schema
 
 
@@ -71,6 +72,13 @@ def test_task_authority_rejects_explicit_inclusive_to_exact_narrowing():
     with pytest.raises(ValueError, match='narrows'):
         reject_semantic_narrowing({'steps': [dict(id='payments', intent='筛选分期数为 6 的支付记录', dependencies=[])]}, task)
     reject_semantic_narrowing({'steps': [dict(id='payments', intent='筛选分期数达到 6 的支付记录', dependencies=[])]}, task)
+
+
+def test_task_constraint_extractor_keeps_inclusive_meaning_without_task_answers():
+    assert inclusive_task_constraints('找出支付分期数达到 6，且金额不少于 20 的记录') == [
+        '任务中的“达到 6”是包含式比较，必须按 >= 6 解释，不能缩窄为等于 6。',
+        '任务中的“不少于 20”是包含式比较，必须按 >= 20 解释，不能缩窄为等于 20。',
+    ]
 
 
 async def test_graph_reuses_upstream_fields_and_elides_record_calls():

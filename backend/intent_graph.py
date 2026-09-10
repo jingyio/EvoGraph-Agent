@@ -77,6 +77,21 @@ def prune_unrequested_steps(plan, task_text):
     return result, removed
 
 
+def inclusive_task_constraints(task_text):
+    """Return explicit inclusive constraints already stated by the task text.
+
+    This describes comparison semantics only. It does not identify records,
+    calculate metrics, or turn a model-only selection into a compiled filter.
+    """
+    seen, constraints = set(), []
+    for phrase, value in re.findall(r'(至少|达到|不少于|不低于|大于等于)\s*(\d+)', task_text):
+        key = (phrase, value)
+        if key not in seen:
+            seen.add(key)
+            constraints.append(f'任务中的“{phrase} {value}”是包含式比较，必须按 >= {value} 解释，不能缩窄为等于 {value}。')
+    return constraints
+
+
 def reject_semantic_narrowing(plan, task_text):
     """Task text is authoritative when a Plan explicitly narrows an inclusive number condition."""
     inclusive = re.findall(r'(?:至少|达到|不少于|不低于|大于等于)\s*(\d+)', task_text)

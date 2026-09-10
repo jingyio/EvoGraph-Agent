@@ -179,6 +179,31 @@ async def test_complete_report_evidence_is_canonicalized_for_baseline_and_graph_
         assert any(event['type'] == 'report_evidence' for event in run['events'])
 
 
+async def test_plan_and_execution_receive_task_derived_inclusive_constraint(tmp_path):
+    histories = []
+    class InclusiveBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', family='installments', split='train',
+                        task='找出支付记录分期数达到 6 的订单并发布结果', suggestedBudget={'toolCalls': 80})
+    class InclusiveModel(Model):
+        async def complete(self, messages, tools):
+            histories.append(deepcopy(messages))
+            if self.role == 'planner':
+                return await super().complete(messages, tools)
+            if any(message.get('tool_call_id') == 'finance_publish_report' for message in messages):
+                return result()
+            if not any(message.get('role') == 'tool' for message in messages):
+                return result('finance_list_orders', {'page': 1, 'pageSize': 50})
+            return result('finance_publish_report', {})
+    runner = TaskRunner(InclusiveBank(tmp_path), lambda role: InclusiveModel(role, histories), learning_enabled=False)
+    run = await runner.start(TaskRunRequest(taskId='inclusive', strategy='plan_react'))
+    await runner.tasks[run['id']]
+    assert run['evaluation']['status'] == 'passed'
+    assert run['semanticConstraints'] == ['任务中的“达到 6”是包含式比较，必须按 >= 6 解释，不能缩窄为等于 6。']
+    assert run['metrics']['semanticConstraintGuards'] == 1
+    assert any('>= 6' in message.get('content', '') for history in histories for message in history if message.get('role') == 'user')
+
+
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
     runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
     baseline = dict(id='baseline', taskId='same', strategy='react', status='completed', createdAt='2026-09-10T01:00:00Z',
