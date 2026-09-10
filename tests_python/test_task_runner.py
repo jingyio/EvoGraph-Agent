@@ -136,6 +136,15 @@ def test_report_evidence_canonicalization_requires_complete_observations():
     assert missing is None
 
 
+def test_pagination_guard_requires_sequential_same_size_pages():
+    assert TaskRunner.pagination_violation(None, {'page': 1, 'pageSize': 50}) is None
+    first = dict(page=1, pageSize=50, mayHaveMore=True)
+    assert TaskRunner.pagination_violation(first, {'page': 2, 'pageSize': 10}) == '分页 continuation 必须沿用上一页 pageSize'
+    assert TaskRunner.pagination_violation(first, {'page': 3, 'pageSize': 50}) == '分页 continuation 必须紧接上一页 page'
+    assert TaskRunner.pagination_violation(first, {'page': 2, 'pageSize': 50}) is None
+    assert TaskRunner.pagination_violation(dict(page=2, pageSize=50, mayHaveMore=False), {'page': 3, 'pageSize': 50}) == '上一页已声明没有更多记录，拒绝不必要的分页读取'
+
+
 async def test_complete_report_evidence_is_canonicalized_for_baseline_and_graph_rsi(tmp_path):
     class EvidenceBank(Bank):
         def task(self, key):
