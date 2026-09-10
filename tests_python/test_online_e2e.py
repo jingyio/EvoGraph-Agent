@@ -1,4 +1,4 @@
-from scripts.run_online_e2e import TYPES, judge_summary, result_report, summary, task_manifest
+from scripts.run_online_e2e import TYPES, judge_summary, result_report, selected_manifest, summary, task_manifest
 
 
 class Bank:
@@ -11,8 +11,8 @@ class Bank:
 def run(task_id, status='completed', evaluation='passed', **extra):
     return dict(taskId=task_id, status=status, evaluation=dict(status=evaluation, issues=[]),
                 metrics=dict(inputTokens=10, outputTokens=2, modelRequests=1, toolCalls=2, toolErrors=0,
-                             durationMs=100, usageComplete=True, inertiaAttempts=0, inertiaAccepted=0,
-                             inertiaCalls=0, inertiaErrors=0, inertiaRejected=0, inertiaQueryMs=0), **extra)
+                             durationMs=100, usageComplete=True, reportAttempts=1, failedReportAttempts=0,
+                             reportRecoveryBlockedReads=0), **extra)
 
 
 def test_online_manifest_has_fixed_distinct_train_instances():
@@ -21,20 +21,20 @@ def test_online_manifest_has_fixed_distinct_train_instances():
     assert len({row['taskId'] for row in manifest}) == 36
     assert [row['family'] for row in manifest[:6]] == [family for _, family in TYPES]
     assert [row['round'] for row in manifest[::6]] == [1, 2, 3, 4, 5, 6]
+    assert [row['taskId'] for row in selected_manifest(Bank(), ['tickets-labels-02', 'finance-installments-01'])] == ['tickets-labels-02', 'finance-installments-01']
 
 
 def test_online_summary_keeps_failures_and_local_maintenance():
     rows = [dict(round=1, taskId='finance-cancelled_payments-01', runs=dict(
         baseline=run('finance-cancelled_payments-01'),
         rsi=run('finance-cancelled_payments-01', status='failed', evaluation='failed', error='timeout',
-                evolution=dict(planningPath='fast', lookupMs=1.2, maintenanceMs=3.4),
-                toolInertiaMaintenance=dict(updatedPaths=1, updatedParameterEdges=1, updateMs=.2, persistMs=.3))))]
+                evolution=dict(planningPath='fast', lookupMs=1.2, maintenanceMs=3.4))))]
     report = summary(rows)
     assert report['arms']['rsi']['attempts'] == 1
     assert report['arms']['rsi']['passed'] == 0
     assert report['arms']['rsi']['failures'][0]['error'] == 'timeout'
     assert report['arms']['rsi']['diagnostics']['evolutionMaintenanceMs'] == 3.4
-    assert report['arms']['rsi']['diagnostics']['inertiaUpdates'] == 1
+    assert report['arms']['rsi']['diagnostics']['reportAttempts'] == 1
     assert 'RSI' in result_report(dict(id='x', status='running', summary=report, rounds=[], evolutionChain=[]))
 
 

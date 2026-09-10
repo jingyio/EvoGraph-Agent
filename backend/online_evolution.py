@@ -11,7 +11,6 @@ from .graph import ordered_nodes, contract_hash
 from .graph_store import write_private
 from .intent_graph import compile_intent_graph
 from .tinyedge import TinyEdgeMaintenanceError, mine as mine_tinyedges, candidate_rows, compose as compose_tinyedges
-from . import tool_inertia
 
 
 class OnlineEvolution:
@@ -21,7 +20,7 @@ class OnlineEvolution:
         self.versions = []
         self.workflows = []
         self.tiny_edges = []
-        self.tool_inertia = tool_inertia.empty()
+        self.tool_inertia = dict(schemaVersion=1, toolPaths=[], parameterEdges=[])
 
     def restore(self):
         if self.path.exists():
@@ -29,15 +28,14 @@ class OnlineEvolution:
             self.versions = payload.get('versions', [])
             self.workflows = payload.get('workflows', [])
             self.tiny_edges = payload.get('tinyEdges', [])
-            self.tool_inertia = payload.get('toolInertia', tool_inertia.empty())
+            self.tool_inertia = payload.get('toolInertia', self.tool_inertia)
 
-    def save(self, inertia_info=None):
+    def save(self):
         started = time.perf_counter()
         write_private(self.path, dict(schemaVersion=3, versions=self.versions,
                                       workflows=self.workflows, tinyEdges=self.tiny_edges,
                                       toolInertia=self.tool_inertia))
-        if inertia_info is not None:
-            inertia_info['persistMs'] = round((time.perf_counter() - started) * 1000, 3)
+        return round((time.perf_counter() - started) * 1000, 3)
 
     def context_key(self, task, tools):
         # Only the taskbank's explicit record-count/clock slots are generalized.
@@ -139,13 +137,6 @@ class OnlineEvolution:
                                materializedCount=0, totalMaterializedCount=len(self.tiny_edges))
         info['tinyEdgeMaintenance'] = maintenance
 
-    def observe_tool_inertia(self, run, task, tools):
-        """Persist only model-origin, successful normal train trajectories."""
-        info = tool_inertia.update(self.tool_inertia, run, task, tools)
-        if info.get('updatedPaths') or info.get('updatedParameterEdges'):
-            self.save(info)
-        return info
-
     @staticmethod
     def safe_plan(plan, nodes, tools):
         # Store field requirements, not old record IDs, dates, answers or model prose.
@@ -192,7 +183,6 @@ class OnlineEvolution:
             if task['split'] != 'train':
                 info['note'] = '验证任务仅累计适用证据；不生成结构修改'
                 return
-            info['toolInertia'] = tool_inertia.update(self.tool_inertia, run, task, tools)
             graph = run.get('graph')
             if not graph or not run.get('plan') or not passed:
                 info['note'] = '无通过评分的读取图或有效修复，失败保留待分析'
@@ -265,4 +255,4 @@ class OnlineEvolution:
                 info['note'] = ('保存初始图；无进一步结构修改' if info['generatedVersionIds'] else '结构未变化，累计证据；不虚增版本') if not run.get('fallback') else '未提取可验证修复，保留问题；下次正常任务重新规划'
         finally:
             info['maintenanceMs'] = round((time.perf_counter() - started) * 1000, 3)
-            self.save(info.get('toolInertia'))
+            info['persistMs'] = self.save()

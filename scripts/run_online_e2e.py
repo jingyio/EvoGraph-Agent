@@ -52,17 +52,31 @@ def task_manifest(bank):
     return selected
 
 
+def selected_manifest(bank, task_ids=None):
+    manifest = task_manifest(bank)
+    if not task_ids:
+        return manifest
+    by_id = {row['taskId']: row for row in manifest}
+    selected = []
+    for task_id in task_ids:
+        if task_id not in by_id:
+            raise ValueError('task_not_in_fixed_train_manifest:' + task_id)
+        selected.append(deepcopy(by_id[task_id]))
+    if len(selected) != len(set(task_ids)):
+        raise ValueError('task_ids_not_unique')
+    return selected
+
+
 SCHEMA_VERSION = 2
 
 
 def compact(run):
-    return deepcopy({key: run.get(key) for key in ['id', 'taskId', 'strategy', 'status', 'phase', 'models', 'metrics', 'phaseMetrics', 'evaluation', 'evolution', 'compositionPlan', 'graphSelection', 'toolInertia', 'toolInertiaMaintenance', 'fallback', 'error', 'createdAt', 'startedAt', 'finishedAt']})
+    return deepcopy({key: run.get(key) for key in ['id', 'taskId', 'strategy', 'status', 'phase', 'models', 'metrics', 'phaseMetrics', 'evaluation', 'evolution', 'compositionPlan', 'graphSelection', 'fallback', 'error', 'createdAt', 'startedAt', 'finishedAt']})
 
 
 def experience_summary(runner):
     evolution = runner.evolution
     return dict(versions=len(evolution.versions), workflows=len(evolution.workflows), tinyEdges=len(evolution.tiny_edges),
-                toolPaths=len(evolution.tool_inertia.get('toolPaths', [])), parameterEdges=len(evolution.tool_inertia.get('parameterEdges', [])),
                 graphIds=[row['id'] for row in evolution.versions])
 
 
@@ -73,7 +87,6 @@ def aggregate(values, key):
 def diagnostics(runs):
     evolution = [run.get('evolution') or {} for run in runs]
     metrics = [run.get('metrics') or {} for run in runs]
-    inertia = [(run.get('toolInertiaMaintenance') or (run.get('evolution') or {}).get('toolInertia') or {}) for run in runs]
     composition = [run.get('compositionPlan') or {} for run in runs]
     paths = {}
     for item in evolution:
@@ -86,11 +99,8 @@ def diagnostics(runs):
         graphLookupMs=round(aggregate(evolution, 'lookupMs'), 3),
         compositionLocalMs=round(sum(item.get('compositionLocalMs', composition[index].get('localMs', 0)) or 0 for index, item in enumerate(evolution)), 3),
         evolutionMaintenanceMs=round(aggregate(evolution, 'maintenanceMs'), 3),
-        inertiaAttempts=aggregate(metrics, 'inertiaAttempts'), inertiaAccepted=aggregate(metrics, 'inertiaAccepted'),
-        inertiaCalls=aggregate(metrics, 'inertiaCalls'), inertiaErrors=aggregate(metrics, 'inertiaErrors'),
-        inertiaRejected=aggregate(metrics, 'inertiaRejected'), inertiaQueryMs=round(aggregate(metrics, 'inertiaQueryMs'), 3),
-        inertiaUpdates=aggregate(inertia, 'updatedPaths'), parameterEdgeUpdates=aggregate(inertia, 'updatedParameterEdges'),
-        inertiaUpdateMs=round(aggregate(inertia, 'updateMs'), 3), inertiaPersistMs=round(aggregate(inertia, 'persistMs'), 3))
+        reportAttempts=aggregate(metrics, 'reportAttempts'), failedReportAttempts=aggregate(metrics, 'failedReportAttempts'),
+        blockedRecoveryReads=aggregate(metrics, 'reportRecoveryBlockedReads'))
 
 
 def success(run):
@@ -112,10 +122,11 @@ def summary(rows):
                            usageComplete=all(row.get('usageComplete') for row in metrics), failures=[dict(taskId=row.get('taskId'), status=row.get('status'), error=row.get('error'), issues=row.get('evaluation', {}).get('issues', [])) for row in runs if not success(row)],
                            diagnostics=diagnostics(runs))
     a, b = result['baseline'], result['rsi']
-    return dict(arms=result, allOutcomeTokenDelta=b['totalTokens'] - a['totalTokens'],
-                allOutcomeLatencyDeltaMs=b['durationMs'] - a['durationMs'],
-                qualityRegressions=sum(success(row['runs'].get('baseline', {})) and not success(row['runs'].get('rsi', {})) for row in rows),
-                qualityImprovements=sum(not success(row['runs'].get('baseline', {})) and success(row['runs'].get('rsi', {})) for row in rows))
+    comparable = bool(a['attempts'] and b['attempts'])
+    return dict(arms=result, allOutcomeTokenDelta=b['totalTokens'] - a['totalTokens'] if comparable else None,
+                allOutcomeLatencyDeltaMs=b['durationMs'] - a['durationMs'] if comparable else None,
+                qualityRegressions=sum(success(row['runs'].get('baseline', {})) and not success(row['runs'].get('rsi', {})) for row in rows) if comparable else None,
+                qualityImprovements=sum(not success(row['runs'].get('baseline', {})) and success(row['runs'].get('rsi', {})) for row in rows) if comparable else None)
 
 
 def round_summaries(rows):
@@ -156,10 +167,7 @@ def reconstructed_timeline(rows, runner):
             workflows = [row for row in evolution.workflows if row['sourceRunId'] in ids]
             versions = [row for row in evolution.versions if row['sourceRunId'] in ids]
             edges = [row for row in evolution.tiny_edges if set(row.get('sourceWorkflowIds', [])) <= {item['id'] for item in workflows}]
-            paths = [row for row in evolution.tool_inertia.get('toolPaths', []) if set(row.get('sourceRunIds', [])) & ids]
-            parameters = [row for row in evolution.tool_inertia.get('parameterEdges', []) if set(row.get('sourceRunIds', [])) & ids]
-            return dict(versions=len(versions), workflows=len(workflows), tinyEdges=len(edges), toolPaths=len(paths),
-                        parameterEdges=len(parameters), graphIds=[row['id'] for row in versions])
+            return dict(versions=len(versions), workflows=len(workflows), tinyEdges=len(edges), graphIds=[row['id'] for row in versions])
         pair['experienceTimeline'] = dict(method='reconstructed_from_append_only_source_run_ids',
                                           before=snapshot(before), after=snapshot(seen),
                                           note='Legacy experienceBefore/After is retained; this derived timeline corrects resume-time overwrite.')
@@ -248,7 +256,8 @@ def result_report(result):
     rounds = ''.join(f"<tr><td>{row['round']}</td><td>{row['summary']['arms']['baseline']['totalTokens']:,}</td><td>{row['summary']['arms']['rsi']['totalTokens']:,}</td><td>{row['summary']['arms']['baseline']['passed']}</td><td>{row['summary']['arms']['rsi']['passed']}</td></tr>" for row in result.get('rounds', []))
     chains = ''.join(f"<li><b>{escape(item['taskId'])}</b>: used={escape(str(item['usedGraphId'] or 'none'))}, created={escape(', '.join(item['createdGraphIds']) or 'none')}</li>" for item in result.get('evolutionChain', [])) or '<li>尚未观察到经验变化。</li>'
     judge = result.get('judgeSummary') or {}
-    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1100px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>RSI - 基线：token {data.get('allOutcomeTokenDelta', 0):,}；延迟 {data.get('allOutcomeLatencyDeltaMs', 0) / 1000:.1f}s。负值才表示 RSI 较低。</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main>'''
+    delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI - 基线：token {data['allOutcomeTokenDelta']:,}；延迟 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s。负值才表示 RSI 较低。"
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1100px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}</style><main><small>固定 manifest、隔离经验、串行在线学习；Agent 成本与报告 Judge 成本分开。</small><h1>RSI 端到端在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main>'''
 
 
 def write_report(root, result):
@@ -270,7 +279,7 @@ def checkpoint(root, result_path, result, rsi=None):
     write_report(root, result)
 
 
-async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
+async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None):
     if not 1 <= through_round <= 6:
         raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
@@ -280,7 +289,7 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
         raise ValueError('invalid_experiment_id')
     root = ROOT / 'artifacts' / 'online-e2e' / experiment
     result_path, manifest_path = root / 'result.json', root / 'manifest.json'
-    manifest = task_manifest(bank)
+    manifest = selected_manifest(bank, task_ids)
     if manifest_path.exists() and json.loads(manifest_path.read_text()) != manifest:
         raise RuntimeError('manifest_changed')
     write(manifest_path, manifest)
@@ -289,7 +298,7 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
     base.restore(); rsi.restore()
     result = json.loads(result_path.read_text()) if result_path.exists() else dict(
         schemaVersion=SCHEMA_VERSION, id=experiment, status='running', createdAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), manifest=manifest, pairs=[],
-        protocol=dict(baseline='plan_react', rsi='motif_first', baselineLearning=False, rsiLearning=True,
+        protocol=dict(baseline='not_run' if rsi_only else 'plan_react', rsi='graph_rsi', baselineLearning=False, rsiLearning=True,
                       learning='RSI only, train only, sequential; baseline has no cross-task learning', executor=config.MODEL,
                       planner=config.PLANNER_MODEL, composition=config.COMPOSITION_MODEL, judgeModel=config.JUDGE_MODEL,
                       maxSteps=config.MAX_STEPS, timeout=config.RUN_TIMEOUT, taskHash=digest(manifest),
@@ -302,7 +311,8 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
     for index, item in enumerate(manifest):
         if item['round'] > through_round:
             break
-        pair = by_task.setdefault(item['taskId'], dict(index=index, **item, launchOrder=['baseline', 'rsi'] if index % 2 == 0 else ['rsi', 'baseline'], runs={}, experienceBefore=None, experienceAfter=None))
+        launch = ['rsi'] if rsi_only else ['baseline', 'rsi'] if index % 2 == 0 else ['rsi', 'baseline']
+        pair = by_task.setdefault(item['taskId'], dict(index=index, **item, launchOrder=launch, runs={}, experienceBefore=None, experienceAfter=None))
         if pair['experienceBefore'] is None:
             pair['experienceBefore'] = experience_summary(rsi)
             result['pairs'] = list(by_task.values())
@@ -314,7 +324,7 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
                 if run:
                     pair['runs'][arm] = compact(run)
                 continue
-            runner, strategy = (base, 'plan_react') if arm == 'baseline' else (rsi, 'motif_first')
+            runner, strategy = (base, 'plan_react') if arm == 'baseline' else (rsi, 'graph_rsi')
             run = await runner.start(TaskRunRequest(taskId=item['taskId'], strategy=strategy))
             # Persist identity before awaiting: a process interruption never silently reruns this task.
             pair['runs'][arm] = compact(run)
@@ -330,7 +340,7 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT):
             pair['experienceAfter'] = experience_summary(rsi)
         result['pairs'] = list(by_task.values())
         checkpoint(root, result_path, result, rsi)
-    if through_round < 6:
+    if through_round < 6 or rsi_only:
         result['status'] = 'running'
         result['precheckThroughRound'] = through_round
         checkpoint(root, result_path, result, rsi)
@@ -360,5 +370,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--through-round', type=int, default=6, help='Run through this fixed round; values below 6 retain a resumable formal precheck.')
     parser.add_argument('--experiment', default=DEFAULT_EXPERIMENT, help='New isolated experiment directory ID; existing manifests cannot change.')
+    parser.add_argument('--rsi-only', action='store_true', help='Run only Graph RSI for isolated mechanism prechecks; no baseline or Judge calls.')
+    parser.add_argument('--task-ids', help='Comma-separated subset of the fixed train manifest, preserving the supplied order.')
     args = parser.parse_args()
-    asyncio.run(main(args.through_round, args.experiment))
+    task_ids = args.task_ids.split(',') if args.task_ids else None
+    asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids))
