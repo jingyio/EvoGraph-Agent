@@ -73,7 +73,7 @@ def aggregate(values, key):
 def diagnostics(runs):
     evolution = [run.get('evolution') or {} for run in runs]
     metrics = [run.get('metrics') or {} for run in runs]
-    inertia = [run.get('toolInertiaMaintenance') or {} for run in runs]
+    inertia = [(run.get('toolInertiaMaintenance') or (run.get('evolution') or {}).get('toolInertia') or {}) for run in runs]
     composition = [run.get('compositionPlan') or {} for run in runs]
     paths = {}
     for item in evolution:
