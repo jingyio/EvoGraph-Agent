@@ -90,6 +90,31 @@ class TaskRunner:
         return sorted(required - set(observed))
 
     @staticmethod
+    def runtime_overhead(run):
+        """Return a non-token local orchestration ledger for one run.
+
+        These timings are already part of end-to-end wall time, but are kept
+        separate from model usage and business-tool activity.  Nested phases
+        are deliberately not summed twice: ``localCompileMs`` covers retrieval,
+        capability selection and graph compilation as one cold-start phase;
+        ``maintenanceMs`` and its subsequent persistence are separate phases.
+        """
+        evolution = run.get('evolution') or {}
+        metrics = run.get('metrics') or {}
+        rows = {
+            'graphLookupMs': evolution.get('lookupMs', 0),
+            'coldGraphCompileMs': evolution.get('localCompileMs', 0),
+            'compositionLocalMs': evolution.get('compositionLocalMs', 0),
+            'deterministicBindingMs': metrics.get('bindingMs', 0),
+            'evolutionMaintenanceMs': evolution.get('maintenanceMs', 0),
+            'experiencePersistMs': evolution.get('persistMs', 0),
+        }
+        normalized = {key: round(float(value or 0), 3) for key, value in rows.items()}
+        normalized['totalMs'] = round(sum(normalized.values()), 3)
+        normalized['tokenCost'] = 0
+        return normalized
+
+    @staticmethod
     def pagination_violation(previous, args):
         """Validate a continuation against the last successful list page."""
         if previous is None:
@@ -203,7 +228,7 @@ class TaskRunner:
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0,
                                 reportEvidenceCoverageGaps=0, reportEvidenceFormatFailures=0, paginationGuardRejects=0,
-                                semanticConstraintGuards=0),
+                                semanticConstraintGuards=0, runtimeOverheadMs=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
@@ -234,6 +259,8 @@ class TaskRunner:
                         run.setdefault('evolution', {})['maintenanceError'] = str(error)[:500]
                     overhead = run.get('evolution', {}).get('maintenanceMs', 0)
                     run['metrics']['durationMs'] += overhead
+                run['runtimeOverhead'] = self.runtime_overhead(run)
+                run['metrics']['runtimeOverheadMs'] = run['runtimeOverhead']['totalMs']
                 run['finishedAt'] = now()
                 run['events'].append(dict(seq=len(run['events']) + 1, at=run['finishedAt'],
                     elapsedMs=run['metrics']['durationMs'], type='finished', title=run['phase'],
@@ -508,6 +535,11 @@ class TaskRunner:
                             run['graphHandoff'] = [n['tool'] for n in nodes if n.get('defer')]
                             messages.append(dict(role='user', content='历史图中以下读取子图已交给模型，请使用当前观察完成必要读取：' + json.dumps(run['graphHandoff'])))
                         by_id = {node['id']: node for node in nodes}
+                        # The compiler may merge semantically equivalent
+                        # current-data reads. The executable node set is
+                        # authoritative after the merge, while stale Plan
+                        # selection rows remain only diagnostics.
+                        selection = [row for row in selection if row['stepId'] in by_id]
                         for row in selection:
                             if by_id[row['stepId']].get('reuse'):
                                 row.update(execution='reuse-upstream-output', reuse=by_id[row['stepId']]['reuse'])

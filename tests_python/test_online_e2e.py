@@ -26,6 +26,19 @@ def test_online_manifest_has_fixed_distinct_train_instances():
     assert [row['taskId'] for row in selected_manifest(Bank(), ['tickets-labels-02', 'finance-installments-01'])] == ['tickets-labels-02', 'finance-installments-01']
 
 
+def test_all_train_manifest_is_interleaved_by_family_instance():
+    bank = Bank()
+    bank.tasks = {
+        f'{scenario}-{family}-{index:02d}': bank.task(f'{scenario}-{family}-{index:02d}')
+        for scenario, family in [('finance', 'alpha'), ('support', 'beta')]
+        for index in range(1, 7)
+    }
+    manifest = task_manifest(bank, 'all_train')
+    assert len(manifest) == 12
+    assert [row['round'] for row in manifest[:4]] == [1, 1, 2, 2]
+    assert [row['taskId'] for row in manifest[:2]] == ['finance-alpha-01', 'support-beta-01']
+
+
 def test_online_summary_keeps_failures_and_local_maintenance():
     rows = [dict(round=1, taskId='finance-cancelled_payments-01', runs=dict(
         baseline=run('finance-cancelled_payments-01'),
@@ -36,6 +49,7 @@ def test_online_summary_keeps_failures_and_local_maintenance():
     assert report['arms']['rsi']['passed'] == 0
     assert report['arms']['rsi']['failures'][0]['error'] == 'timeout'
     assert report['arms']['rsi']['diagnostics']['evolutionMaintenanceMs'] == 3.4
+    assert report['arms']['rsi']['runtimeOverheadMs'] == 0
     assert report['arms']['rsi']['diagnostics']['reportAttempts'] == 1
     assert report['arms']['baseline']['p95LatencyMs'] == 100
     assert report['arms']['baseline']['maxTotalTokens'] == 12

@@ -19,6 +19,7 @@ from .business_report import render_report
 from .llm_judge import LLMJudge, JudgeRequest, JUDGE_PROMPT
 from .autotool import digest
 from .showcase import SHOWCASE_EXPERIMENT, build_pair_detail, build_showcase
+from .live_showcase import LiveShowcase
 
 
 class ReportReview(BaseModel):
@@ -40,12 +41,19 @@ class TaskToolRequest(BaseModel):
     arguments: dict = Field(default_factory=dict)
 
 
+class LiveShowcaseRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    taskId: str = Field(min_length=1, max_length=120)
+    steps: int = Field(default=2, ge=1, le=2)
+
+
 def create_app(service=None):
     service = service or RunService()
     taskbank = TaskBank()
     task_runner = TaskRunner(taskbank)
     paired = PairedEvaluation(task_runner)
     judge = LLMJudge(paired)
+    live_showcase = LiveShowcase(taskbank, taskbank.root)
     @asynccontextmanager
     async def lifespan(app):
         service.restore()
@@ -59,6 +67,7 @@ def create_app(service=None):
             await judge.shutdown()
             await paired.shutdown()
             await task_runner.shutdown()
+            await live_showcase.shutdown()
             await service.shutdown()
     app = FastAPI(title='RSI Agent Lab', version='0.3.0', lifespan=lifespan)
     app.state.service = service
@@ -66,6 +75,7 @@ def create_app(service=None):
     app.state.task_runner = task_runner
     app.state.paired = paired
     app.state.judge = judge
+    app.state.live_showcase = live_showcase
 
     @app.get('/api/evaluations')
     async def evaluation_list():
@@ -127,6 +137,42 @@ def create_app(service=None):
             return build_pair_detail(taskbank.root, taskbank, key, task_id)
         except (FileNotFoundError, KeyError):
             raise HTTPException(404, 'Showcase task not found')
+
+    @app.post('/api/live-showcase', status_code=202)
+    async def live_showcase_start(request: LiveShowcaseRequest):
+        if judge.tasks or paired.tasks:
+            raise ValueError('裁判或冻结评测正在运行；在线展示保持独占以避免干扰计量')
+        try:
+            item = await live_showcase.start(request.taskId, request.steps)
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+        return {'id': item['id'], 'status': item['status'], 'taskIds': item['taskIds']}
+
+    @app.get('/api/live-showcase/{key}')
+    async def live_showcase_get(key: str):
+        try:
+            return live_showcase.get(key)
+        except KeyError:
+            raise HTTPException(404, 'Live showcase run not found')
+
+    @app.get('/api/live-showcase/{key}/runs/{arm}/{run_id}')
+    async def live_showcase_run(key: str, arm: str, run_id: str):
+        try:
+            return live_showcase.run(key, arm, run_id)
+        except KeyError:
+            raise HTTPException(404, 'Live showcase run not found')
+
+    @app.post('/api/live-showcase/{key}/cancel')
+    async def live_showcase_cancel(key: str):
+        task = live_showcase.tasks.get(key)
+        if not task:
+            try:
+                live_showcase.get(key)
+            except KeyError:
+                raise HTTPException(404, 'Live showcase run not found')
+            return {'cancelled': False}
+        task.cancel()
+        return {'cancelled': True}
 
     def online_e2e_run(key, arm, run_id):
         if arm not in ['baseline', 'rsi'] or not re.fullmatch(r'[0-9a-f-]{36}', run_id):

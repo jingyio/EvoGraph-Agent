@@ -27,6 +27,7 @@ TYPES = [
     ('support', 'channels'), ('support', 'timeliness'),
     ('tickets', 'unassigned'), ('tickets', 'labels'),
 ]
+MANIFEST_PROFILES = ('core36', 'all_train')
 
 
 def write(path, value):
@@ -36,10 +37,22 @@ def write(path, value):
     temporary.replace(path)
 
 
-def task_manifest(bank):
+def task_types(bank, profile):
+    if profile == 'core36':
+        return TYPES
+    if profile != 'all_train':
+        raise ValueError('unknown_manifest_profile:' + profile)
+    rows = sorted({(task['scenario'], task['family']) for task in bank.tasks.values() if task.get('split') == 'train'})
+    if not rows:
+        raise ValueError('all_train_profile_has_no_train_tasks')
+    return rows
+
+
+def task_manifest(bank, profile='core36'):
     selected = []
+    types = task_types(bank, profile)
     for round_index in range(6):
-        for scenario, family in TYPES:
+        for scenario, family in types:
             task_id = f'{scenario}-{family}-{round_index + 1:02d}'
             task = bank.task(task_id)
             if task['split'] != 'train':
@@ -47,13 +60,13 @@ def task_manifest(bank):
             selected.append(dict(round=round_index + 1, taskId=task_id, scenario=scenario, family=family,
                                  recordCount=task['recordCount'], recordIds=task['recordIds'], asOf=task.get('asOf'),
                                  taskDigest=digest(dict(task=task['task'], recordIds=task['recordIds'], asOf=task.get('asOf')))))
-    if len({row['taskId'] for row in selected}) != 36:
+    if len({row['taskId'] for row in selected}) != len(types) * 6:
         raise ValueError('task_manifest_not_unique')
     return selected
 
 
-def selected_manifest(bank, task_ids=None):
-    manifest = task_manifest(bank)
+def selected_manifest(bank, task_ids=None, profile='core36'):
+    manifest = task_manifest(bank, profile)
     if not task_ids:
         return manifest
     by_id = {row['taskId']: row for row in manifest}
@@ -140,6 +153,7 @@ def diagnostics(runs):
         graphLookupMs=round(aggregate(evolution, 'lookupMs'), 3),
         compositionLocalMs=round(sum(item.get('compositionLocalMs', composition[index].get('localMs', 0)) or 0 for index, item in enumerate(evolution)), 3),
         evolutionMaintenanceMs=round(aggregate(evolution, 'maintenanceMs'), 3),
+        runtimeOverheadMs=round(aggregate(metrics, 'runtimeOverheadMs'), 3),
         reportAttempts=aggregate(metrics, 'reportAttempts'), failedReportAttempts=aggregate(metrics, 'failedReportAttempts'),
         blockedRecoveryReads=aggregate(metrics, 'reportRecoveryBlockedReads'),
         evidenceCanonicalizations=aggregate(metrics, 'reportEvidenceCanonicalizations'),
@@ -178,6 +192,7 @@ def summary(rows):
                            totalTokens=total_tokens, modelRequests=sum(row.get('modelRequests') or 0 for row in metrics),
                            toolCalls=sum(row.get('toolCalls') or 0 for row in metrics), toolErrors=sum(row.get('toolErrors') or 0 for row in metrics),
                            durationMs=sum(row.get('durationMs') or 0 for row in metrics), tokensPerSuccess=total_tokens / passed if passed else None,
+                           runtimeOverheadMs=round(sum(float(row.get('runtimeOverheadMs') or 0) for row in metrics), 3),
                            averageLatencyMs=sum(durations) / len(durations) if durations else None,
                            p95LatencyMs=percentile(durations, .95), maxLatencyMs=max(durations) if durations else 0,
                            maxTotalTokens=max(run_tokens) if run_tokens else 0,
@@ -464,7 +479,7 @@ def checkpoint(root, result_path, result, rsi=None):
 
 
 async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, task_ids=None, rsi_source=None,
-               skip_judge=False, reliability_experiment=None, scale_experiment=None):
+               skip_judge=False, reliability_experiment=None, scale_experiment=None, manifest_profile='core36'):
     if not 1 <= through_round <= 6:
         raise ValueError('through_round_must_be_1_to_6')
     bank = TaskBank(); bank.load()
@@ -474,7 +489,9 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
         raise ValueError('invalid_experiment_id')
     root = ROOT / 'artifacts' / 'online-e2e' / experiment
     result_path, manifest_path = root / 'result.json', root / 'manifest.json'
-    manifest = selected_manifest(bank, task_ids)
+    if manifest_profile not in MANIFEST_PROFILES:
+        raise ValueError('unknown_manifest_profile:' + manifest_profile)
+    manifest = selected_manifest(bank, task_ids, manifest_profile)
     source_root = ROOT / 'artifacts' / 'online-e2e' / rsi_source if rsi_source else None
     source_result = None
     source_pairs = {}
@@ -505,6 +522,7 @@ async def main(through_round=6, experiment=DEFAULT_EXPERIMENT, rsi_only=False, t
                       learning='RSI only, train only, sequential; baseline has no cross-task learning', executor=config.MODEL,
                       planner=config.PLANNER_MODEL, composition=config.COMPOSITION_MODEL, judgeModel=config.JUDGE_MODEL,
                       maxSteps=config.MAX_STEPS, timeout=config.RUN_TIMEOUT, taskHash=digest(manifest),
+                      manifestProfile=manifest_profile,
                       revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                       startFromEmpty=True, shadowRollouts=0, singleAgentConcurrency=True,
                       judge='anonymous dual order after all agent runs; judge cost is separate',
@@ -594,11 +612,13 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', default=DEFAULT_EXPERIMENT, help='New isolated experiment directory ID; existing manifests cannot change.')
     parser.add_argument('--rsi-only', action='store_true', help='Run only Graph RSI for isolated mechanism prechecks; no baseline or Judge calls.')
     parser.add_argument('--rsi-source', help='Reuse a completed RSI-only experiment by ID and run only a protocol-matched baseline in this new experiment directory.')
-    parser.add_argument('--task-ids', help='Comma-separated subset of the fixed train manifest, preserving the supplied order.')
+    parser.add_argument('--task-ids', help='Comma-separated subset of the selected train manifest, preserving the supplied order.')
+    parser.add_argument('--manifest-profile', choices=MANIFEST_PROFILES, default='core36',
+                        help='core36 is the frozen delivery set; all_train is an independent 180-task saturation protocol.')
     parser.add_argument('--skip-judge', action='store_true', help='Complete Agent execution without Judge requests; a later compatible resume judges after all Agent runs.')
     parser.add_argument('--reliability-experiment', help='Optional linked serial long-tail precheck experiment ID for the report page.')
     parser.add_argument('--scale-experiment', help='Optional linked serial scale/reliability experiment ID for the report page.')
     args = parser.parse_args()
     task_ids = args.task_ids.split(',') if args.task_ids else None
     asyncio.run(main(args.through_round, args.experiment, args.rsi_only, task_ids, args.rsi_source,
-                     args.skip_judge, args.reliability_experiment, args.scale_experiment))
+                     args.skip_judge, args.reliability_experiment, args.scale_experiment, args.manifest_profile))

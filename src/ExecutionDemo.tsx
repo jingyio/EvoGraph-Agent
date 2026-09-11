@@ -13,7 +13,7 @@ const n = (value: number) => Math.round(value).toLocaleString('zh-CN');
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 function pretty(value: unknown) { return typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
 
-function TraceGraph({ nodes, states, prefix }: { nodes: GraphNode[]; states: Record<string, string>; prefix: string }) {
+export function TraceGraph({ nodes, states, prefix }: { nodes: GraphNode[]; states: Record<string, string>; prefix: string }) {
   const depths = new Map<string, number>();
   for (let i = 0; i < nodes.length; i++) for (const node of nodes) if (!depths.has(node.id) && node.dependencies.every(d => depths.has(d))) depths.set(node.id, Math.max(-1, ...node.dependencies.map(d => depths.get(d)!)) + 1);
   const positions = new Map(nodes.map(node => [node.id, { x: 12 + (depths.get(node.id) || 0) * 224, y: 12 + nodes.filter(x => depths.get(x.id) === depths.get(node.id)).findIndex(x => x.id === node.id) * 83 }]));

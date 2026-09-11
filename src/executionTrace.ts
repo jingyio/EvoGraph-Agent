@@ -1,6 +1,6 @@
 export type Strategy = 'react' | 'strong_react' | 'plan_react' | 'plan_react_reuse' | 'autotool' | 'graph_rsi' | 'motif_only' | 'motif_first';
 export const strategyNames: Record<Strategy, string> = { react: 'ReAct', strong_react: 'Strong ReAct', plan_react: 'Plan + ReAct', plan_react_reuse: '复用 Plan + ReAct', autotool: 'Plan + AutoTool', graph_rsi: 'Graph RSI', motif_only: 'Motif Only', motif_first: 'Motif First + AutoTool' };
-export type Metrics = { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; toolErrors: number; usageComplete: boolean; durationMs: number; queueMs: number; elidedToolCalls?: number; recoveryToolCalls?: number; motifSelectedRecords?: number; motifFilteredOutRecords?: number };
+export type Metrics = { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; toolErrors: number; usageComplete: boolean; durationMs: number; queueMs: number; elidedToolCalls?: number; recoveryToolCalls?: number; motifSelectedRecords?: number; motifFilteredOutRecords?: number; runtimeOverheadMs?: number };
 export type Evaluation = { status: string; issues?: string[] };
 export type TraceEvent = { seq: number; at: string; elapsedMs?: number; type: string; title: string; detail?: any; metrics?: Metrics };
 export type GraphNode = { id: string; tool: string; dependencies: string[]; reuse?: { fields: string[] }; foreach?: { filter?: { field: string; operator: string; value: unknown } }; defer?: boolean };

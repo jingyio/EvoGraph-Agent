@@ -136,6 +136,15 @@ def test_report_evidence_canonicalization_requires_complete_observations():
     assert missing is None
 
 
+def test_runtime_overhead_is_a_separate_non_token_ledger():
+    run = dict(metrics=dict(bindingMs=.5), evolution=dict(lookupMs=1, localCompileMs=5,
+                                                           compositionLocalMs=2, maintenanceMs=3, persistMs=.25))
+    ledger = TaskRunner.runtime_overhead(run)
+    assert ledger['tokenCost'] == 0
+    assert ledger['totalMs'] == 11.75
+    assert ledger['coldGraphCompileMs'] == 5
+
+
 def test_pagination_guard_requires_sequential_same_size_pages():
     assert TaskRunner.pagination_violation(None, {'page': 1, 'pageSize': 50}) is None
     first = dict(page=1, pageSize=50, mayHaveMore=True)
@@ -186,6 +195,47 @@ async def test_complete_report_evidence_is_canonicalized_for_baseline_and_graph_
                                          evidenceIds=['finance:one', 'finance:two'], summary='kept')
         assert run['metrics']['reportEvidenceCanonicalizations'] == 1
         assert any(event['type'] == 'report_evidence' for event in run['events'])
+
+
+async def test_equivalent_graph_nodes_merge_without_stale_selection_fallback(tmp_path):
+    class DuplicateBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', family='duplicate', split='train', recordIds=['one'],
+                        task='列出本任务订单并读取订单状态后发布报告', suggestedBudget={'toolCalls': 10})
+        def tools(self, key):
+            def listing(args, ctx):
+                ctx.evidence.add('finance:one')
+                return {'records': [{'id': 'one', 'status': 'canceled', '_evidenceRef': 'finance:one'}], 'page': 1, 'mayHaveMore': False}
+            def detail(args, ctx):
+                ctx.evidence.add('finance:one')
+                return {'id': args['orderId'], 'status': 'canceled', '_evidenceRef': 'finance:one'}
+            def publish(args, ctx):
+                ctx.run['evaluation'] = dict(status='passed', issues=[])
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+            return [
+                Tool('finance_list_orders', '列出订单 ID 和状态', 'read', object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), listing, outputs=['id', 'status']),
+                Tool('finance_get_order', '读取订单状态', 'read', object_schema({'orderId': {'type': 'string'}}), detail, outputs=['id', 'status']),
+                Tool('finance_publish_report', '发布报告', 'artifact', object_schema({'evidenceIds': {'type': 'array', 'items': {'type': 'string'}}}), publish),
+            ]
+    class DuplicateModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': [
+                    {'id': 'list', 'intent': '列出订单 ID 和状态', 'dependencies': []},
+                    {'id': 'first_detail', 'intent': '读取订单状态', 'dependencies': ['list']},
+                    {'id': 'second_detail', 'intent': '读取订单状态', 'dependencies': ['list']},
+                ]})
+            if any(message.get('tool_call_id') == 'finance_publish_report' for message in messages):
+                return result()
+            return result('finance_publish_report', {'evidenceIds': ['finance:one']})
+    runner = TaskRunner(DuplicateBank(tmp_path), lambda role: DuplicateModel(role, []))
+    run = await runner.start(TaskRunRequest(taskId='duplicate', strategy='graph_rsi'))
+    await runner.tasks[run['id']]
+    assert run['evaluation']['status'] == 'passed'
+    assert run.get('fallback') is None
+    assert run['graph']['status'] == 'done'
+    assert len(run['graph']['nodes']) == 2
+    assert len(run['graphSelection']) == 2
 
 
 async def test_plan_and_execution_receive_task_derived_inclusive_constraint(tmp_path):
