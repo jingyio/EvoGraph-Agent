@@ -58,6 +58,8 @@
 - 在选定验证任务上做有限重复实验，统计质量、参数错误、上限触发、恢复、均值和波动；不预设 RSI 零错误。
 - 改动稳定后冻结方案，另做 test 评估，测试反馈不得回流学习。
 - 最终视频应包括相同业务成果、真实成本对照、实际 G0→Fast 使用链及限制。优先使用 `#home` → `#compare`（全量36对、三领域按真实保存事件索引推进的对比轨道）→ `#insights` → `#replay?task=finance-cancelled_payments-01`（模型调度工具与图执行器调度工具、绑定和 DAG 高亮），不制作虚构时间线；没有真实 G1/G2 时不展示图修改链。
+- 在线录制入口 `#live` 已可运行真实 `plan_react` 与 `graph_rsi` 的 1/2 个 train 任务序列；它必须保持独立 artifact、费用确认和单会话限制。当前预算暂停：**未经新的用户预算授权，不启动额外模型运行**。可先回放已保存 session，不能把演示会话合入正式实验。
+- `online-rsi-all-train-saturation-v3` 的 token/请求/工具/结果可作为冷启动诊断展示；其 `runtimeOverhead` 归因错误，禁止用于本地 overhead 或饱和结论。V4 部分运行保留但不作为比较样本。
 
 ## P1.5 AutoTool / TIG
 

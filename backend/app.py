@@ -45,6 +45,9 @@ class LiveShowcaseRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     taskId: str = Field(min_length=1, max_length=120)
     steps: int = Field(default=2, ge=1, le=2)
+    # A live showcase makes real provider requests. Keep this acknowledgement
+    # in the API boundary so a direct caller cannot start a run by accident.
+    confirmCost: bool = False
 
 
 def create_app(service=None):
@@ -142,6 +145,10 @@ def create_app(service=None):
     async def live_showcase_start(request: LiveShowcaseRequest):
         if judge.tasks or paired.tasks:
             raise ValueError('裁判或冻结评测正在运行；在线展示保持独占以避免干扰计量')
+        if live_showcase.tasks:
+            raise HTTPException(409, '已有在线展示正在运行；请先等待完成或停止该会话')
+        if not request.confirmCost:
+            raise HTTPException(400, '在线展示会发起真实模型请求；请确认费用后再启动')
         try:
             item = await live_showcase.start(request.taskId, request.steps)
         except ValueError as error:

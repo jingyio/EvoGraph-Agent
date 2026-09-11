@@ -1,0 +1,97 @@
+.cold-start-diagnostic {
+  padding: 48px 0;
+  border-bottom: 1px solid #e7e7e7;
+}
+
+.cold-start-diagnostic > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.cold-start-diagnostic h2 {
+  margin: 10px 0 0;
+  font-size: 31px;
+  line-height: 1.18;
+  font-weight: 620;
+}
+
+.cold-start-diagnostic > header > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #a76b00;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.cold-start-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 2px solid #111;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.cold-start-grid article {
+  min-height: 147px;
+  padding: 19px 17px;
+  border-right: 1px solid #e6e6e6;
+}
+
+.cold-start-grid article:first-child { padding-left: 0; }
+.cold-start-grid article:last-child { border-right: 0; }
+
+.cold-start-grid small {
+  display: block;
+  font-size: 10px;
+  color: #777;
+}
+
+.cold-start-grid strong {
+  display: block;
+  margin: 11px 0 8px;
+  font-size: 27px;
+  line-height: 1.05;
+  color: #007b68;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+}
+
+.cold-start-grid article:first-child strong,
+.cold-start-grid article:last-child strong { color: #222; }
+
+.cold-start-grid p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: #686868;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.cold-start-caption {
+  max-width: 980px;
+  margin: 15px 0 0;
+  color: #757575;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.cold-start-caption b { color: #a76b00; }
+
+@media (max-width: 900px) {
+  .cold-start-grid { grid-template-columns: 1fr 1fr; }
+  .cold-start-grid article:nth-child(2) { border-right: 0; }
+  .cold-start-grid article:nth-child(-n + 2) { border-bottom: 1px solid #e6e6e6; }
+}
+
+@media (max-width: 600px) {
+  .cold-start-diagnostic > header { align-items: start; flex-direction: column; }
+  .cold-start-grid { grid-template-columns: 1fr; }
+  .cold-start-grid article,
+  .cold-start-grid article:first-child { min-height: auto; padding: 17px 0; border-right: 0; border-bottom: 1px solid #e6e6e6; }
+  .cold-start-grid article:last-child { border-bottom: 0; }
+}

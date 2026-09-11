@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowRight, CheckCircle2, Circle, Database, Play, Square, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Circle, Database, Play, Square, Zap } from 'lucide-react';
 import { api } from './api';
 import { TraceGraph } from './ExecutionDemo';
 import { activeRun, traceAt, traceDuration } from './executionTrace';
 import type { TraceRun } from './executionTrace';
 import './live-comparison.css';
+import './live-cost.css';
 
 type Task = { id: string; scenario: string; family: string; title: string; task: string; split: string; recordCount: number };
 type CompactRun = { id: string; taskId: string; status: string; strategy: string; metrics: Record<string, number>; evolution?: Record<string, unknown> | null };
@@ -40,6 +41,7 @@ export default function LiveComparison() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskId, setTaskId] = useState('finance-cancelled_payments-01');
   const [steps, setSteps] = useState(2);
+  const [costAcknowledged, setCostAcknowledged] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [sessionKey, setSessionKey] = useState<string | null>(sessionFromHash);
   const [runs, setRuns] = useState<Record<string, TraceRun>>({});
@@ -82,13 +84,13 @@ export default function LiveComparison() {
   const selected = tasks.find(task => task.id === taskId);
   const currentBaseline = activePair?.runs.baseline ? runs[`baseline:${activePair.runs.baseline.id}`] || null : null;
   const currentRsi = activePair?.runs.rsi ? runs[`rsi:${activePair.runs.rsi.id}`] || null : null;
-  const canStart = !!selected && !running;
+  const canStart = !!selected && !running && costAcknowledged;
 
   async function start() {
     if (!canStart) return;
     setError(''); setRuns({}); setSession(null);
     try {
-      const created = await api<{ id: string }>('/api/live-showcase', { method: 'POST', body: JSON.stringify({ taskId, steps }) });
+      const created = await api<{ id: string }>('/api/live-showcase', { method: 'POST', body: JSON.stringify({ taskId, steps, confirmCost: true }) });
       setSessionKey(created.id);
       window.location.hash = `live?session=${created.id}`;
       setSession({ id: created.id, status: 'queued', taskIds: [], events: [], pairs: [], protocol: {}, summary: { baseline: {}, rsi: {} } });
@@ -98,7 +100,8 @@ export default function LiveComparison() {
 
   return <main className="showcase-page live-comparison-page">
     <section className="live-hero"><div><p className="showcase-kicker">ONLINE COMPARISON / REAL MODEL REQUESTS</p><h1>现场跑一次，而不是只回放。</h1><p>同族 train 任务、空的独立 RSI 经验、严格 1 / 1 / 1。结果仅用于录制演示，不并入已冻结的 36-task 主结论。</p></div><div className="live-hero-status"><Activity size={17} /><strong>{running ? 'LIVE' : session?.status === 'completed' ? 'SAVED' : 'READY'}</strong><span>{session ? `会话 ${session.id.slice(0, 8)}` : '等待一条真实任务'}</span></div></section>
-    <section className="live-controls"><label>领域<select disabled={running} value={selected?.scenario || 'finance'} onChange={event => { const next = tasks.find(task => task.scenario === event.target.value); if (next) setTaskId(next.id); }}>{['finance', 'support', 'tickets'].map(key => <option key={key} value={key}>{label[key]}</option>)}</select></label><label>训练任务<select disabled={running} value={taskId} onChange={event => setTaskId(event.target.value)}>{tasks.filter(task => task.scenario === selected?.scenario).map(task => <option key={task.id} value={task.id}>{task.id} · {task.recordCount} 条记录</option>)}</select></label><label>在线序列<select disabled={running} value={steps} onChange={event => setSteps(Number(event.target.value))}><option value={2}>同族两任务：形成 → 复用</option><option value={1}>单任务：冷启动对照</option></select></label><button className="live-start" disabled={!canStart} onClick={() => void start()}><Play size={15} />开始真实运行</button>{running && <button className="live-stop" onClick={() => void cancel()}><Square size={14} />停止</button>}</section>
+    <section className="live-controls"><label>领域<select disabled={running} value={selected?.scenario || 'finance'} onChange={event => { const next = tasks.find(task => task.scenario === event.target.value); if (next) setTaskId(next.id); }}>{['finance', 'support', 'tickets'].map(key => <option key={key} value={key}>{label[key]}</option>)}</select></label><label>训练任务<select disabled={running} value={taskId} onChange={event => setTaskId(event.target.value)}>{tasks.filter(task => task.scenario === selected?.scenario).map(task => <option key={task.id} value={task.id}>{task.id} · {task.recordCount} 条记录</option>)}</select></label><label>在线序列<select disabled={running} value={steps} onChange={event => { setSteps(Number(event.target.value)); setCostAcknowledged(false); }}><option value={2}>同族两任务：形成 → 复用</option><option value={1}>单任务：冷启动对照</option></select></label><label className="live-cost-confirm"><input type="checkbox" checked={costAcknowledged} disabled={running} onChange={event => setCostAcknowledged(event.target.checked)} /><span>我确认启动 {steps * 2} 次真实 Agent 运行</span></label><button className="live-start" disabled={!canStart} onClick={() => void start()}><Play size={15} />开始真实运行</button>{running && <button className="live-stop" onClick={() => void cancel()}><Square size={14} />停止</button>}</section>
+    <section className="live-cost-notice"><AlertTriangle size={17} /><div><b>费用与用途确认</b><p>此按钮会调用已配置的真实模型：{steps === 2 ? '两个同族 train 任务 × Baseline/RSI，共 4 次 Agent 运行。' : '一个 train 任务 × Baseline/RSI，共 2 次 Agent 运行。'} 当前没有可靠的美元价格配置，页面不估算美元；模型调用数和 token 会在会话中原样保存。正式结论请看冻结实验，在线会话只用于视频演示。</p></div><a href="#live?session=1e14783f-de8f-4524-8abc-34e321d26f7c">打开已保存样例（不发起新请求）</a></section>
     {error && <p className="showcase-error">{error}</p>}
     <section className="live-protocol"><span>Baseline 无跨任务学习</span><i /> <span>RSI 从空经验开始</span><i /> <span>模型 / 读取 / Agent 均为 1</span><i /> <span>Judge 不运行</span></section>
     <section className="live-session-strip"><div><small>当前任务</small><strong>{activePair?.taskId || session?.taskIds?.join(' → ') || '—'}</strong></div><div><small>顺序</small><strong>Baseline → RSI</strong></div><div><small>RSI 图</small><strong>{currentRsi?.evolution?.usedVersionId ? 'Fast 复用' : currentRsi ? '冷启动 / Fallback' : '等待'}</strong></div><div><small>累计 token 差</small><strong>{session?.summary.tokenSavingRate == null ? '—' : `${(session.summary.tokenSavingRate * 100).toFixed(1)}%`}</strong></div></section>
