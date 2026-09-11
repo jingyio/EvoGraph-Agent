@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgeCheck, BrainCircuit, Clock3, Cpu, Route, Sparkles } from 'lucide-react';
+import { ArrowUpRight, BadgeCheck, BrainCircuit, Clock3, Cpu, Database, Route, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { SHOWCASE_EXPERIMENT, Showcase, duration, number, percent } from './showcase';
@@ -21,6 +21,11 @@ export default function ShowcaseHome() {
     <section className="showcase-section entrance-grid">
       <a href="#compare" className="entrance entrance-comparison"><div><Route size={22} /><p>对比测试</p><h2>同一任务<br />两条执行流</h2></div><span>36 个配对任务 <ArrowUpRight size={19} /></span></a>
       <a href="#insights" className="entrance entrance-insights"><div><BrainCircuit size={22} /><p>RSI 效果分析</p><h2>调用、token<br />与观察延迟</h2></div><span>经验形成与实际使用 <ArrowUpRight size={19} /></span></a>
+    </section>
+    <section className="showcase-section data-origin">
+      <div className="section-intro"><p className="showcase-kicker">DATA + TOOL CONTRACT</p><h2>业务场景可追溯。<br />接口边界不伪装成生产。</h2><p>{data.coverage.experimentDescription} {data.coverage.taskbankDescription}</p></div>
+      <div className="source-grid">{data.sources.map(source => <article key={source.scenario}><Database size={19} /><small>{source.label}</small><strong>{source.source}</strong><span>{source.sourceScale}</span><p>{source.taskShape}</p><em>{source.toolBoundary}</em></article>)}</div>
+      <div className="source-footnote">业务对象来自公开历史数据；Agent 实际调用的是按任务隔离、带 JSON Schema 参数校验和证据引用的本地只读工具。它验证读取、筛选、报告与恢复工作流，不等同于生产 ERP/Zammad 的实时写入部署。</div>
     </section>
     <section className="showcase-section task-signal">
       <div className="section-intro"><p className="showcase-kicker">一个真实保存的任务对</p><h2>先看 Agent 做了什么。</h2><p>这里不是模拟动画。每一步均来自 `online-rsi-serial-final-v4` 的已保存轨迹。</p></div>

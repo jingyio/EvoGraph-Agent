@@ -1,4 +1,4 @@
-from backend.showcase import audit_submission
+from backend.showcase import _timeline_event, audit_submission
 
 
 def task():
@@ -38,3 +38,16 @@ def test_strict_audit_rejects_unobserved_evidence_and_ungrounded_number():
     assert result['evidenceExact'] is False
     assert result['evidenceObserved'] is False
     assert result['summaryNumbersGrounded'] is False
+
+
+def test_timeline_event_exposes_saved_cumulative_metrics_without_event_detail():
+    event = {
+        'type': 'action', 'title': 'finance_list_orders',
+        'detail': {'arguments': '{"page": 1}', 'callId': 'opaque'},
+        'metrics': {'modelRequests': 2, 'toolCalls': 1, 'inputTokens': 120, 'outputTokens': 30, 'durationMs': 500},
+    }
+    result = _timeline_event(event, 4)
+    assert result == {
+        'position': 4, 'kind': 'action', 'title': '调用工具：finance_list_orders', 'elapsedMs': 500.0,
+        'metrics': {'modelRequests': 2, 'toolCalls': 1, 'inputTokens': 120, 'outputTokens': 30, 'durationMs': 500, 'filteredOutDetailReads': 0, 'deterministicBindings': 0},
+    }

@@ -16,6 +16,33 @@ from typing import Any
 SHOWCASE_EXPERIMENT = 'online-rsi-serial-final-v4'
 REPORT_KEYS = {'metrics', 'selectedIds', 'evidenceIds', 'summary'}
 
+SCENARIO_META = {
+    'finance': {
+        'label': '财务运营',
+        'source': 'Olist 脱敏电商订单、支付与商品记录',
+        'sourceScale': '1,000 笔订单进入任务库',
+        'taskShape': '每个任务范围 10 笔订单',
+        'toolBoundary': '本地只读 JSON Schema 工具，按任务范围返回订单与关联字段',
+        'featuredTaskId': 'finance-cancelled_payments-02',
+    },
+    'support': {
+        'label': '客服投诉运营',
+        'source': 'CFPB 公开投诉记录',
+        'sourceScale': '500 条投诉进入任务库',
+        'taskShape': '每个任务范围 5 条投诉',
+        'toolBoundary': '本地只读 JSON Schema 工具，按任务范围返回投诉、渠道与响应字段',
+        'featuredTaskId': 'support-channels-02',
+    },
+    'tickets': {
+        'label': '技术工单',
+        'source': 'zammad/zammad GitHub Issues（排除 PR）',
+        'sourceScale': '300 条 Issue 进入任务库',
+        'taskShape': '每个任务范围 3 条工单',
+        'toolBoundary': '本地只读 JSON Schema 工具，按任务范围返回工单、标签与分配字段',
+        'featuredTaskId': 'tickets-labels-02',
+    },
+}
+
 
 def total_tokens(metrics: dict[str, Any] | None) -> int:
     metrics = metrics or {}
@@ -215,6 +242,45 @@ def _overview(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _aggregate_rows(rows: list[dict[str, Any]], label: str, identifier: str) -> dict[str, Any]:
+    """Aggregate an already fixed task set without hiding any individual pair."""
+    points = []
+    baseline_tokens = rsi_tokens = 0
+    for position, pair in enumerate(rows, start=1):
+        baseline_tokens += total_tokens(pair['runs']['baseline']['metrics'])
+        rsi_tokens += total_tokens(pair['runs']['rsi']['metrics'])
+        points.append({
+            'taskId': pair['taskId'],
+            'position': position,
+            'baselineCumulativeTokens': baseline_tokens,
+            'rsiCumulativeTokens': rsi_tokens,
+            'savingRate': 1 - rsi_tokens / baseline_tokens if baseline_tokens else None,
+        })
+
+    def arm_metrics(arm: str) -> dict[str, Any]:
+        metrics = [pair['runs'][arm]['metrics'] for pair in rows]
+        return {
+            'attempts': len(rows),
+            'passed': sum(pair['runs'][arm]['evaluation'].get('status') == 'passed' for pair in rows),
+            'inputTokens': sum(int(item.get('inputTokens') or 0) for item in metrics),
+            'outputTokens': sum(int(item.get('outputTokens') or 0) for item in metrics),
+            'totalTokens': sum(total_tokens(item) for item in metrics),
+            'modelRequests': sum(int(item.get('modelRequests') or 0) for item in metrics),
+            'toolCalls': sum(int(item.get('toolCalls') or 0) for item in metrics),
+            'durationMs': sum(float(item.get('durationMs') or 0) for item in metrics),
+        }
+
+    return {
+        'id': identifier,
+        'label': label,
+        'taskCount': len(rows),
+        'pairs': [pair['taskId'] for pair in rows],
+        'points': points,
+        'finalSavingRate': points[-1]['savingRate'] if points else None,
+        'metrics': {'baseline': arm_metrics('baseline'), 'rsi': arm_metrics('rsi')},
+    }
+
+
 def _audit_rollup(pairs: list[dict[str, Any]]) -> dict[str, Any]:
     fields = [
         'strictStructuredPass', 'strictReportAuditPass', 'schemaExact', 'metricExact', 'selectionExact',
@@ -257,8 +323,10 @@ def build_showcase(root: Path, taskbank: Any, experiment: str = SHOWCASE_EXPERIM
         }
         pairs.append(row)
     family_map: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    scenario_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for pair in pairs:
         family_map[(pair['scenario'], pair['family'])].append(pair)
+        scenario_map[pair['scenario']].append(pair)
     families = []
     for (scenario, family), rows in family_map.items():
         base_total = rsi_total = 0
@@ -276,11 +344,38 @@ def build_showcase(root: Path, taskbank: Any, experiment: str = SHOWCASE_EXPERIM
             'pairs': [pair['taskId'] for pair in rows], 'points': points,
             'finalSavingRate': points[-1]['savingRate'] if points else None,
         })
+    categories = []
+    for scenario in ['finance', 'support', 'tickets']:
+        rows = scenario_map.get(scenario, [])
+        if not rows:
+            continue
+        meta = SCENARIO_META[scenario]
+        categories.append({
+            **_aggregate_rows(rows, meta['label'], scenario),
+            'scenario': scenario,
+            'familyCount': len({pair['family'] for pair in rows}),
+            'featuredTaskId': meta['featuredTaskId'],
+            'families': sorted({pair['familyLabel'] for pair in rows}),
+        })
     protocol = result.get('protocol') or {}
     return {
         'id': result.get('id'), 'status': result.get('status'), 'createdAt': result.get('createdAt'),
         'protocol': {key: protocol.get(key) for key in ['executor', 'planner', 'composition', 'maxSteps', 'timeout', 'comparisonMode', 'startFromEmpty', 'singleAgentConcurrency', 'shadowRollouts']},
-        'overview': _overview(result), 'audit': _audit_rollup(pairs), 'families': families, 'pairs': pairs,
+        'overview': _overview(result),
+        'audit': _audit_rollup(pairs),
+        'coverage': {
+            'experimentTaskCount': len(pairs),
+            'taskbankTaskCount': 300,
+            'experimentDescription': '固定 train 协议中的 36 个任务对：每个领域 2 个任务类型，每类型 6 个不同实例。',
+            'taskbankDescription': '公开历史数据任务库共有 300 个任务；其余任务未被纳入本次严格串行主实验，不能被补写为已测结果。',
+        },
+        'sources': [
+            {'scenario': scenario, **meta} for scenario, meta in SCENARIO_META.items() if scenario in scenario_map
+        ],
+        'allTasks': _aggregate_rows(pairs, '全部固定实验任务', 'all'),
+        'categories': categories,
+        'families': families,
+        'pairs': pairs,
         'limitations': {
             'latency': '同一 session 交替串行观测；供应商负载和缓存仍会影响时长，不能表述为稳定 provider 性能优势。',
             'judge': 'Judge 与执行模型相同，26/36 对完成且有顺序分歧；不构成独立文字质量优势。',
@@ -363,6 +458,55 @@ def _trace_steps(run: dict[str, Any]) -> list[dict[str, Any]]:
     return steps
 
 
+def _timeline_event(event: dict[str, Any], position: int) -> dict[str, Any] | None:
+    """Expose only replay-safe, actual state changes with their saved cumulative metrics."""
+    detail = event.get('detail') or {}
+    event_type = event.get('type')
+    title = event.get('title') or '运行事件'
+    if event_type == 'model_start':
+        label = f'发起模型请求：{title}'
+    elif event_type == 'model':
+        calls = detail.get('toolCalls') or []
+        label = f'模型返回 {len(calls)} 个工具调用' if calls else '模型返回业务结论'
+    elif event_type == 'plan':
+        label = f'生成读取计划：{len(detail.get("steps") or [])} 步'
+    elif event_type == 'graph_created':
+        label = f'读取图绑定：{len(detail.get("nodes") or [])} 节点'
+    elif event_type == 'binding':
+        label = f'绑定参数：{detail.get("argumentSets", 0)} 组'
+    elif event_type == 'motif':
+        label = f'筛选后补查：跳过 {detail.get("filteredOutRecords", 0)} 条'
+    elif event_type == 'action':
+        label = f'调用工具：{title}'
+    elif event_type == 'observation':
+        label = f'获得观察：{title}'
+    elif event_type == 'report_recovery':
+        label = '报告校验失败，进入一次有界恢复'
+    elif event_type == 'evaluation':
+        label = f'结构化校验：{detail.get("status", "pending")}'
+    elif event_type == 'finished':
+        label = f'执行结束：{detail.get("status", "completed")}'
+    else:
+        return None
+    metrics = event.get('metrics') or {}
+    return {
+        'position': position,
+        'kind': event_type,
+        'title': label,
+        'elapsedMs': float(event.get('elapsedMs') or metrics.get('durationMs') or 0),
+        'metrics': {key: metrics.get(key, 0) for key in ['modelRequests', 'toolCalls', 'inputTokens', 'outputTokens', 'durationMs', 'filteredOutDetailReads', 'deterministicBindings']},
+    }
+
+
+def _timeline(run: dict[str, Any]) -> list[dict[str, Any]]:
+    timeline = []
+    for event in run.get('events') or []:
+        item = _timeline_event(event, len(timeline) + 1)
+        if item:
+            timeline.append(item)
+    return timeline
+
+
 def build_pair_detail(root: Path, taskbank: Any, experiment: str, task_id: str) -> dict[str, Any]:
     showcase = build_showcase(root, taskbank, experiment)
     pair = next((item for item in showcase['pairs'] if item['taskId'] == task_id), None)
@@ -379,6 +523,7 @@ def build_pair_detail(root: Path, taskbank: Any, experiment: str, task_id: str) 
             **pair['runs'][arm],
             'graphNodes': _graph_nodes(run),
             'steps': _trace_steps(run),
+            'timeline': _timeline(run),
             'report': {key: (run.get('submission') or {}).get(key) for key in REPORT_KEYS},
         }
     return detail

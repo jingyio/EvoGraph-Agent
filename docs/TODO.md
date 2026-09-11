@@ -57,7 +57,7 @@
 
 - 在选定验证任务上做有限重复实验，统计质量、参数错误、上限触发、恢复、均值和波动；不预设 RSI 零错误。
 - 改动稳定后冻结方案，另做 test 评估，测试反馈不得回流学习。
-- 最终视频应包括相同业务成果、真实成本对照、实际 G0→Fast 使用链及限制。优先使用 `#home` → `#compare` → `#insights` → `#replay?task=finance-cancelled_payments-02`，不制作虚构时间线；没有真实 G1/G2 时不展示图修改链。
+- 最终视频应包括相同业务成果、真实成本对照、实际 G0→Fast 使用链及限制。优先使用 `#home` → `#compare`（全量36对、三领域动态保存轨迹）→ `#insights` → `#replay?task=finance-cancelled_payments-02`，不制作虚构时间线；没有真实 G1/G2 时不展示图修改链。
 
 ## P1.5 AutoTool / TIG
 
