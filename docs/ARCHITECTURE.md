@@ -11,7 +11,7 @@
 ## 当前任务库路径
 
 ```text
-React: ShowcaseHome / EmployeeExperience / CompareExperience / RsiInsights / TaskReplay
+React: ShowcaseHome（企业运营数字员工工作台） / CompareExperience / RsiInsights / TaskReplay
        └─ ExecutionDemo / TaskBankPanel / OnlineEvolutionPanel / EvaluationPanel（实验工作台）
                  ↓ JSON API
 backend/app.py → Showcase DTO（只读最终 artifact + 派生审计） / TaskRunner
@@ -71,7 +71,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173` 默认 `#home`，并提供 `#employees`、`#compare`、`#insights` 和 `#replay?task=<id>` 录制入口；旧 `#demo`、`#evaluation`、`#evolution`、`#taskbank` 是实验工作台。`#employees` 将同一只读 V4 DTO 映射为财务运营助手、客服运营分析师和技术研发管理助手，链接每个领域的已保存任务、实际 HTML 简报和原始回放；它不运行 Agent、不生成 PPTX、也不改变严格实验。`#compare` 默认展示固定 manifest 的全部 36 对，并按财务、客服、技术工单各 12 对聚合；三条动态轨迹是保存事件的累计指标回放，技术代表任务使用 `labels`，但 `unassigned` 仍留在技术领域/全量分母中。主页同时说明公开历史数据、本地 SQLite、按任务隔离的 JSON Schema 只读工具与生产平台边界。展示 API 是 `/api/showcase/online-rsi-serial-final-v4` 和 `/pairs/{taskId}`；后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，并提供 `#compare`、`#insights` 和 `#replay?task=<id>` 录制入口；旧 `#demo`、`#evaluation`、`#evolution`、`#taskbank` 是实验工作台。`#home` 是一个企业运营数字员工工作台：财务分析、客服分析和研发运营作为同一员工的能力切换，读取同一只读 V4 DTO，展示业务需求、保存的实际执行过程、当前参数绑定、提交指标和 HTML 简报。主页不显示任务 ID 或 train/benchmark 分类；旧 `#employees` 会重定向至主页。它不运行 Agent、不生成 PPTX、也不改变严格实验。`#compare` 默认展示固定 manifest 的全部 36 对，并按财务、客服、技术工单各 12 对聚合；三条动态轨迹是保存事件的累计指标回放，技术代表任务使用 `labels`，但 `unassigned` 仍留在技术领域/全量分母中。数据来源、SQLite/JSON Schema 只读边界和生产平台限制放在验证与技术说明入口。展示 API 是 `/api/showcase/online-rsi-serial-final-v4` 和 `/pairs/{taskId}`；后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 
