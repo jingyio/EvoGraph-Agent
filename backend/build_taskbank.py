@@ -171,8 +171,8 @@ def build():
     connection.commit()
     connection.close()
     (OUT / 'records.sqlite3').chmod(0o600)
-    manifest = dict(version='public-v2-task-contract', createdAt=as_of, scenarios=provenance, taskCount=len(tasks),
-                    note='真实历史数据上的人工设计任务；selectedIds 合同明确列出任务要求识别、筛选或排序的记录。未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。')
+    manifest = dict(version='public-v3-deterministic-time-tools', createdAt=as_of, scenarios=provenance, taskCount=len(tasks),
+                    note='真实历史数据上的人工设计任务；selectedIds 合同明确列出任务要求识别、筛选或排序的记录。新增通用本地时间排序/时间差计算工具；记录、划分、参考时刻和内部评分答案不变。未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。')
     write_private(OUT / 'gold.json', gold)
     write_private(ROOT / 'benchmarks/manifest.json', manifest)
     write_private(TASKS, ''.join(json.dumps(t, ensure_ascii=False) + '\n' for t in tasks))

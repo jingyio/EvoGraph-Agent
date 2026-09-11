@@ -1,5 +1,6 @@
 """Read-only task-scoped tools over frozen public records; gold is never a tool output."""
 from copy import deepcopy
+from datetime import datetime
 import json
 from pathlib import Path
 import sqlite3
@@ -121,17 +122,40 @@ class TaskBank:
                 object_schema({parameter: {'type': 'string', 'minLength': 1}}), lambda args, ctx, fields=fields: read(args[parameter], fields, ctx), outputs=['id', *fields])
         add('get_task_scope', '读取当前任务范围、参考时间及输出字段名称；不返回参考答案。', object_schema(),
             lambda args, ctx: {k: task[k] for k in ['id', 'asOf', 'recordCount', 'acceptance']}, outputs=['id', 'asOf', 'recordCount', 'acceptance'])
-        add('sum_values', '整数求和，不做币种换算。输入值需来自已读取记录。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'integer'}}}), lambda args, ctx: {'sum': sum(args['values'])}, outputs=['sum'])
+        add('sum_values', '整数求和，不做币种换算。输入值需来自已读取记录。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'integer'}}}), lambda args, ctx: {'sum': sum(args['values'])}, 'compute', outputs=['sum'])
         def count(args, ctx):
             from collections import Counter
             return dict(counts=dict(Counter(args['values'])))
-        add('count_values', '按精确字符串分组计数；缺失字段使用 (missing)。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'string'}}}), count, outputs=['counts'])
+        add('count_values', '按精确字符串分组计数；缺失字段使用 (missing)。', object_schema({'values': {'type': 'array', 'maxItems': 2000, 'items': {'type': 'string'}}}), count, 'compute', outputs=['counts'])
         def rank(args, ctx):
             if any(r['id'] not in task['recordIds'] for r in args['records']):
                 raise ValueError('Record is outside this task scope')
             direction = -1 if args['direction'] == 'desc' else 1
             return {'ids': [r['id'] for r in sorted(args['records'], key=lambda r: (direction * r['value'], r['id']))[:args['limit']]]}
-        add('rank_values', '按整数值排序，并列按记录 ID 字符串升序。', object_schema({'records': {'type': 'array', 'maxItems': 100, 'items': object_schema({'id': {'type': 'string'}, 'value': {'type': 'integer'}})}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}), rank, outputs=['ids'])
+        add('rank_values', '按整数值排序，并列按记录 ID 字符串升序。', object_schema({'records': {'type': 'array', 'maxItems': 100, 'items': object_schema({'id': {'type': 'string'}, 'value': {'type': 'integer'}})}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}), rank, 'compute', outputs=['ids'])
+        def rank_time(args, ctx):
+            if any(r['id'] not in task['recordIds'] for r in args['records']):
+                raise ValueError('Record is outside this task scope')
+
+            def timestamp(value):
+                return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+
+            direction = -1 if args['direction'] == 'desc' else 1
+            return {
+                'ids': [
+                    row['id']
+                    for row in sorted(
+                        args['records'],
+                        key=lambda row: (direction * timestamp(row['timestamp']), row['id']),
+                    )[:args['limit']]
+                ]
+            }
+        add('rank_time_values', '按 ISO-8601 时间排序，并列按记录 ID 字符串升序。时间比较不应由模型手工判断。', object_schema({'records': {'type': 'array', 'maxItems': 100, 'items': object_schema({'id': {'type': 'string'}, 'timestamp': {'type': 'string', 'minLength': 1}})}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}), rank_time, 'compute', outputs=['ids'])
+        def elapsed(args, ctx):
+            start = datetime.fromisoformat(args['start'].replace('Z', '+00:00'))
+            end = datetime.fromisoformat(args['end'].replace('Z', '+00:00'))
+            return {'seconds': int((end - start).total_seconds())}
+        add('elapsed_seconds', '计算两个 ISO-8601 时间戳的 end - start 秒数。时间差计算不应由模型手工心算。', object_schema({'start': {'type': 'string', 'minLength': 1}, 'end': {'type': 'string', 'minLength': 1}}), elapsed, 'compute', outputs=['seconds'])
         def publish(args, ctx):
             evaluation = compare(task, self.gold[task_id], args, ctx.evidence)
             ctx.run['submission'] = deepcopy(args)

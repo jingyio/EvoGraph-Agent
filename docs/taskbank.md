@@ -1,8 +1,8 @@
-# 三场景真实数据任务库 public-v2-task-contract
+# 三场景真实数据任务库 public-v3-deterministic-time-tools
 
 已构造财务、客服、技术工单各 100 个任务，共 300 个。每个场景 10 个任务族，每族 10 个任务；同族使用不同来源记录。任务说明和筛选规则由本项目设计，业务记录来自公开真实数据，没有补造交易、投诉或 Issue。
 
-`public-v2-task-contract` 保持 300 条任务的记录 ID、划分、参考时刻和内部评分答案不变，只修正了 Agent 可见的 `selectedIds` 说明：任务要求列出、筛选或排序记录时必须提交这些 ID；只有没有记录清单的任务才提交空数组。此前带有相反通用提示的运行应保留为合同缺陷预检，不能与 v2 结果拼接。
+`public-v3-deterministic-time-tools` 保持 300 条任务的记录 ID、划分、参考时刻和内部评分答案不变。它继承 V2 的 `selectedIds` 说明，并新增通用本地 `rank_time_values` 与 `elapsed_seconds` 工具，避免模型手工比较时间和心算时间差。工具只计算当前调用参数，不读取 gold；它们标记为 `compute`，不会计入业务读取并发或 `peakReads`。此前带有不同任务/工具契约的运行必须保留，但不能与 V3 结果拼接。
 
 ## 数据与任务分布
 
@@ -40,7 +40,7 @@
 - 财务：`finance_list_orders(page, pageSize)`、`finance_get_order(orderId)`、`finance_get_order_items(orderId)`、`finance_get_order_payments(orderId)`、`finance_get_customer(orderId)`、`finance_get_order_reviews(orderId)`。
 - 客服：`support_list_complaints(page, pageSize)`、`support_get_complaint(complaintId)`、`support_get_response(complaintId)`、`support_get_dates(complaintId)`、`support_get_narrative(complaintId)`。
 - 工单：`tickets_list_issues(page, pageSize)`、`tickets_get_issue(issueId)`、`tickets_get_labels(issueId)`、`tickets_get_assignment(issueId)`、`tickets_get_milestone(issueId)`、`tickets_get_activity(issueId)`、`tickets_get_resolution(issueId)`、`tickets_get_body(issueId)`。
-- 每场景另有带场景前缀的 `get_task_scope()`、`sum_values(values)`、`count_values(values)`、`rank_values(records, direction, limit)`、`publish_report(metrics, selectedIds, evidenceIds, summary)`。排序方向为 asc/desc，数值为整数，并列按字符串 ID 升序。
+- 每场景另有带场景前缀的 `get_task_scope()`、`sum_values(values)`、`count_values(values)`、`rank_values(records, direction, limit)`、`rank_time_values(records, direction, limit)`、`elapsed_seconds(start, end)`、`publish_report(metrics, selectedIds, evidenceIds, summary)`。排序方向为 asc/desc，数值或时间相同均按字符串 ID 升序；时间排序和时间差通过确定性工具完成，不由模型心算。
 
 金额统一为 BRL 分（Olist 原生币种 BRL）；时间差字段为秒。未将分期金额解释为未偿债务，未把多条支付记录当作重复扣款，未把 agency 转交时差解释为企业响应时长，未把项目更新时间阈值冒充真实 SLA。
 

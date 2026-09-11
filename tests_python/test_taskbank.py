@@ -117,8 +117,30 @@ async def test_http_catalog_and_tool_session_hide_answers(tmp_path, monkeypatch)
             listed = (await client.get('/api/taskbank/tasks?scenario=finance')).json()
             assert len(listed) == 1 and 'gold' not in listed[0] and 'metrics' not in listed[0]
             tools = (await client.get('/api/taskbank/tasks/test-task/tools')).json()
-            assert len(tools) == 11 and '1100' not in json.dumps(tools)
+            assert len(tools) == 13 and '1100' not in json.dumps(tools)
+            effects = {tool['name']: tool['effect'] for tool in tools}
+            assert all(effects[f'finance_{name}'] == 'compute' for name in [
+                'sum_values', 'count_values', 'rank_values', 'rank_time_values', 'elapsed_seconds',
+            ])
             session = (await client.post('/api/taskbank/sessions', json={'taskId': task['id']})).json()
             response = await client.post('/api/taskbank/sessions/' + session['id'] + '/call', json={'tool': 'finance_get_order_payments', 'arguments': {'orderId': 'a'}})
             assert response.status_code == 200 and response.json()['result']['payments'][0]['amount_cents'] == 1100
             assert (await client.get('/api/taskbank/tasks?scenario=unknown')).status_code == 400
+
+
+async def test_time_helpers_compute_from_current_arguments_without_gold(tmp_path):
+    bank, task, _ = small_bank(tmp_path)
+    bank.task(task['id'])['recordIds'].append('b')
+    session = bank.start(task['id'])
+    ranked = await bank.call(session['id'], 'finance_rank_time_values', {'records': [
+        {'id': 'a', 'timestamp': '2026-01-02T00:00:00Z'},
+        {'id': 'b', 'timestamp': '2026-01-02T00:00:00Z'},
+    ], 'direction': 'desc', 'limit': 2})
+    assert ranked['ok'] and ranked['result']['ids'] == ['a', 'b']
+    elapsed = await bank.call(session['id'], 'finance_elapsed_seconds', {
+        'start': '2026-01-01T00:00:00Z', 'end': '2026-01-02T00:00:00Z'})
+    assert elapsed['ok'] and elapsed['result']['seconds'] == 86400
+    outside = await bank.call(session['id'], 'finance_rank_time_values', {'records': [
+        {'id': 'outside', 'timestamp': '2026-01-02T00:00:00Z'},
+    ], 'direction': 'asc', 'limit': 1})
+    assert not outside['ok'] and 'outside this task scope' in outside['error']
