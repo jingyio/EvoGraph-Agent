@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgeCheck, BrainCircuit, Clock3, Cpu, Database, Route, Sparkles } from 'lucide-react';
+import { ArrowUpRight, BadgeCheck, BrainCircuit, BriefcaseBusiness, Clock3, Cpu, Database, Route, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { SHOWCASE_EXPERIMENT, Showcase, duration, number, percent } from './showcase';
@@ -14,11 +14,12 @@ export default function ShowcaseHome() {
   const example = data.pairs.find(pair => pair.taskId === 'finance-cancelled_payments-02') || data.pairs[0];
   return <main className="showcase-page showcase-home">
     <section className="hero-stage">
-      <div className="hero-copy"><p className="showcase-kicker">RSI AGENT LAB / SERIAL ONLINE EXPERIMENT</p><h1>同样完成业务任务。<br /><span>更少的模型开销。</span></h1><p className="hero-deck">将已验证的读取结构留在运行时，把重复规划从每个任务中拿掉。不是更少做事，而是少问一次模型。</p><div className="hero-actions"><a href="#compare" className="showcase-button dark">进入对比测试 <ArrowUpRight size={16} /></a><a href="#insights" className="showcase-button quiet">查看 RSI 效果</a></div></div>
+      <div className="hero-copy"><p className="showcase-kicker">ENTERPRISE OPERATION ANALYST / SERIAL ONLINE EXPERIMENT</p><h1>同样完成业务任务。<br /><span>更少的模型开销。</span></h1><p className="hero-deck">把财务、客服和技术运营的重复读取结构留在运行时，输出有证据的业务简报。底层严谨实验仍保留，岗位层只负责把结果讲清楚。</p><div className="hero-actions"><a href="#employees" className="showcase-button dark">进入数字员工 <ArrowUpRight size={16} /></a><a href="#compare" className="showcase-button quiet">进入对比测试</a></div></div>
       <div className="hero-number"><span>Agent token</span><strong>{percent(data.overview.tokenSavingRate)}</strong><p>539,468 <i>→</i> 347,368</p><small>固定 36 条 train 任务 · 串行 `1 / 1 / 1`</small></div>
     </section>
     <section className="hero-proof"><div><span>任务通过</span><strong>{rsi.passed}/{rsi.attempts}</strong><small>Baseline {baseline.passed}/{baseline.attempts}</small></div><div><span>LLM 请求</span><strong>{percent(data.overview.modelRequestSavingRate)}</strong><small>{baseline.modelRequests} <i>→</i> {rsi.modelRequests}</small></div><div><span>观察延迟</span><strong>{duration(rsi.durationMs)}</strong><small>交替串行观测，非 provider 因果结论</small></div><div><span>真实工具调用</span><strong>{number(rsi.toolCalls)}</strong><small>Baseline {number(baseline.toolCalls)} · 未靠少读工具取胜</small></div></section>
-    <section className="showcase-section entrance-grid">
+    <section className="showcase-section entrance-grid employee-entrances">
+      <a href="#employees" className="entrance entrance-employee"><div><BriefcaseBusiness size={22} /><p>企业运营分析数字员工</p><h2>岗位成果<br />与业务简报</h2></div><span>财务 · 客服 · 技术 <ArrowUpRight size={19} /></span></a>
       <a href="#compare" className="entrance entrance-comparison"><div><Route size={22} /><p>对比测试</p><h2>同一任务<br />两条执行流</h2></div><span>36 个配对任务 <ArrowUpRight size={19} /></span></a>
       <a href="#insights" className="entrance entrance-insights"><div><BrainCircuit size={22} /><p>RSI 效果分析</p><h2>调用、token<br />与观察延迟</h2></div><span>经验形成与实际使用 <ArrowUpRight size={19} /></span></a>
     </section>

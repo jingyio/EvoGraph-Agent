@@ -18,6 +18,24 @@ def test_report_uses_observations_not_unread_records_and_escapes_untrusted_text(
     assert 'pending' in html and '文字' in html
 
 
+def test_report_uses_scenario_role_without_reading_expected_answers():
+    task = {
+        'id': 'finance-example', 'scenario': 'finance', 'title': '订单异常分析',
+        'recordCount': 1, 'asOf': '2026-09-11', 'task': '分析当前记录', 'sourceUrl': '',
+    }
+    run = {
+        'id': 'run-1', 'status': 'completed', 'events': [],
+        'evaluation': {'status': 'passed', 'issues': []},
+        'submission': {'metrics': {'order_count': 1}, 'selectedIds': [], 'evidenceIds': [], 'summary': '已完成。'},
+    }
+
+    report = render_report(run, task)
+
+    assert '财务运营助手' in report
+    assert '订单异常与支付风险简报' in report
+    assert 'gold' not in report.lower()
+
+
 async def test_report_and_human_review_endpoints(tmp_path, monkeypatch):
     import httpx
     from backend.app import create_app

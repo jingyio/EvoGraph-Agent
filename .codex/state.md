@@ -32,7 +32,7 @@ npm run build
 
 已有 `.venv`，前端 Node 22+。后端 `npm run dev:backend` 或 `.venv/bin/python -m backend serve`（4317），前端 `npm run dev:frontend`（5173）。启动前检查端口，避免重复服务；重启前确认没有在途模型任务。
 
-主展示页面（开发基址 `http://127.0.0.1:5173`）：`/#home` 概览和数据/工具边界、`/#compare` 默认全量 36 个同任务对比并聚合为财务/客服/技术工单各12项。三领域播放器按保存事件的实际索引逐步前进（不按不同轨迹长度比例抽帧），可切换领域聚焦轨道，并显示累计 LLM/token/工具/时间和 M（模型）/S（结构化运行时）/C（控制）事件。`/#insights` 为 RSI 效果与严格报告审计；`/#replay?task=finance-cancelled_payments-01` 会区分模型调度工具、图执行器调度工具、当前观察参数绑定、筛选和活跃 DAG 节点。技术 `unassigned` 未从任何汇总删除，但不作主讲回放。公开历史数据经本地 SQLite + 强 JSON Schema 的只读工具暴露，不能称生产企业写入部署。旧工作台仍在 `/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`。FastAPI 文档：`http://127.0.0.1:4317/docs`。
+主展示页面（开发基址 `http://127.0.0.1:5173`）：`/#home` 概览和数据/工具边界；`/#employees` 是企业运营分析数字员工产品层，以相同 V4 工件映射财务运营助手、客服运营分析师和技术研发管理助手，显示真实业务请求、实际工具结构、当前参数绑定、提交指标、HTML 简报与领域内 12 项成本对比。它不发模型请求、不是生产 ERP/CRM 写入部署，也不生成 PPTX。`/#compare` 默认全量 36 个同任务对比并聚合为财务/客服/技术工单各12项。三领域播放器按保存事件的实际索引逐步前进（不按不同轨迹长度比例抽帧），可切换领域聚焦轨道，并显示累计 LLM/token/工具/时间和 M（模型）/S（结构化运行时）/C（控制）事件。`/#insights` 为 RSI 效果与严格报告审计；`/#replay?task=finance-cancelled_payments-02` 会区分模型调度工具、图执行器调度工具、当前观察参数绑定、筛选和活跃 DAG 节点。技术 `unassigned` 未从任何汇总删除，但不作主讲回放。公开历史数据经本地 SQLite + 强 JSON Schema 的只读工具暴露，不能称生产企业写入部署。旧工作台仍在 `/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`。FastAPI 文档：`http://127.0.0.1:4317/docs`。
 - 展示 API `GET /api/showcase/online-rsi-serial-final-v4` 和任务细节 `GET /api/showcase/online-rsi-serial-final-v4/pairs/{taskId}` 只读地从最终 V4 artifact 派生 DTO。它使用 gold 计算 audit，但不返回 gold、不调用模型、不改写 artifact：两臂结构化精确检查均 36/36；加上已知 ID、可追溯数字和金额单位措辞的有限摘要审计为 Baseline 25/36、RSI 26/36。后者不是全面自然语言事实判定。
 
 清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。当前为92个Python测试、4个前端回放测试、类型检查和构建通过；展示 API/严格审计/事件执行来源的协议回归已覆盖。300条契约校验（10,400 次工具调用、0 次模型调用）通过。真实 train 尝试 `800f792f`、`9ef504a8`、`acfa3b5e`、`504f58d7`、`982d7e44` 未 materialize 可组合 TinyEdge：保留编译歧义/模型超时/网络失败，不声称 Composition 收益。
@@ -56,6 +56,8 @@ npm run build
 当前可展示结论是在线经验积累与 Fast 复用：六个 family 均在最终严格串行 V4 中降低 token，全量达到 -35.6%。这不证明多代结构进化、Composition 收益、独立 Judge 优势或通用低延迟。不要重跑该实验直到结果好看；若继续研究，必须建立新版本、固定新协议，validation/test 反馈不得回写 Workflow/TinyEdge。
 
 2026-09-11 收口补记：`online-rsi-all-train-saturation-v3` 的 30-family 首到达任务结果可受限展示（RSI token `-18.48%`、模型请求 `-28.73%`），但其 `runtimeOverhead` 含约 14.3 秒被误分类的 Composition 模型等待，不能用于 overhead 结论或与 V4 合并。`#live` 已支持真实、可保存回放的 Baseline/RSI 对照；启动必须显式费用确认，单任务为两次 Agent、两任务为四次 Agent，且后端拒绝并行 live 会话。预算暂停期间不发起额外模型调用，使用保存会话录制。
+
+2026-09-11 岗位化收口：新增 `#employees` 与 [展示设计](../docs/enterprise-operations-employee-showcase-2026-09-11.md)。它只读取最终 V4 的 DTO 和已有报告，提供三类岗位卡、实际业务简报、同领域成本对比及在线 G0→Fast 使用链；没有新增 Agent/Judge/学习调用，也不把 HTML 报告称为 PPTX。报告标题按场景显示岗位与简报名。验证：`npm test` 99 passed、`npm run test:frontend` 4 passed、`npm run build` passed；浏览器实际加载确认三个岗位均由保存 artifact 驱动。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 
