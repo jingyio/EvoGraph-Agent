@@ -1,3 +1,5 @@
+import re
+
 from scripts.run_online_e2e import TYPES, completed_status, judge_summary, result_report, rsi_source_pairs, selected_manifest, summary, task_manifest
 
 
@@ -72,3 +74,20 @@ def test_rsi_source_requires_matching_manifest_and_successful_isolated_runs():
                   pairs=[dict(taskId='finance-cancelled_payments-01', runs=dict(rsi=run('finance-cancelled_payments-01')))])
     selected = rsi_source_pairs(source, manifest)
     assert selected['finance-cancelled_payments-01']['runs']['rsi']['taskId'] == 'finance-cancelled_payments-01'
+
+
+def test_family_chart_uses_shared_axis_and_keeps_saving_polygon_in_viewbox():
+    rows = []
+    for index, (baseline_tokens, rsi_tokens) in enumerate([(20, 15), (25, 10)]):
+        task_id = f'finance-cancelled_payments-0{index + 1}'
+        rows.append(dict(index=index, round=index + 1, taskId=task_id, scenario='finance', family='cancelled_payments',
+                         recordCount=1, runs=dict(
+                             baseline=run(task_id, inputTokens=baseline_tokens, outputTokens=0),
+                             rsi=run(task_id, inputTokens=rsi_tokens, outputTokens=0,
+                                     evolution=dict(planningPath='fast')))))
+    page = result_report(dict(id='chart', status='completed', protocol={}, pairs=rows, summary=summary(rows),
+                              rounds=[], evolutionChain=[], judgeSummary={}))
+    assert 'Cumulative token (absolute shared axis)' in page
+    polygon = re.search(r'<polygon points="([^"]+)" class="saving-area"', page).group(1)
+    x_values = [float(point.split(',')[0]) for point in polygon.split()]
+    assert all(56 <= value <= 548 for value in x_values)
