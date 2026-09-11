@@ -91,3 +91,23 @@ def test_family_chart_uses_shared_axis_and_keeps_saving_polygon_in_viewbox():
     polygon = re.search(r'<polygon points="([^"]+)" class="saving-area"', page).group(1)
     x_values = [float(point.split(',')[0]) for point in polygon.split()]
     assert all(56 <= value <= 548 for value in x_values)
+
+
+def test_report_separates_rsi_learning_health_from_baseline_reliability():
+    task_id = 'finance-cancelled_payments-01'
+    rows = [dict(index=0, round=1, taskId=task_id, scenario='finance', family='cancelled_payments', recordCount=1,
+                 runs=dict(
+                     baseline=run(task_id, reportAttempts=2, failedReportAttempts=1),
+                     rsi=run(task_id, reportAttempts=1, failedReportAttempts=0, evolution=dict(
+                         planningPath='fast', usedVersionId='workflow-1', generatedVersionIds=['workflow-1'],
+                         tinyEdgeMaintenance=dict(workflowStatus='recorded', miningStatus='ok')))))]
+    report = summary(rows)
+    diagnostics = report['arms']['rsi']['diagnostics']
+    assert diagnostics['fastSucceeded'] == 1
+    assert diagnostics['initialWorkflowVersions'] == 1
+    assert diagnostics['maintenanceRecorded'] == diagnostics['maintenanceMiningOk'] == 1
+    page = result_report(dict(id='health', status='completed', protocol={}, pairs=rows, summary=report,
+                              rounds=[], evolutionChain=[], judgeSummary={}))
+    assert 'RSI 在线学习链路健康' in page
+    assert '不是只统计首次失败' in page
+    assert '不能据此声称长期零错误' in page
