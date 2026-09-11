@@ -18,6 +18,7 @@ from .paired_evaluation import PairedEvaluation, EvaluationRequest
 from .business_report import render_report
 from .llm_judge import LLMJudge, JudgeRequest, JUDGE_PROMPT
 from .autotool import digest
+from .showcase import SHOWCASE_EXPERIMENT, build_pair_detail, build_showcase
 
 
 class ReportReview(BaseModel):
@@ -108,6 +109,24 @@ def create_app(service=None):
         if not path.exists():
             raise HTTPException(404, 'Online experiment report not found')
         return HTMLResponse(path.read_text(), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
+    @app.get('/api/showcase/{key}')
+    async def showcase_get(key: str):
+        if key != SHOWCASE_EXPERIMENT:
+            raise HTTPException(404, 'Showcase experiment not found')
+        try:
+            return build_showcase(taskbank.root, taskbank, key)
+        except FileNotFoundError:
+            raise HTTPException(404, 'Showcase experiment not found')
+
+    @app.get('/api/showcase/{key}/pairs/{task_id}')
+    async def showcase_pair_get(key: str, task_id: str):
+        if key != SHOWCASE_EXPERIMENT or task_id not in taskbank.tasks:
+            raise HTTPException(404, 'Showcase task not found')
+        try:
+            return build_pair_detail(taskbank.root, taskbank, key, task_id)
+        except (FileNotFoundError, KeyError):
+            raise HTTPException(404, 'Showcase task not found')
 
     def online_e2e_run(key, arm, run_id):
         if arm not in ['baseline', 'rsi'] or not re.fullmatch(r'[0-9a-f-]{36}', run_id):

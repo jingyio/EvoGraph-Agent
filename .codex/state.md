@@ -32,9 +32,10 @@ npm run build
 
 已有 `.venv`，前端 Node 22+。后端 `npm run dev:backend` 或 `.venv/bin/python -m backend serve`（4317），前端 `npm run dev:frontend`（5173）。启动前检查端口，避免重复服务；重启前确认没有在途模型任务。
 
-页面：`/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`（开发基址 `http://127.0.0.1:5173`）。FastAPI文档：`http://127.0.0.1:4317/docs`。
+主展示页面（开发基址 `http://127.0.0.1:5173`）：`/#home` 概览、`/#compare` 36 个同任务对比、`/#insights` RSI 效果与严格报告审计、`/#replay?task=finance-cancelled_payments-02` 逐步回放。旧工作台仍在 `/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`。FastAPI 文档：`http://127.0.0.1:4317/docs`。
+- 展示 API `GET /api/showcase/online-rsi-serial-final-v4` 和任务细节 `GET /api/showcase/online-rsi-serial-final-v4/pairs/{taskId}` 只读地从最终 V4 artifact 派生 DTO。它使用 gold 计算 audit，但不返回 gold、不调用模型、不改写 artifact：两臂结构化精确检查均 36/36；加上已知 ID、可追溯数字和金额单位措辞的有限摘要审计为 Baseline 25/36、RSI 26/36。后者不是全面自然语言事实判定。
 
-清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。本轮为67个Python测试、4个前端回放测试、类型检查和构建通过；300条契约校验（10,400 次工具调用、0 次模型调用）通过。真实 train 尝试 `800f792f`、`9ef504a8`、`acfa3b5e`、`504f58d7`、`982d7e44` 未 materialize 可组合 TinyEdge：保留编译歧义/模型超时/网络失败，不声称 Composition 收益。
+清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。当前为90个Python测试、4个前端回放测试、类型检查和构建通过；展示 API/严格审计的协议回归已覆盖。300条契约校验（10,400 次工具调用、0 次模型调用）通过。真实 train 尝试 `800f792f`、`9ef504a8`、`acfa3b5e`、`504f58d7`、`982d7e44` 未 materialize 可组合 TinyEdge：保留编译歧义/模型超时/网络失败，不声称 Composition 收益。
 
 ## 配置与私有状态
 

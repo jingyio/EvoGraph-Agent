@@ -11,9 +11,10 @@
 ## 当前任务库路径
 
 ```text
-React: ExecutionDemo / TaskBankPanel / OnlineEvolutionPanel / EvaluationPanel
+React: ShowcaseHome / CompareExperience / RsiInsights / TaskReplay
+       └─ ExecutionDemo / TaskBankPanel / OnlineEvolutionPanel / EvaluationPanel（实验工作台）
                  ↓ JSON API
-backend/app.py → TaskRunner
+backend/app.py → Showcase DTO（只读最终 artifact + 派生审计） / TaskRunner
                  ├─ ReAct / Strong ReAct
                  ├─ Plan + ReAct
                  ├─ Plan DAG（每次规划）
@@ -37,6 +38,7 @@ backend/app.py → TaskRunner
 | `backend/paired_evaluation.py` | 固定验证/测试任务与图，运行明确的两臂对照，保留失败成本 | 不从评测结果生成经验 |
 | `backend/llm_judge.py` | 匿名双顺序报告评分、reward、独立裁判计量 | 不执行 Agent，不改写事实评分，不训练图 |
 | `backend/business_report.py` | 所有 Agent 共用 HTML 报告与实际工具证据展示 | 不读取 gold 来补写业务结果 |
+| `backend/showcase.py` | 只读聚合最终严格串行 artifact，生成 family 曲线、成对任务、DAG/绑定回放和严格报告审计 DTO | 不运行 Agent/Judge，不写经验，不向前端泄漏 gold 或把有限摘要审计称为全面文字事实评分 |
 
 用户粘贴的架构示例中的 `Resolver`、`MotifContext` 是说明性概念，不是当前仓库类名。不要据此未经任务需要重建框架。
 
@@ -69,10 +71,12 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173`：`#demo` 实时/回放、`#evaluation` 成对评测与裁判、`#evolution` 在线版本、`#taskbank` 任务工具。后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，并提供 `#compare`、`#insights` 和 `#replay?task=<id>` 三个录制入口；旧 `#demo`、`#evaluation`、`#evolution`、`#taskbank` 是实验工作台。展示 API 是 `/api/showcase/online-rsi-serial-final-v4` 和 `/pairs/{taskId}`；后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 
 `scripts/run_online_e2e.py` 是独立的 36-task 在线训练对照入口。它创建专用 run/experience 目录，基线禁用学习，RSI 仅从此前正常 train 任务更新经验；每次启动后立即 checkpoint run ID，避免恢复时重复学习。`--rsi-source` 只复用已审计的 RSI-only source，并在新目录补跑匹配 Baseline；结果明确标注为分时匹配。静态页由 `/api/online-e2e/{id}/report` 提供，并按 family 给出六条经验形成/复用与准确 trace/report 入口。
 
 完成的严格串行工件 `online-rsi-serial-final-v4` 额外从原始 run 聚合 P95/最大延迟、最大 token、报告恢复、维护、分页和 phase token。它只生成派生摘要，不会重放 Agent/Judge；Agent 成本与 Judge 的已记录 token 下限分开显示。最终证据边界见 [online-rsi-serial-final-results-2026-09-11.md](online-rsi-serial-final-results-2026-09-11.md)。
+
+展示层的严格报告审计不会改变上述原始结构化 evaluation：它再次核查报告 schema、metric/selection/evidence 精确性、证据在当前 trace 中确已观察，并以有限规则检查摘要中的已知 ID、数字和 `cents` 金额表述。gold 仅在后端进程内用于得到布尔结果；不返回预期答案或未通过的具体业务真值。
