@@ -688,7 +688,7 @@ class TaskRunner:
                             messages.append(dict(role='user', content='报告仅缺少或格式错误的 evidenceIds。不要重新读取业务数据；请只调用 publish_report，evidenceIds 必须使用当前观察中的完整引用：' + json.dumps(refs, ensure_ascii=False)))
                         else:
                             constraints = run.get('semanticConstraints') or []
-                            messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。' +
+                            messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。若原任务要求列出、筛选或排序记录，selectedIds 必须包含这些当前观察得到的记录 ID；只有原任务没有要求任何记录清单时才使用空数组。' +
                                                  ('原任务条件仍然有效：' + ' '.join(constraints) if constraints else '')))
         try:
             await asyncio.wait_for(workflow(), timeout=config.RUN_TIMEOUT)

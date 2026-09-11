@@ -1,5 +1,5 @@
 {
-  "version": "public-v1",
+  "version": "public-v2-task-contract",
   "createdAt": "2026-09-09T16:41:44.294Z",
   "scenarios": {
     "finance": {
@@ -77,5 +77,5 @@
     }
   },
   "taskCount": 300,
-  "note": "真实历史数据上的人工设计任务；未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。"
+  "note": "真实历史数据上的人工设计任务；selectedIds 合同明确列出任务要求识别、筛选或排序的记录。未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。"
 }

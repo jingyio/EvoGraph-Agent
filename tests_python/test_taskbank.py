@@ -43,6 +43,15 @@ def test_ticket_stale_boundary_and_closed_issue_exclusion():
     assert answer('tickets', 'bugs', [dict(row, state='closed')], '')['selectedIds'] == []
 
 
+def test_frozen_task_contract_never_tells_rank_or_selection_tasks_to_emit_empty_ids():
+    bank = TaskBank()
+    bank.load()
+    tasks = list(bank.tasks.values())
+    assert tasks and all('无需筛选的任务为空数组' not in task['task'] for task in tasks)
+    for task_id in ['support-recent-01', 'tickets-activity-01', 'tickets-closure-01']:
+        assert 'selectedIds 必须列出任务要求识别、筛选或排序的记录 ID' in bank.task(task_id)['task']
+
+
 def small_bank(root):
     (root / 'benchmarks').mkdir()
     (root / 'artifacts/taskbank').mkdir(parents=True)

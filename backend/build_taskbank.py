@@ -158,7 +158,8 @@ def build():
                 tasks.append(dict(id=task_id, scenario=scenario, family=family, title=title, split=split, asOf=as_of,
                     recordIds=[r['id'] for r in cohort], sourceUrl=source['url'], recordCount=size,
                     task=f'任务 {task_id}：只分析本任务工具可见的 {size} 条记录。{instruction} '
-                         f'以 {as_of} 为参考时刻。返回 metrics 字段 {", ".join(keys)}，selectedIds 按要求列出（无需筛选的任务为空数组），并给出逐条证据引用和简短结论。不得补造缺失数据、修改原始记录或发送消息。',
+                         f'以 {as_of} 为参考时刻。返回 metrics 字段 {", ".join(keys)}；selectedIds 必须列出任务要求识别、筛选或排序的记录 ID，'
+                         f'仅在任务没有要求列出任何记录时使用空数组。并给出逐条证据引用和简短结论。不得补造缺失数据、修改原始记录或发送消息。',
                     acceptance=dict(metricKeys=keys, selectedIdsOrderMatters=expected['ordered'], evidence='引用本任务实际观察过的记录', prose='仅保存，不自动评估全部自然语言质量'),
                     suggestedBudget=dict(modelRequests=24, toolCalls=80)))
                 gold[task_id] = expected
@@ -170,8 +171,8 @@ def build():
     connection.commit()
     connection.close()
     (OUT / 'records.sqlite3').chmod(0o600)
-    manifest = dict(version='public-v1', createdAt=as_of, scenarios=provenance, taskCount=len(tasks),
-                    note='真实历史数据上的人工设计任务；未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。')
+    manifest = dict(version='public-v2-task-contract', createdAt=as_of, scenarios=provenance, taskCount=len(tasks),
+                    note='真实历史数据上的人工设计任务；selectedIds 合同明确列出任务要求识别、筛选或排序的记录。未实际调用 LLM 执行 300 次。非企业在线写入工作流，非 IID 成功率样本。')
     write_private(OUT / 'gold.json', gold)
     write_private(ROOT / 'benchmarks/manifest.json', manifest)
     write_private(TASKS, ''.join(json.dumps(t, ensure_ascii=False) + '\n' for t in tasks))
