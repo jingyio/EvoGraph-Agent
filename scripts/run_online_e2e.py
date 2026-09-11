@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Run the fixed, isolated 36-task online RSI experiment exactly once per task."""
 import asyncio
 import argparse
