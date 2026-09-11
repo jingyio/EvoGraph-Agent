@@ -43,7 +43,7 @@ export type PairDetail = ShowcasePair & {
   task: { id: string; title: string; task: string; scenario: string; family: string; recordCount: number; recordIds: string[]; sourceUrl?: string };
   runs: { baseline: CompactRun & { graphNodes: GraphNode[]; steps: Step[]; timeline: TimelineEvent[]; report: Record<string, unknown> }; rsi: CompactRun & { graphNodes: GraphNode[]; steps: Step[]; timeline: TimelineEvent[]; report: Record<string, unknown> } };
 };
-export type TimelineEvent = { position: number; kind: string; title: string; elapsedMs: number; metrics: Metrics };
+export type TimelineEvent = { position: number; kind: string; channel: 'model' | 'structured' | 'control'; title: string; executor?: string | null; nodeId?: string | null; elapsedMs: number; metrics: Metrics };
 
 export const total = (metrics?: Metrics) => Number(metrics?.inputTokens || 0) + Number(metrics?.outputTokens || 0);
 export const number = (value?: number) => new Intl.NumberFormat('zh-CN').format(Math.round(value || 0));

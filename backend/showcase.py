@@ -489,10 +489,20 @@ def _timeline_event(event: dict[str, Any], position: int) -> dict[str, Any] | No
     else:
         return None
     metrics = event.get('metrics') or {}
+    executor = detail.get('executor')
+    if event_type in {'model_start', 'model', 'plan'}:
+        channel = 'model'
+    elif event_type in {'graph_created', 'binding', 'motif'} or executor == 'graph':
+        channel = 'structured'
+    else:
+        channel = 'control'
     return {
         'position': position,
         'kind': event_type,
+        'channel': channel,
         'title': label,
+        'executor': executor,
+        'nodeId': detail.get('nodeId'),
         'elapsedMs': float(event.get('elapsedMs') or metrics.get('durationMs') or 0),
         'metrics': {key: metrics.get(key, 0) for key in ['modelRequests', 'toolCalls', 'inputTokens', 'outputTokens', 'durationMs', 'filteredOutDetailReads', 'deterministicBindings']},
     }

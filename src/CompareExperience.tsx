@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ChevronDown, ExternalLink, Minus, Pause, Play, RotateCcw } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Minus, Pause, Play, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import { PairDetail, ScenarioGroup, SHOWCASE_EXPERIMENT, Showcase, ShowcasePair, TimelineEvent, duration, number, percent, total } from './showcase';
@@ -19,10 +19,13 @@ function Delta({ baseline, rsi, kind }: { baseline: number; rsi: number; kind: s
   return <span className={`delta ${delta > 0 ? 'positive' : delta < 0 ? 'negative' : ''}`}>{delta > 0 ? <Check size={13} /> : <Minus size={13} />}{kind === 'token' ? `${number(Math.abs(delta))} token` : `${Math.abs(delta).toFixed(kind === 'latency' ? 1 : 0)}${kind === 'latency' ? 's' : ' 次'}`}</span>;
 }
 
-function eventAt(timeline: TimelineEvent[], step: number, maxStep: number) {
+function eventAt(timeline: TimelineEvent[], step: number) {
   if (!timeline.length) return undefined;
-  const index = Math.min(timeline.length - 1, Math.round(step * (timeline.length - 1) / Math.max(1, maxStep)));
-  return timeline[index];
+  return timeline[Math.min(timeline.length - 1, Math.max(0, step))];
+}
+
+function channelLabel(event?: TimelineEvent) {
+  return event?.channel === 'model' ? 'M / 模型请求或输出' : event?.channel === 'structured' ? 'S / 图绑定、筛选或执行' : 'C / 校验与恢复控制';
 }
 
 function LiveMetrics({ event }: { event?: TimelineEvent }) {
@@ -30,18 +33,32 @@ function LiveMetrics({ event }: { event?: TimelineEvent }) {
   return <div className="live-metrics"><span><b>{metrics?.modelRequests || 0}</b>LLM</span><span><b>{number(total(metrics))}</b>token</span><span><b>{metrics?.toolCalls || 0}</b>工具</span><span><b>{duration(Number(metrics?.durationMs || event?.elapsedMs))}</b>时间</span></div>;
 }
 
-function DomainReplay({ category, detail, step, maxStep }: { category: ScenarioGroup; detail?: PairDetail; step: number; maxStep: number }) {
+function MiniRail({ timeline, step, onStep }: { timeline: TimelineEvent[]; step: number; onStep: (step: number) => void }) {
+  return <div className="mini-event-rail" aria-label="已保存事件索引">{timeline.map((event, index) => <button key={event.position} className={`${event.channel} ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`} onClick={() => onStep(index)} aria-label={`${index + 1}. ${event.title}`} title={`${index + 1}. ${event.title}`}>{event.channel === 'model' ? 'M' : event.channel === 'structured' ? 'S' : 'C'}</button>)}</div>;
+}
+
+function DomainReplay({ category, detail, step, onStep }: { category: ScenarioGroup; detail?: PairDetail; step: number; onStep: (step: number) => void }) {
   if (!detail) return <article className="domain-replay loading"><small>{category.label}</small><p>正在载入已保存轨迹…</p></article>;
-  const baseline = eventAt(detail.runs.baseline.timeline, step, maxStep);
-  const rsi = eventAt(detail.runs.rsi.timeline, step, maxStep);
-  return <article className="domain-replay"><header><div><small>{category.label}</small><strong>{detail.taskId}</strong></div><a href={`#replay?task=${encodeURIComponent(detail.taskId)}`} aria-label={`打开 ${detail.taskId} 完整回放`} title="打开完整回放"><ArrowUpRight size={16} /></a></header><div className="live-lanes"><div><span>BASELINE</span><b>{baseline?.title || '等待开始'}</b><LiveMetrics event={baseline} /></div><div className="rsi-live"><span>RSI</span><b>{rsi?.title || '等待开始'}</b><LiveMetrics event={rsi} /></div></div></article>;
+  const baseline = eventAt(detail.runs.baseline.timeline, step);
+  const rsi = eventAt(detail.runs.rsi.timeline, step);
+  return <article className="domain-replay"><header><div><small>{category.label}</small><strong>{detail.taskId}</strong></div><a href={`#replay?task=${encodeURIComponent(detail.taskId)}`} aria-label={`打开 ${detail.taskId} 完整回放`} title="打开完整回放"><ArrowUpRight size={16} /></a></header><div className="live-lanes"><div><span>BASELINE · {channelLabel(baseline)}</span><b>{baseline?.title || '等待开始'}</b><LiveMetrics event={baseline} /><MiniRail timeline={detail.runs.baseline.timeline} step={Math.min(step, detail.runs.baseline.timeline.length - 1)} onStep={onStep} /></div><div className="rsi-live"><span>RSI · {channelLabel(rsi)}</span><b>{rsi?.title || '等待开始'}</b><LiveMetrics event={rsi} /><MiniRail timeline={detail.runs.rsi.timeline} step={Math.min(step, detail.runs.rsi.timeline.length - 1)} onStep={onStep} /></div></div></article>;
 }
 
 function ReplayStrip({ categories, details }: { categories: ScenarioGroup[]; details: Record<string, PairDetail> }) {
-  const [step, setStep] = useState(0); const [playing, setPlaying] = useState(false);
+  const [step, setStep] = useState(0); const [playing, setPlaying] = useState(false); const [focusedScenario, setFocusedScenario] = useState('finance');
   const maxStep = Math.max(1, ...Object.values(details).flatMap(detail => [detail.runs.baseline.timeline.length, detail.runs.rsi.timeline.length]).map(length => Math.max(0, length - 1)));
-  useEffect(() => { if (!playing) return; const timer = window.setInterval(() => setStep(current => current >= maxStep ? 0 : current + 1), 900); return () => window.clearInterval(timer); }, [playing, maxStep]);
-  return <section className="live-replay"><header><div><p className="showcase-kicker">THREE DOMAIN REPLAYS / SAVED TRACE, NOT SYNTHETIC ANIMATION</p><h2>同一时间步，三类 Agent 同步向前。</h2></div><div className="replay-controls"><button onClick={() => setPlaying(value => !value)} aria-label={playing ? '暂停回放' : '播放回放'} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button onClick={() => { setPlaying(false); setStep(0); }} aria-label="重置回放" title="重置"><RotateCcw size={16} /></button><span>{step + 1} / {maxStep + 1}</span></div></header><input className="replay-scrubber" type="range" min="0" max={maxStep} value={step} onChange={event => { setPlaying(false); setStep(Number(event.target.value)); }} aria-label="回放时间步" /><div className="domain-replay-grid">{categories.map(category => <DomainReplay key={category.scenario} category={category} detail={details[category.featuredTaskId]} step={step} maxStep={maxStep} />)}</div><p className="replay-hint">每一帧是保存 trace 的真实累计状态。技术代表任务选用 labels；未分配工单仍保留在技术领域的全量 12 项计算中，但不作为主讲案例。</p></section>;
+  const focused = categories.find(category => category.scenario === focusedScenario) || categories[0];
+  const focus = focused && details[focused.featuredTaskId];
+  const baseline = focus && eventAt(focus.runs.baseline.timeline, step);
+  const rsi = focus && eventAt(focus.runs.rsi.timeline, step);
+  useEffect(() => { if (!playing) return; const timer = window.setInterval(() => setStep(current => current >= maxStep ? 0 : current + 1), 720); return () => window.clearInterval(timer); }, [playing, maxStep]);
+  return <section className="live-replay"><header><div><p className="showcase-kicker">THREE DOMAIN REPLAYS / EXACT SAVED EVENT INDEX</p><h2>每一格，都是一次真实执行事件。</h2></div><div className="replay-controls"><button onClick={() => setStep(value => Math.max(0, value - 1))} aria-label="上一步" title="上一步"><ChevronLeft size={16} /></button><button onClick={() => setPlaying(value => !value)} aria-label={playing ? '暂停回放' : '播放回放'} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button onClick={() => setStep(value => Math.min(maxStep, value + 1))} aria-label="下一步" title="下一步"><ChevronRight size={16} /></button><button onClick={() => { setPlaying(false); setStep(0); }} aria-label="重置回放" title="重置"><RotateCcw size={16} /></button><span>{step + 1} / {maxStep + 1}</span></div></header><input className="replay-scrubber" type="range" min="0" max={maxStep} value={step} onChange={event => { setPlaying(false); setStep(Number(event.target.value)); }} aria-label="真实事件时间步" /><div className="domain-replay-grid">{categories.map(category => <DomainReplay key={category.scenario} category={category} detail={details[category.featuredTaskId]} step={step} onStep={next => { setPlaying(false); setStep(next); setFocusedScenario(category.scenario); }} />)}</div>{focus && <section className="compare-film"><header><div><p className="showcase-kicker">FOCUSED TAKE / {focused.label.toUpperCase()}</p><h3>{focus.task.task}</h3><span>第 {step + 1} 个保存事件；两个轨道按各自事件序列前进，短轨结束后停在最终状态。</span></div><div className="replay-focus-tabs">{categories.map(category => <button key={category.scenario} className={category.scenario === focused.scenario ? 'selected' : ''} onClick={() => { setPlaying(false); setFocusedScenario(category.scenario); }}>{category.label}</button>)}</div></header><div className="compare-film-lanes"><FocusedLane label="BASELINE" event={baseline} timeline={focus.runs.baseline.timeline} step={step} onStep={next => { setPlaying(false); setStep(next); }} /><FocusedLane label="RSI" rsi event={rsi} timeline={focus.runs.rsi.timeline} step={step} onStep={next => { setPlaying(false); setStep(next); }} /></div><a className="compare-film-link" href={`#replay?task=${encodeURIComponent(focus.taskId)}`}>打开该任务的 DAG 与参数绑定回放 <ArrowUpRight size={15} /></a></section>}<p className="replay-hint">M 表示模型请求或可见输出；S 表示图绑定、筛选、依赖驱动工具调用；C 表示校验和有界恢复。这里不按比例抽帧，也不生成虚构事件。技术代表任务选用 labels；未分配工单仍保留在技术领域的全量 12 项计算中。</p></section>;
+}
+
+function FocusedLane({ label, event, timeline, step, onStep, rsi = false }: { label: string; event?: TimelineEvent; timeline: TimelineEvent[]; step: number; onStep: (step: number) => void; rsi?: boolean }) {
+  const metrics = event?.metrics;
+  const boundedStep = Math.min(step, Math.max(0, timeline.length - 1));
+  return <article className={`compare-film-lane ${rsi ? 'rsi' : 'baseline'}`}><header><span>{label}</span><small>{channelLabel(event)}</small></header><strong>{event?.title || '等待开始'}</strong><LiveMetrics event={event} /><MiniRail timeline={timeline} step={boundedStep} onStep={onStep} /><footer>{rsi ? 'S：图已选节点、当前观察参数绑定、筛选与图执行。' : 'M：读取后由模型继续选择下一步工具或报告动作。'}</footer></article>;
 }
 
 export default function CompareExperience() {
