@@ -19,6 +19,7 @@ const n = (value?: number) => new Intl.NumberFormat('zh-CN').format(Math.round(v
 const seconds = (value?: number) => `${((value || 0) / 1000).toFixed(1)}s`;
 const token = (metrics?: { inputTokens?: number; outputTokens?: number }) => (metrics?.inputTokens || 0) + (metrics?.outputTokens || 0);
 const label: Record<string, string> = { finance: '财务运营', support: '客服运营', tickets: '技术工单' };
+const sessionFromHash = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('session');
 
 function LiveLane({ arm, run }: { arm: 'baseline' | 'rsi'; run: TraceRun | null }) {
   const view = run ? traceAt(run, activeRun(run) ? Math.max(run.metrics.durationMs || 0, Date.now() - Date.parse(run.startedAt || run.createdAt)) : traceDuration(run)) : null;
@@ -40,12 +41,23 @@ export default function LiveComparison() {
   const [taskId, setTaskId] = useState('finance-cancelled_payments-01');
   const [steps, setSteps] = useState(2);
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionKey, setSessionKey] = useState<string | null>(sessionFromHash);
   const [runs, setRuns] = useState<Record<string, TraceRun>>({});
   const [error, setError] = useState('');
   const running = session?.status === 'queued' || session?.status === 'running';
   const activePair = useMemo(() => session?.pairs.find(pair => pair.status === 'running') || session?.pairs.filter(pair => Object.keys(pair.runs).length).at(-1), [session]);
 
   useEffect(() => { api<Task[]>('/api/taskbank/tasks?split=train').then(setTasks).catch(error => setError(error.message)); }, []);
+  useEffect(() => {
+    const sync = () => setSessionKey(sessionFromHash());
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+  useEffect(() => {
+    if (!sessionKey || session?.id === sessionKey) return;
+    setError(''); setRuns({});
+    api<Session>(`/api/live-showcase/${sessionKey}`).then(setSession).catch(failure => setError((failure as Error).message));
+  }, [session?.id, sessionKey]);
   useEffect(() => {
     if (!session) return;
     let stopped = false;
@@ -77,6 +89,8 @@ export default function LiveComparison() {
     setError(''); setRuns({}); setSession(null);
     try {
       const created = await api<{ id: string }>('/api/live-showcase', { method: 'POST', body: JSON.stringify({ taskId, steps }) });
+      setSessionKey(created.id);
+      window.location.hash = `live?session=${created.id}`;
       setSession({ id: created.id, status: 'queued', taskIds: [], events: [], pairs: [], protocol: {}, summary: { baseline: {}, rsi: {} } });
     } catch (failure) { setError((failure as Error).message); }
   }
