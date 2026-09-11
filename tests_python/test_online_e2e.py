@@ -35,6 +35,9 @@ def test_online_summary_keeps_failures_and_local_maintenance():
     assert report['arms']['rsi']['failures'][0]['error'] == 'timeout'
     assert report['arms']['rsi']['diagnostics']['evolutionMaintenanceMs'] == 3.4
     assert report['arms']['rsi']['diagnostics']['reportAttempts'] == 1
+    assert report['arms']['baseline']['p95LatencyMs'] == 100
+    assert report['arms']['baseline']['maxTotalTokens'] == 12
+    assert report['toolCallDelta'] == 0
     assert 'RSI' in result_report(dict(id='x', status='running', summary=report, rounds=[], evolutionChain=[]))
 
 
@@ -46,6 +49,14 @@ def test_judge_cost_stays_separate_from_agent_summary():
     report = judge_summary(rows)
     assert report['totalTokens'] == 24 and report['modelRequests'] == 2
     assert report['rewards'] == dict(baseline=.8, rsi=.9)
+    assert report['reportedTokenLowerBound'] == 24
+
+
+def test_judge_summary_keeps_failure_reason_and_missing_usage_visible():
+    report = judge_summary([dict(judge=dict(status='failed', error='provider_timeout'))])
+    assert report['failed'] == 1
+    assert report['usageComplete'] is False
+    assert report['failureReasons'] == dict(provider_timeout=1)
 
 
 def test_completed_rsi_only_run_does_not_remain_running_or_need_judge():

@@ -109,6 +109,15 @@ def aggregate(values, key):
     return sum((value or {}).get(key) or 0 for value in values)
 
 
+def percentile(values, fraction):
+    """Return the nearest-rank percentile for recorded non-empty metrics."""
+    ordered = sorted(value for value in values if value is not None)
+    if not ordered:
+        return 0
+    index = max(0, min(len(ordered) - 1, int(len(ordered) * fraction + 0.999999) - 1))
+    return ordered[index]
+
+
 def diagnostics(runs):
     evolution = [run.get('evolution') or {} for run in runs]
     metrics = [run.get('metrics') or {} for run in runs]
@@ -125,7 +134,23 @@ def diagnostics(runs):
         compositionLocalMs=round(sum(item.get('compositionLocalMs', composition[index].get('localMs', 0)) or 0 for index, item in enumerate(evolution)), 3),
         evolutionMaintenanceMs=round(aggregate(evolution, 'maintenanceMs'), 3),
         reportAttempts=aggregate(metrics, 'reportAttempts'), failedReportAttempts=aggregate(metrics, 'failedReportAttempts'),
-        blockedRecoveryReads=aggregate(metrics, 'reportRecoveryBlockedReads'))
+        blockedRecoveryReads=aggregate(metrics, 'reportRecoveryBlockedReads'),
+        evidenceCanonicalizations=aggregate(metrics, 'reportEvidenceCanonicalizations'),
+        evidenceCoverageGaps=aggregate(metrics, 'reportEvidenceCoverageGaps'),
+        evidenceFormatFailures=aggregate(metrics, 'reportEvidenceFormatFailures'),
+        paginationGuardRejects=aggregate(metrics, 'paginationGuardRejects'),
+        maintenanceErrors=sum(bool(item.get('maintenanceError')) for item in evolution))
+
+
+def phase_summary(runs):
+    result = {}
+    for run in runs:
+        for phase, metrics in (run.get('phaseMetrics') or {}).items():
+            current = result.setdefault(phase, dict(requests=0, inputTokens=0, outputTokens=0))
+            current['requests'] += metrics.get('requests') or 0
+            current['inputTokens'] += metrics.get('inputTokens') or 0
+            current['outputTokens'] += metrics.get('outputTokens') or 0
+    return result
 
 
 def success(run):
@@ -139,17 +164,28 @@ def summary(rows):
         metrics = [row['metrics'] for row in runs]
         passed = sum(success(row) for row in runs)
         total_tokens = sum((row.get('inputTokens') or 0) + (row.get('outputTokens') or 0) for row in metrics)
+        durations = [row.get('durationMs') or 0 for row in metrics]
+        run_tokens = [(row.get('inputTokens') or 0) + (row.get('outputTokens') or 0) for row in metrics]
         result[arm] = dict(attempts=len(runs), passed=passed, successRate=passed / len(runs) if runs else None,
                            inputTokens=sum(row.get('inputTokens') or 0 for row in metrics), outputTokens=sum(row.get('outputTokens') or 0 for row in metrics),
                            totalTokens=total_tokens, modelRequests=sum(row.get('modelRequests') or 0 for row in metrics),
                            toolCalls=sum(row.get('toolCalls') or 0 for row in metrics), toolErrors=sum(row.get('toolErrors') or 0 for row in metrics),
                            durationMs=sum(row.get('durationMs') or 0 for row in metrics), tokensPerSuccess=total_tokens / passed if passed else None,
+                           averageLatencyMs=sum(durations) / len(durations) if durations else None,
+                           p95LatencyMs=percentile(durations, .95), maxLatencyMs=max(durations) if durations else 0,
+                           maxTotalTokens=max(run_tokens) if run_tokens else 0,
+                           averageToolCalls=sum(row.get('toolCalls') or 0 for row in metrics) / len(metrics) if metrics else None,
                            usageComplete=all(row.get('usageComplete') for row in metrics), failures=[dict(taskId=row.get('taskId'), status=row.get('status'), error=row.get('error'), issues=row.get('evaluation', {}).get('issues', [])) for row in runs if not success(row)],
-                           diagnostics=diagnostics(runs))
+                           diagnostics=diagnostics(runs), phaseMetrics=phase_summary(runs))
     a, b = result['baseline'], result['rsi']
     comparable = bool(a['attempts'] and b['attempts'])
     return dict(arms=result, allOutcomeTokenDelta=b['totalTokens'] - a['totalTokens'] if comparable else None,
                 allOutcomeLatencyDeltaMs=b['durationMs'] - a['durationMs'] if comparable else None,
+                tokenSavingRate=1 - b['totalTokens'] / a['totalTokens'] if comparable and a['totalTokens'] else None,
+                modelRequestSavingRate=1 - b['modelRequests'] / a['modelRequests'] if comparable and a['modelRequests'] else None,
+                observedLatencySavingRate=1 - b['durationMs'] / a['durationMs'] if comparable and a['durationMs'] else None,
+                toolCallDelta=b['toolCalls'] - a['toolCalls'] if comparable else None,
+                agentReportedTotalTokens=a['totalTokens'] + b['totalTokens'] if comparable else None,
                 qualityRegressions=sum(success(row['runs'].get('baseline', {})) and not success(row['runs'].get('rsi', {})) for row in rows) if comparable else None,
                 qualityImprovements=sum(not success(row['runs'].get('baseline', {})) and success(row['runs'].get('rsi', {})) for row in rows) if comparable else None)
 
@@ -204,7 +240,7 @@ def judge_summary(rows):
     completed = [row for row in judges if row.get('status') == 'completed']
     metrics = [row.get('metrics') or {} for row in judges]
     rewards = {arm: [] for arm in ['baseline', 'rsi']}
-    winners = {}
+    winners, failure_reasons = {}, {}
     consistent = 0
     for item in completed:
         result = item.get('result') or {}
@@ -214,12 +250,19 @@ def judge_summary(rows):
             report = (result.get('reports') or {}).get(arm)
             if report:
                 rewards[arm].append(report['reward'])
+    for item in judges:
+        if item.get('status') == 'completed':
+            continue
+        reason = item.get('error') or 'unknown_judge_failure'
+        failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
     return dict(attempts=len(judges), completed=len(completed), failed=len(judges) - len(completed), winners=winners,
                 orderConsistent=consistent, orderInconclusive=len(completed) - consistent,
                 rewards={arm: round(sum(values) / len(values), 4) if values else None for arm, values in rewards.items()},
                 modelRequests=aggregate(metrics, 'modelRequests'), inputTokens=aggregate(metrics, 'inputTokens'),
                 outputTokens=aggregate(metrics, 'outputTokens'), totalTokens=aggregate(metrics, 'inputTokens') + aggregate(metrics, 'outputTokens'),
                 durationMs=aggregate(metrics, 'durationMs'), usageComplete=all(item.get('usageComplete') for item in metrics),
+                reportedTokenLowerBound=aggregate(metrics, 'inputTokens') + aggregate(metrics, 'outputTokens'),
+                failureReasons=failure_reasons,
                 sameAsExecutor=all(item.get('sameAsExecutor') for item in completed) if completed else None)
 
 
@@ -322,22 +365,43 @@ def family_sections(result):
 def result_report(result):
     data = result.get('summary') or {}
     arms = data.get('arms') or {}
+    protocol = result.get('protocol') or {}
+    judge = result.get('judgeSummary') or {}
+
+    def percent(value):
+        return '—' if value is None else f'{value:.1%}'
+
+    def seconds(value):
+        return f'{(value or 0) / 1000:.2f}s'
+
     def arm(name):
         row = arms.get(name, {})
-        return f"<tr><th>{escape(name)}</th><td>{row.get('passed', 0)} / {row.get('attempts', 0)}</td><td>{row.get('totalTokens', 0):,}</td><td>{row.get('modelRequests', 0)}</td><td>{row.get('toolCalls', 0)}</td><td>{row.get('durationMs', 0) / 1000:.1f}s</td></tr>"
+        return f"<tr><th>{escape(name)}</th><td>{row.get('passed', 0)} / {row.get('attempts', 0)}</td><td>{row.get('inputTokens', 0):,} / {row.get('outputTokens', 0):,} / {row.get('totalTokens', 0):,}</td><td>{row.get('modelRequests', 0)}</td><td>{row.get('toolCalls', 0)}<br><small>avg {(row.get('averageToolCalls') or 0):.2f}</small></td><td>{seconds(row.get('durationMs'))}</td></tr>"
+
+    def reliability(name):
+        row = arms.get(name, {})
+        diagnostics = row.get('diagnostics') or {}
+        return f"<tr><th>{escape(name)}</th><td>{seconds(row.get('averageLatencyMs'))} / {seconds(row.get('p95LatencyMs'))} / {seconds(row.get('maxLatencyMs'))}</td><td>{row.get('maxTotalTokens', 0):,}</td><td>{diagnostics.get('reportAttempts', 0)} / {diagnostics.get('failedReportAttempts', 0)}</td><td>{row.get('toolErrors', 0)} / {diagnostics.get('maintenanceErrors', 0)}</td><td>{diagnostics.get('paginationGuardRejects', 0)} / {diagnostics.get('blockedRecoveryReads', 0)}</td></tr>"
+
+    def phase(name, stage):
+        metrics = (arms.get(name, {}).get('phaseMetrics') or {}).get(stage, {})
+        return f"{metrics.get('requests', 0)} req / {metrics.get('inputTokens', 0) + metrics.get('outputTokens', 0):,} token"
+
     rounds = ''.join(f"<tr><td>{row['round']}</td><td>{row['summary']['arms']['baseline']['totalTokens']:,}</td><td>{row['summary']['arms']['rsi']['totalTokens']:,}</td><td>{row['summary']['arms']['baseline']['passed']}</td><td>{row['summary']['arms']['rsi']['passed']}</td></tr>" for row in result.get('rounds', []))
     chains = ''.join(f"<li><b>{escape(item['taskId'])}</b>: used={escape(str(item['usedGraphId'] or 'none'))}, created={escape(', '.join(item['createdGraphIds']) or 'none')}</li>" for item in result.get('evolutionChain', [])) or '<li>尚未观察到经验变化。</li>'
-    judge = result.get('judgeSummary') or {}
     selectors, families = family_sections(result)
-    delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI - 基线：token {data['allOutcomeTokenDelta']:,}；延迟 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s。负值才表示 RSI 较低。"
-    protocol = result.get('protocol') or {}
+    delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI 相对 Baseline：Agent token {data['allOutcomeTokenDelta']:,}（{percent(data.get('tokenSavingRate'))}）；模型请求 {data['modelRequestSavingRate'] * 100:.1f}% 更少；工具调用 {data['toolCallDelta']:+,}。端到端时长观察差异 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s（{percent(data.get('observedLatencySavingRate'))}），受模型服务时段影响，不作为稳定延迟优势主张。"
+    rsi_diagnostics = (arms.get('rsi') or {}).get('diagnostics') or {}
+    baseline_diagnostics = (arms.get('baseline') or {}).get('diagnostics') or {}
+    evolution_note = f"Fast {rsi_diagnostics.get('graphReuse', 0)} 次；Fallback {(rsi_diagnostics.get('planningPaths') or {}).get('fallback', 0)} 次；Composition 实际执行 {rsi_diagnostics.get('compositionRuns', 0)} 次。图查询 {rsi_diagnostics.get('graphLookupMs', 0):.1f}ms、组合本地选择 {rsi_diagnostics.get('compositionLocalMs', 0):.1f}ms、维护 {rsi_diagnostics.get('evolutionMaintenanceMs', 0):.1f}ms，均已记录在 Agent 端到端时长中。"
+    judge_failures = '；'.join(f'{escape(reason)} × {count}' for reason, count in (judge.get('failureReasons') or {}).items()) or '无'
     supplements = []
     if protocol.get('reliabilityExperiment'):
         supplements.append(f'<a href="/api/online-e2e/{escape(protocol["reliabilityExperiment"])} /report">长尾修复预检</a>'.replace(' /report', '/report'))
     if protocol.get('scaleExperiment'):
         supplements.append(f'<a href="/api/efficiency/{escape(protocol["scaleExperiment"])} /report">串行规模与可靠性补验</a>'.replace(' /report', '/report'))
     supplemental_html = '；'.join(supplements) if supplements else '本实验没有关联补充工件。'
-    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1240px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px;vertical-align:top}}th{{background:#f4f7f8}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}a{{color:#086c72}}select{{font:inherit;padding:7px;border:1px solid #9aabb2;background:white}}.family{{margin-top:22px;border-top:2px solid #354a56;padding-top:12px;overflow-x:auto}}svg{{display:block;width:100%;max-width:570px;height:auto;background:#fbfcfc;border:1px solid #dbe3e6}}.axis{{stroke:#9aabb2;stroke-width:1}}.baseline-line{{stroke:#8a4a25;stroke-width:3;fill:none}}.rsi-line{{stroke:#087d64;stroke-width:3;fill:none}}.baseline-label{{fill:#8a4a25}}.rsi-label{{fill:#087d64}}@media(max-width:700px){{main{{margin:0;padding:16px}}table{{font-size:12px}}}}</style><main><small>固定 manifest、独立经验库，run/model/read 均为 1；Agent 成本与 Judge 成本分开。</small><h1>RSI 串行在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}；比较：{escape(protocol.get('comparisonMode', 'unknown'))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；Judge {judge.get('modelRequests', 0)} 请求、{judge.get('totalTokens', 0):,} token、{judge.get('durationMs', 0) / 1000:.1f}s。平均 reward：基线 {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}。同模型 Judge：{judge.get('sameAsExecutor')}；不计入 Agent 成本。</p><h2>按轮</h2><table><tr><th>轮</th><th>基线 token</th><th>RSI token</th><th>基线通过</th><th>RSI通过</th></tr>{rounds}</table><h2>任务族内演进</h2><label>任务族 <select id="family-select">{selectors}</select></label>{families}<h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>补充可靠性工件</h2><p>{supplemental_html}</p><h2>录制顺序</h2><ol><li>选择一个任务族，展示首个任务形成 G0 和后续任务实际 Fast 使用。</li><li>点击同一任务的 baseline/RSI trace 与 report，对照业务结果、模型和工具成本。</li><li>查看族内累计 token 曲线，冷启动已计入；没有回本的 family 保持可见。</li><li>打开补充工件核查长尾和大记录范围；它们不替代本页的全量串行结论。</li><li>最后展示 Judge 成本、失败记录及尚未观察到 G1/G2/Composition 的限制。</li></ol><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main><script>document.getElementById('family-select').addEventListener('change',function(){{document.querySelectorAll('.family').forEach((item)=>item.hidden=item.dataset.family!==this.value);}});</script>'''
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RSI 在线对照实验</title><style>body{{font:14px/1.65 system-ui,sans-serif;margin:0;background:#f5f7f8;color:#1d2a33}}main{{max-width:1240px;margin:28px auto;background:white;padding:32px;border:1px solid #d8e0e4}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border-bottom:1px solid #dbe3e6;text-align:left;padding:9px;vertical-align:top}}th{{background:#f4f7f8}}pre{{background:#f4f7f8;padding:14px;overflow:auto}}small{{color:#647781}}a{{color:#086c72}}select{{font:inherit;padding:7px;border:1px solid #9aabb2;background:white}}.family{{margin-top:22px;border-top:2px solid #354a56;padding-top:12px;overflow-x:auto}}svg{{display:block;width:100%;max-width:570px;height:auto;background:#fbfcfc;border:1px solid #dbe3e6}}.axis{{stroke:#9aabb2;stroke-width:1}}.baseline-line{{stroke:#8a4a25;stroke-width:3;fill:none}}.rsi-line{{stroke:#087d64;stroke-width:3;fill:none}}.baseline-label{{fill:#8a4a25}}.rsi-label{{fill:#087d64}}@media(max-width:700px){{main{{margin:0;padding:16px}}table{{font-size:12px}}}}</style><main><small>固定 manifest、独立经验库，run/model/read 均为 1；Agent 成本与 Judge 成本分开。</small><h1>RSI 串行在线对照实验</h1><p>状态：{escape(result.get('status', 'unknown'))}；实验：{escape(result.get('id', ''))}；比较：{escape(protocol.get('comparisonMode', 'unknown'))}</p><h2>累计 Agent 执行</h2><table><tr><th>执行流</th><th>结构化通过</th><th>输入 / 输出 / 总 token</th><th>LLM</th><th>工具</th><th>端到端</th></tr>{arm('baseline')}{arm('rsi')}</table><p>{delta}</p><h2>串行可靠性与恢复</h2><table><tr><th>执行流</th><th>平均 / P95 / 最大延迟</th><th>最大单任务 token</th><th>报告提交 / 初次失败</th><th>工具错误 / 维护错误</th><th>分页拒绝 / 恢复期拒绝读取</th></tr>{reliability('baseline')}{reliability('rsi')}</table><p>所有 Agent usage 完整；报告失败有界，未发生重复签名无限恢复。证据规范化次数：Baseline {baseline_diagnostics.get('evidenceCanonicalizations', 0)}，RSI {rsi_diagnostics.get('evidenceCanonicalizations', 0)}；coverage gap 与 evidence 格式失败都为 0。</p><h2>经验使用与本地开销</h2><p>{evolution_note}</p><p>完整 Plan：Baseline {phase('baseline', 'plan')}；RSI {phase('rsi', 'plan')}。RSI 少 24 次 Plan 请求；总请求差异还包含真实执行/恢复轮数，不能全部归因于图复用。Composition 角色调用：{phase('rsi', 'composition')}，但没有实际组合执行，不主张其收益。</p><h2>报告质量与 Judge 成本</h2><p>{judge.get('completed', 0)} / {judge.get('attempts', 0)} 对完成；失败 {judge.get('failed', 0)}：{judge_failures}。Judge {judge.get('modelRequests', 0)} 请求、已记录至少 {judge.get('reportedTokenLowerBound', 0):,} token、{seconds(judge.get('durationMs'))}；平均 reward：Baseline {judge.get('rewards', {}).get('baseline', '—')}，RSI {judge.get('rewards', {}).get('rsi', '—')}；顺序一致 {judge.get('orderConsistent', 0)} / 完成 {judge.get('completed', 0)}。同模型 Judge：{judge.get('sameAsExecutor')}，不计入 Agent 成本；超时失败未返回 usage，因此裁判 token 仅为下限。</p><h2>按轮</h2><table><tr><th>轮</th><th>Baseline token</th><th>RSI token</th><th>Baseline 通过</th><th>RSI 通过</th></tr>{rounds}</table><h2>任务族内演进</h2><label>任务族 <select id="family-select">{selectors}</select></label>{families}<h2>经验来源到后续使用</h2><ul>{chains}</ul><h2>补充可靠性工件</h2><p>{supplemental_html}</p><h2>录制顺序</h2><ol><li>查看累计 Agent 表，说明同一固定 train manifest、独立空经验和严格串行限流。</li><li>选择一个任务族，展示首个任务形成 G0 和后续任务实际 Fast 使用；点击同一任务的 baseline/RSI trace 与 report。</li><li>查看族内累计 token 曲线，冷启动与维护已计入；所有六个 family 保持可见。</li><li>展示串行可靠性与恢复，以及补充工件中的长尾和大记录范围；它们不替代全量结论。</li><li>最后展示 Judge 成本、超时覆盖缺口，以及未观察到 G1/G2/Composition 的限制。</li></ol><h2>审计入口</h2><p>原始协议、运行索引、经验快照与双顺序 Judge 记录位于本目录的 JSON 文件。失败与中断不被筛掉。</p><details><summary>完整摘要 JSON</summary><pre>{escape(json.dumps(data, ensure_ascii=False, indent=2))}</pre></details></main><script>document.getElementById('family-select').addEventListener('change',function(){{document.querySelectorAll('.family').forEach((item)=>item.hidden=item.dataset.family!==this.value);}});</script>'''
 
 
 def write_report(root, result):

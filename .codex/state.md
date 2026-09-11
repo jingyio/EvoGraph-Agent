@@ -1,14 +1,14 @@
 # 项目状态快照
 
-更新时间：2026-09-10。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
+更新时间：2026-09-11。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
 
 - 项目：RSI 数字员工 Lab。
 - 仓库：`/Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab`。
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 旧 `online-e2e-train-v1` 保留为负收益历史。修复后 RSI-only `online-rsi-graph-precheck-v3` 为 36/36、386,813 token、30 次 Fast 复用、0 维护错误；新 Baseline `online-rsi-graph-matched-v4` 为 32/36、509,630 token。分时匹配记录下 RSI token -24.1%，未达到 30% 目标，详情见 `docs/online-rsi-matched-results-2026-09-10.md`。运行 artifacts 不入 Git。
-- 后续 `cancelled_payments` 编译器语义/等价读取修复在独立 `online-rsi-cancelled-optimized-v4` 为 6/6、51,647 token、19 工具，相对兼容历史 Baseline family -36.0%；规模/并发真实工件为 `efficiency-scale-reliability-v1`，包含失败与读取峰值1，详情见 `docs/efficiency-scale-reliability-results-2026-09-10.md`。
+- 最终主证据是严格串行 `online-rsi-serial-final-v4`：固定 36 个不同 train 任务、独立空 RSI 经验、`run_limit=model_limit=read_limit=1`、同 session 交替运行。Baseline/RSI 均 36/36；Agent token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277。RSI 形成 6 个 G0，后续实际 Fast 复用 24 次；无 Composition、无 G1/G2。全部 Agent usage 完整、工具/维护错误均为0；Judge 26/36完成、10个服务超时、同模型且15个顺序分歧。详见 `docs/online-rsi-serial-final-results-2026-09-11.md`。运行 artifacts 不入 Git。
+- 旧 `online-e2e-train-v1` 保留为负收益历史；`online-rsi-graph-matched-v4` 保留为分时匹配且 token -24.1% 的历史对照，不能与最终 V4 拼接。`cancelled_payments` 的编译器语义/等价读取修复在 V4 的严格对照中转正为 -44.0%。规模补验为 `efficiency-scale-serial-v4`，读取峰值固定为1，不主张并发收益。
 
 ## 已完成
 
@@ -52,7 +52,7 @@ npm run build
 
 ## 下一步
 
-当前可展示结论是在线经验积累与 Fast 复用，并在五个 family 降低成本；`cancelled_payments` 是真实负收益，30% 全量目标未达到。下一项只能从这个负收益和 Baseline evidence 覆盖失败提出正常 train 假设；不得重跑本轮任务直到结果好看，冻结方案前不扩展 validation/test，test 反馈不得回写 Workflow/TinyEdge。
+当前可展示结论是在线经验积累与 Fast 复用：六个 family 均在最终严格串行 V4 中降低 token，全量达到 -35.6%。这不证明多代结构进化、Composition 收益、独立 Judge 优势或通用低延迟。不要重跑该实验直到结果好看；若继续研究，必须建立新版本、固定新协议，validation/test 反馈不得回写 Workflow/TinyEdge。
 
 每阶段结束更新本文件的基线、在途任务、验证结果和下一步；它是普通 Markdown 快照，没有自动 `.save_state` 命令。
 

@@ -1,6 +1,6 @@
 # 实验状态与可主张的结论
 
-更新时间：2026-09-10；实验功能基线 `9520ae7`，本文另记录其后的沙箱清理验证。本文件为状态索引，原始数字与协议见链接，执行轨迹保存在本地 artifacts（不随 Git 分发）。
+更新时间：2026-09-11；实验功能基线 `9520ae7`，本文另记录其后的修复和最终串行验证。本文件为状态索引，原始数字与协议见链接，执行轨迹保存在本地 artifacts（不随 Git 分发）。
 
 ## 已完成的真实验证
 
@@ -13,6 +13,7 @@
 | 复用 Plan 的 ReAct 对照 | 同一 train 任务 `finance-cancelled_payments-03`；`7c32fa3e` vs `fa813841` | 两者通过；Motif 3 vs 7 LLM、10,370 vs 22,135 token、4 vs 6 工具；Motif 延迟 26.04 vs 24.88 s | ReAct 也自行筛选到 1 条详情；本对分离规划/执行成本，不证明详情调用净节省或总体延迟优势 |
 | G-Agent 式三路径 / Persistent TinyEdge | 注入协议回归 + 五条正常 train 尝试，见 `g-agent-local-composition-validation` | 回归实际执行两个片段组合；真实 train 未形成 support>=2 的可组合片段，未触发 Composition | 不把注入机制测试说成模型性能结果；真实尝试含编译歧义和模型超时，未观察到成本、延迟或大小模型协同收益 |
 | 最小 AutoTool / TIG 惯性预检 | 三条正常 train 模型轨迹 `35234b93`、`e8312d69`、`f24650ef`；`motif_first` `381f3fa5` | 三条 train 均通过，产生模型来源路径/参数契约；预检通过且惯性尝试 1 次，`finance_get_order_payments` 支持 2、CIPS 0.1348 < 0.55，拒绝且回到模型 | 没有实际惯性调用、没有模型/token/工具/延迟净收益；不扩大成对评测、不降低阈值制造命中。较早 `3ae50cb8` 暴露并发上下文误用，已保留并用串行边规则修正，不能作为机制收益证据。 |
+| **最终严格串行在线对照** | `online-rsi-serial-final-v4`；36 个固定 train 任务，独立空 RSI 经验，`run=model=read=1` | Baseline/RSI 均 36/36；token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277；Fast 24、Composition 0、G0 6、G1/G2 0 | 主交付结论：全量 Agent token 达到约30%目标；六个 family 均正向，`cancelled_payments` 修复后 -44.0%。延迟为同 session 交替串行观测，不能作稳定 provider 优势。Judge 26/36 完成、10 个服务超时、同模型且15个顺序分歧；详见 [最终结果](online-rsi-serial-final-results-2026-09-11.md)。 |
 | 36-task 在线训练对照 | `online-e2e-train-v1`；36 个固定 train 任务 × `plan_react` / `motif_first`，六轮串行 | 基线 36/36、601,435 token、737.62s；RSI 35/36、766,076 token、890.26s。RSI Fast 5 次，Composition/AutoTool 运行时调用均为 0；双顺序 Judge 平均 reward 两臂同为 0.9714，另耗 339,938 token | 历史 Workflow 在 `support-channels-02...06` 实际复用且跳过 Plan，但全量 RSI token +27.4%、延迟 +20.7%，并有一次确定性失败；不能主张总体净收益。完整协议、审计修复和结果见 `online-e2e-train-results-2026-09-10.md`。 |
 | 修复后 36-task 分时匹配对照 | RSI source `online-rsi-graph-precheck-v3` + 新 Baseline `online-rsi-graph-matched-v4`；同一固定 train manifest | Baseline 32/36、509,630 token、648.18s；RSI 36/36、386,813 token、502.10s；RSI token -24.1%，模型请求 -93，工具 +65；Judge 72 请求/336,757 token，平均 reward 0.9768/0.9746 | 记录模型名、预算、契约和源码 runtime revision 均匹配，但 provider endpoint 历史指纹未保存，且为分时执行；可主张匹配记录下 token/结构化质量结果，不能称严格同时段或独立 Judge 结论。30% token 目标未达到；六 family 中 `cancelled_payments` +77.7% 为负收益，其余五个获益。详见 `online-rsi-matched-results-2026-09-10.md`。 |
 | cancelled_payments 编译修复、规模与并发 | `online-rsi-cancelled-optimized-v4`；`efficiency-scale-reliability-v1` | 修复后的 family 6/6、51,647 token、19 工具；相对兼容历史 Baseline -36.0%。规模 10/30/60 和冻结任务/模型并发 1/2/4 已真实运行 | 编译器正确性修复和 Fast 复用，不是 G1/G2。规模 Baseline 两个 evidence 失败，并发1 RSI一条报告失败；读取峰值固定为1，不能声称工具并发或一般可靠性优势。详见 `efficiency-scale-reliability-results-2026-09-10.md`。 |
@@ -49,7 +50,7 @@
 5. 完整训练摊销、美元成本、真实企业写入流程完成能力。
 6. Persistent TinyEdge 在真实 train 流量中的可组合覆盖、质量与成本收益；本轮只有注入机制验证，不能替代。
 7. 多代结构进化：新 36-task 流证明 G0 形成和 Fast 复用，但没有正常反馈产生的 G1/G2。
-8. 独立/同时段的质量与延迟结论：新对照的 Judge 与执行器同模型且分时执行，不能替代独立裁判、重复实验或同时段性能测量。
+8. 独立/同时段的质量与延迟结论：最终 V4 是同 session 交替串行而不是同时执行，Judge 与执行器同模型且 10 对超时，不能替代独立裁判、重复实验或同时段性能测量。
 
 ## 当前问题
 
