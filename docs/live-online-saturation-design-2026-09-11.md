@@ -30,13 +30,15 @@
 
 1. 历史图查找；
 2. 冷启动工具检索、能力选择和图编译（合为一个 phase，避免重复加总）；
-3. Composition 的本地选择；
+3. Composition 的确定性本地选择（不包括 composition 模型请求等待）；
 4. 确定性参数绑定；
 5. 在线经验维护；
 6. 经验持久化。
 
 该账本是端到端延迟的组成部分，但单独显示为 `0 token` 本地开销；不把绑定
-次数换算成省掉一次模型调用，也不从 Agent token 中扣除它。
+次数换算成省掉一次模型调用，也不从 Agent token 中扣除它。Composition 模型
+调用的 token、请求和 wall time 必须留在 `phaseMetrics.composition` 和 Agent
+端到端时长中，不能计入本地账本。
 
 ## 3. 扩展饱和协议
 

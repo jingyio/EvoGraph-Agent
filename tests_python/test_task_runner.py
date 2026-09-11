@@ -138,11 +138,13 @@ def test_report_evidence_canonicalization_requires_complete_observations():
 
 def test_runtime_overhead_is_a_separate_non_token_ledger():
     run = dict(metrics=dict(bindingMs=.5), evolution=dict(lookupMs=1, localCompileMs=5,
-                                                           compositionLocalMs=2, maintenanceMs=3, persistMs=.25))
+                                                           compositionLocalMs=2, compositionModelWallMs=200,
+                                                           compositionWallMs=202, maintenanceMs=3, persistMs=.25))
     ledger = TaskRunner.runtime_overhead(run)
     assert ledger['tokenCost'] == 0
     assert ledger['totalMs'] == 11.75
     assert ledger['coldGraphCompileMs'] == 5
+    assert 'compositionModelWallMs' not in ledger
 
 
 def test_pagination_guard_requires_sequential_same_size_pages():

@@ -106,7 +106,7 @@ def rsi_source_pairs(source_result, manifest):
     return selected
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def compact(run):
@@ -153,6 +153,8 @@ def diagnostics(runs):
         graphFallbacks=sum(bool(run.get('fallback')) and run.get('strategy') == 'graph_rsi' for run in runs),
         graphLookupMs=round(aggregate(evolution, 'lookupMs'), 3),
         compositionLocalMs=round(sum(item.get('compositionLocalMs', composition[index].get('localMs', 0)) or 0 for index, item in enumerate(evolution)), 3),
+        compositionModelWallMs=round(aggregate(evolution, 'compositionModelWallMs'), 3),
+        compositionWallMs=round(aggregate(evolution, 'compositionWallMs'), 3),
         evolutionMaintenanceMs=round(aggregate(evolution, 'maintenanceMs'), 3),
         runtimeOverheadMs=round(aggregate(metrics, 'runtimeOverheadMs'), 3),
         reportAttempts=aggregate(metrics, 'reportAttempts'), failedReportAttempts=aggregate(metrics, 'failedReportAttempts'),
@@ -444,7 +446,7 @@ def result_report(result):
     delta = '本次为 RSI-only 预检，不生成新的基线调用，不能计算严格相对差值。' if data.get('allOutcomeTokenDelta') is None else f"RSI 相对 Baseline：Agent token {data['allOutcomeTokenDelta']:,}（{percent(data.get('tokenSavingRate'))}）；模型请求 {data['modelRequestSavingRate'] * 100:.1f}% 更少；工具调用 {data['toolCallDelta']:+,}。端到端时长观察差异 {data['allOutcomeLatencyDeltaMs'] / 1000:.1f}s（{percent(data.get('observedLatencySavingRate'))}），受模型服务时段影响，不作为稳定延迟优势主张。"
     rsi_diagnostics = (arms.get('rsi') or {}).get('diagnostics') or {}
     baseline_diagnostics = (arms.get('baseline') or {}).get('diagnostics') or {}
-    evolution_note = f"Fast {rsi_diagnostics.get('graphReuse', 0)} 次；Fallback {(rsi_diagnostics.get('planningPaths') or {}).get('fallback', 0)} 次；Composition 实际执行 {rsi_diagnostics.get('compositionRuns', 0)} 次。RSI 专属图运行时账本合计 {(arms.get('rsi') or {}).get('runtimeOverheadMs', 0):.3f}ms：图查询 {rsi_diagnostics.get('graphLookupMs', 0):.1f}ms、组合本地选择 {rsi_diagnostics.get('compositionLocalMs', 0):.1f}ms、维护 {rsi_diagnostics.get('evolutionMaintenanceMs', 0):.1f}ms。它们已包含在端到端时长，但为 0 token，不混入 Agent token 成本。"
+    evolution_note = f"Fast {rsi_diagnostics.get('graphReuse', 0)} 次；Fallback {(rsi_diagnostics.get('planningPaths') or {}).get('fallback', 0)} 次；Composition 实际执行 {rsi_diagnostics.get('compositionRuns', 0)} 次。RSI 专属图运行时账本合计 {(arms.get('rsi') or {}).get('runtimeOverheadMs', 0):.3f}ms：图查询 {rsi_diagnostics.get('graphLookupMs', 0):.1f}ms、组合本地选择 {rsi_diagnostics.get('compositionLocalMs', 0):.1f}ms、维护 {rsi_diagnostics.get('evolutionMaintenanceMs', 0):.1f}ms。Composition 模型阶段 wall time 为 {rsi_diagnostics.get('compositionModelWallMs', 0):.1f}ms（已计入 composition 模型请求和端到端，不属于 0-token 本地账本）。"
     judge_failures = '；'.join(f'{escape(reason)} × {count}' for reason, count in (judge.get('failureReasons') or {}).items()) or '无'
     supplements = []
     if protocol.get('reliabilityExperiment'):

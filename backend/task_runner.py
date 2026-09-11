@@ -466,22 +466,37 @@ class TaskRunner:
                         candidates = self.evolution.composition_candidates(task, tools)
                         if candidates:
                             run['phase'] = 'Composition 粗计划与局部片段选择'
-                            composition_start = time.perf_counter()
+                            composition_started = time.perf_counter()
+                            composition_model_wall_ms = 0
+                            composition_local_ms = 0
                             try:
-                                coarse = await build_coarse_plan(task, lambda history, tool: structured(composition, 'composition', history, tool))
-                                composed = self.evolution.compose(task, tools, coarse)
-                                elapsed = round((time.perf_counter() - composition_start) * 1000, 3)
+                                model_started = time.perf_counter()
+                                try:
+                                    coarse = await build_coarse_plan(task, lambda history, tool: structured(composition, 'composition', history, tool))
+                                finally:
+                                    composition_model_wall_ms = round((time.perf_counter() - model_started) * 1000, 3)
+                                local_started = time.perf_counter()
+                                try:
+                                    composed = self.evolution.compose(task, tools, coarse)
+                                finally:
+                                    composition_local_ms = round((time.perf_counter() - local_started) * 1000, 3)
+                                composition_wall_ms = round((time.perf_counter() - composition_started) * 1000, 3)
                                 run['compositionPlan'] = dict(coarsePlan=coarse, selectedTinyEdgeIds=composed['selectedTinyEdgeIds'],
-                                                              retrieval=composed['retrieval'], origins=composed['origins'], localMs=elapsed)
+                                                              retrieval=composed['retrieval'], origins=composed['origins'],
+                                                              localMs=composition_local_ms, modelWallMs=composition_model_wall_ms,
+                                                              wallMs=composition_wall_ms)
                                 run['evolution'].update(execution='composition', planningPath='composition',
-                                                        selectedTinyEdgeIds=composed['selectedTinyEdgeIds'], compositionLocalMs=elapsed,
+                                                        selectedTinyEdgeIds=composed['selectedTinyEdgeIds'], compositionLocalMs=composition_local_ms,
+                                                        compositionModelWallMs=composition_model_wall_ms, compositionWallMs=composition_wall_ms,
                                                         note='Fast 未命中；粗计划覆盖后直接绑定已选 Persistent TinyEdge 并执行')
                                 event('composition', '局部 TinyEdge 组合已校验', run['compositionPlan'])
                             except Exception as error:
-                                elapsed = round((time.perf_counter() - composition_start) * 1000, 3)
-                                run['compositionPlan'] = dict(status='fallback', reason=str(error)[:500], localMs=elapsed,
+                                composition_wall_ms = round((time.perf_counter() - composition_started) * 1000, 3)
+                                run['compositionPlan'] = dict(status='fallback', reason=str(error)[:500], localMs=composition_local_ms,
+                                                              modelWallMs=composition_model_wall_ms, wallMs=composition_wall_ms,
                                                               candidateCount=len(candidates))
-                                run['evolution'].update(planningPath='fallback', compositionLocalMs=elapsed,
+                                run['evolution'].update(planningPath='fallback', compositionLocalMs=composition_local_ms,
+                                                        compositionModelWallMs=composition_model_wall_ms, compositionWallMs=composition_wall_ms,
                                                         note='Composition 覆盖或组合不足；完整 Plan 生成成本计入本次任务')
                                 event('composition', '局部 TinyEdge 组合不足，转完整 Plan', run['compositionPlan'])
                         else:

@@ -1,6 +1,6 @@
 import re
 
-from scripts.run_online_e2e import TYPES, completed_status, judge_summary, result_report, rsi_source_pairs, selected_manifest, summary, task_manifest
+from scripts.run_online_e2e import SCHEMA_VERSION, TYPES, completed_status, judge_summary, result_report, rsi_source_pairs, selected_manifest, summary, task_manifest
 
 
 class Bank:
@@ -83,7 +83,7 @@ def test_completed_rsi_only_run_does_not_remain_running_or_need_judge():
 
 def test_rsi_source_requires_matching_manifest_and_successful_isolated_runs():
     manifest = selected_manifest(Bank(), ['finance-cancelled_payments-01'])
-    source = dict(schemaVersion=2, manifest=manifest,
+    source = dict(schemaVersion=SCHEMA_VERSION, manifest=manifest,
                   protocol=dict(rsi='graph_rsi', rsiLearning=True, startFromEmpty=True),
                   pairs=[dict(taskId='finance-cancelled_payments-01', runs=dict(rsi=run('finance-cancelled_payments-01')))])
     selected = rsi_source_pairs(source, manifest)
