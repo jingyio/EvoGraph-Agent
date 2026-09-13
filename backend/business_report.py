@@ -36,7 +36,10 @@ def render_report(run, task):
     records = ''.join('<tr><td>' + text(ref) + '</td><td>' + ('入选' if row.get('id') in selected else '证据记录') + '</td><td>'
                       + '<details><summary>' + text(row.get('title') or row.get('product') or row.get('status') or '查看读取字段') + '</summary><pre>'
                       + pretty(row) + '</pre></details></td></tr>' for ref, row in sorted(evidence.items()))
-    quality = '结构化事实与证据校验通过' if passed else '未通过结构化校验 / 尚未完成'
+    review_required = run.get('evaluation', {}).get('status') == 'user_review_required'
+    quality = ('结构化事实与证据校验通过' if passed else
+               '已保存，等待用户复核（当前用户资料没有私有参考答案）' if review_required else
+               '未通过结构化校验 / 尚未完成')
     issues = run.get('evaluation', {}).get('issues') or []
     return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{text(task['title'])} · 业务报告</title><style>
@@ -48,4 +51,4 @@ body{{font:14px/1.8 system-ui,sans-serif;color:#26394a;background:#f4f7f9;margin
 <h2>筛选清单</h2><pre>{pretty(submission.get('selectedIds') or [])}</pre>
 <h2>逐条工具证据 · {len(evidence)} 条</h2><table><thead><tr><th>证据引用</th><th>筛选状态</th><th>本次实际读取内容</th></tr></thead><tbody>{records}</tbody></table>
 <h2>质量复核</h2><p>结构化校验问题：{text(', '.join(issues) or '无')}</p><pre>{pretty(run.get('manualReview') or {'status': 'pending', 'note': '文字事实一致性、需求覆盖与可读性待人工复核'})}</pre>
-<footer>来源：{text(task.get('sourceUrl', ''))}<br>只展示本次工具实际读取的字段，不载入参考答案。记录 ID：{text(run['id'])}。本报告使用所有 Agent 共用的模板。</footer></main></html>'''
+<footer>来源：{text(task.get('sourceUrl', '当前工作区资料'))}<br>只展示本次工具实际读取的字段，不载入参考答案。记录 ID：{text(run['id'])}。本报告使用所有 Agent 共用的模板。</footer></main></html>'''

@@ -4,8 +4,24 @@
 
 ## 已完成的真实验证
 
+> 2026-09-12 工作区 Workpack 后续实验：V5 Smoke、V6 Smoke 均保留为
+> 诊断；V6 的 12-task 预检因 Baseline `tickets-triage-01` 发生共享
+> `evidence_coverage` 恢复缺陷而未通过同质量门槛，不能用于经济性结论。
+> V7 Smoke `59892bb0-66ab-4d7f-93b9-0ee7dc8e95e4` 已运行：Baseline 3/3，
+> RSI 1/3，故质量门槛失败，成本只保留为诊断。财务失败是模型对已观察
+> 分组数据的手工算术错误；技术项是人工停止后的取消，不能归为机制失败。
+> V8 已以共享确定性键控对账工具建立独立 runtime 版本；协议与边界见
+> [V8 对账协议](workspace-workpack-v8-reconciliation-protocol-2026-09-12.md)。
+
+> 2026-09-13 Workpack V11/V12：V11 的 RSI Fast 路径出现重复确定性 compute
+> 长尾，故新增两臂共享的重复 compute guard 并新建 V12 runtime。V12 smoke
+> 3/3 与 precheck 12/12 均通过；V12 full 42/48 vs 46/48，末尾还有两臂共同的
+> 模型网络失败，因此表面 -40.513% token 仅为诊断，不是同质量经济性结论。完整
+> 边界见 [V12 结果](workspace-workpack-v12-results-2026-09-13.md)。
+
 | 实验 | 覆盖与 ID | 结果 | 结论边界 |
 |---|---|---|---|
+| Workpack V12 staged train | smoke `2413c09a`、precheck `587d7c50`、full `f8acd9e2`；48 对 train workpack、串行 1/1/1 | Smoke 3/3、预检12/12均通过；full Baseline/RSI 42/48、46/48，token 1,813,753→1,078,947，Fast 36、Composition 0 | full 有三次 Baseline 有界失败、一条 Baseline 模型超时、两条两臂共同网络失败；质量门槛失败且服务异常，表面 -40.513% 仅诊断，不能替代 V4。 |
 | Strong ReAct vs RSI | 30 对 validation；`6d01875c-ceaa-4640-9511-f29c2c6e3fc4` | 双方 30/30；token 628397→439413（-30.1%）；均延迟 33.56→22.98s；工具 324→339 | 27 次冷启动、3 次历史图命中；不是纯 Motif/递归贡献；文字未全量评分 |
 | Plan + ReAct vs RSI | 同一批 30 validation 任务；`1535dc8e-a865-4f7c-b00f-69d606f5a4e7` | 29/30 vs 30/30；token 673279→485075；均延迟 34.90→31.39s；工具错误 0→6 | 全量 token -28.0%、延迟 -10.1% 受基线一次失败影响；双方通过的29对为 -15.5%/-4.9% |
 | 正常任务在线复用 | 三场景 8 次运行，见在线验证记录 | 8/8 结构化通过；5次后续任务跳过 Plan；维护约3.7–5.0ms | 仅产生三份 G0，没有真实 G1/G2 链；不是对照性能结论 |

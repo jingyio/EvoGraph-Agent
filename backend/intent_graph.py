@@ -43,7 +43,7 @@ def _expects_list(intent):
 def _capability_matches(intent, tool, role):
     """BM25 ranks candidates; this rejects candidates that cannot fulfill the step."""
     if role == 'list':
-        return set(tool.parameters.get('required', [])) == {'page', 'pageSize'}
+        return set(tool.parameters.get('required', [])) in ({'page', 'pageSize'}, {'tableId', 'page', 'pageSize'})
     meaningful = _distinct_terms(intent)
     capability = _distinct_terms(' '.join([tool.name, tool.description, *map(str, tool.outputs or [])]))
     return not meaningful or bool(meaningful & capability)
@@ -60,6 +60,13 @@ def prune_unrequested_steps(plan, task_text):
     task_terms = _distinct_terms(task_text)
     kept, removed = [], []
     for step in plan['steps']:
+        # A current-workspace ``sourceTable`` is an explicit schema-level
+        # declaration from the Planner.  Word overlap cannot safely prove a
+        # cross-table metric is unnecessary (for example a task can name a
+        # business concept rather than the column that provides it).
+        if step.get('sourceTable'):
+            kept.append(deepcopy(step))
+            continue
         terms = _distinct_terms(step.get('intent', ''))
         is_root = not step.get('dependencies')
         if not is_root and terms and not (terms & task_terms):
@@ -109,7 +116,7 @@ def plan_tool():
         'type': 'object',
         'properties': {
             'kind': {'type': 'string', 'enum': ['match', 'model']},
-            'sourceStepId': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,30}$'},
+            'sourceStepId': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,63}$'},
             'field': {'type': 'string', 'pattern': '^[A-Za-z][A-Za-z0-9_]{0,80}$'},
             'operator': {'type': 'string', 'enum': ['equals']},
             'value': {'type': ['string', 'integer', 'boolean', 'null']},
@@ -118,10 +125,18 @@ def plan_tool():
         'required': ['kind'],
         'additionalProperties': False,
     }
-    step = object_schema({'id': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,30}$'},
+    step = object_schema({'id': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,63}$'},
                           'intent': {'type': 'string', 'minLength': 1, 'maxLength': 300},
                           'dependencies': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}},
-                          'selection': selection}, required=['id', 'intent', 'dependencies'])
+                          # A workspace table is a semantic slot such as
+                          # ``orders``. The runtime maps it to only the
+                          # current workspace's generated table ID.
+                          'sourceTable': {'type': 'string', 'pattern': '^[a-z][a-z0-9_]{0,50}$'},
+                          # Some providers serialize an omitted optional field
+                          # as JSON null.  Treat that exact encoding as absent
+                          # at the runtime boundary; all non-null selections
+                          # still receive the strict semantic validation below.
+                          'selection': {'anyOf': [selection, {'type': 'null'}]}}, required=['id', 'intent', 'dependencies'])
     return Tool('submit_plan', '提交数据获取子目标和依赖，独立的目标不互相依赖。', 'read',
                 object_schema({'steps': {'type': 'array', 'minItems': 1, 'maxItems': 10, 'items': step}}), lambda args, ctx: args)
 
@@ -150,6 +165,21 @@ def validate_plan(plan):
         raise ValueError('Plan contains a dependency cycle')
 
 
+def normalize_optional_plan_fields(plan):
+    """Remove provider null encodings for otherwise omitted optional fields.
+
+    This is deliberately narrower than schema repair: only ``selection: null``
+    becomes an omitted selection.  A malformed non-null selection still fails
+    closed in ``validate_plan`` and cannot turn into a local graph filter.
+    """
+    normalized, removed = deepcopy(plan), []
+    for step in normalized.get('steps') or []:
+        if step.get('selection', object()) is None:
+            step.pop('selection', None)
+            removed.append(step.get('id'))
+    return normalized, removed
+
+
 def graph_tool(plan, retrieval):
     ids = [s['id'] for s in plan['steps']]
     node = object_schema({'id': {'type': 'string', 'enum': ids}, 'tool': {'type': 'string', 'enum': sorted({r['name'] for rows in retrieval.values() for r in rows})}})
@@ -170,7 +200,7 @@ def select_retrieved_graph(plan, retrieval, tools):
         required = set(tool.parameters['required'])
         if not required:
             return 'scope'
-        if required == {'page', 'pageSize'}:
+        if required in ({'page', 'pageSize'}, {'tableId', 'page', 'pageSize'}):
             return 'list'
         if len(required) == 1 and next(iter(required)).endswith('Id'):
             return 'record'
@@ -183,11 +213,32 @@ def select_retrieved_graph(plan, retrieval, tools):
         ancestors = nx.ancestors(dag, key)
         list_ancestor = any(signature(known[selected[parent]]) == 'list' for parent in ancestors if parent in selected)
         descendants = nx.descendants(dag, key)
-        requires_list = _expects_list(plan['steps'][next(index for index, step in enumerate(plan['steps']) if step['id'] == key)]['intent']) or bool(descendants)
-        preferred = 'record' if list_ancestor else 'list' if requires_list else None
+        step = next(step for step in plan['steps'] if step['id'] == key)
+        selection = step.get('selection') or {}
+        selection_source = selection.get('sourceStepId')
+        source_step = next((item for item in plan['steps'] if item['id'] == selection_source), None)
+        # A same-table exact selection is a local view of its upstream list,
+        # not a per-record detail lookup.  Preserve the generic list reader so
+        # the compiler can reuse and filter the actual current observation.
+        local_table_selection = bool(
+            selection.get('kind') == 'match'
+            and step.get('sourceTable')
+            and source_step
+            and source_step.get('sourceTable') == step.get('sourceTable')
+        )
+        # ``sourceTable`` is an explicit request to read rows from the current
+        # workspace schema. Profiles and report indexes may rank higher in
+        # lexical retrieval, but cannot supply row-level evidence or a graph
+        # root. Require the paginated list signature before local selection.
+        requires_list = _expects_list(step['intent']) or bool(descendants) or bool(step.get('sourceTable'))
+        # A semantic workspace table slot always denotes a paginated table
+        # read.  Dependency on an earlier table does not turn it into a
+        # single-record lookup; cross-table joins remain explicit model/tool
+        # work unless a later compiler rule can prove their binding.
+        preferred = 'list' if step.get('sourceTable') or local_table_selection else 'record' if list_ancestor else 'list' if requires_list else None
         eligible = [(row, tool) for row, tool in candidates
                     if (preferred is None or signature(tool) == preferred)
-                    and _capability_matches(next(step['intent'] for step in plan['steps'] if step['id'] == key), tool, preferred or signature(tool))]
+                    and _capability_matches(step['intent'], tool, preferred or signature(tool))]
         if not eligible:
             raise ValueError('No positive, capability-compatible AutoTool candidate for ' + key)
         row, tool = eligible[0]
@@ -216,7 +267,7 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
         if tool.effect != 'read':
             raise ValueError('Read graph cannot publish or write')
         required = set(tool.parameters.get('required', []))
-        role = 'list' if required == {'page', 'pageSize'} else 'record' if len(required) == 1 and next(iter(required)).endswith('Id') else 'scope'
+        role = 'list' if required in ({'page', 'pageSize'}, {'tableId', 'page', 'pageSize'}) else 'record' if len(required) == 1 and next(iter(required)).endswith('Id') else 'scope'
         if not _capability_matches(steps[node['id']]['intent'], tool, role):
             raise ValueError('Selected tool does not satisfy requested output capability')
         node.update(dependencies=steps[node['id']]['dependencies'], sourceEventSeqs=[])
@@ -240,6 +291,16 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
         if parameters == {'page', 'pageSize'}:
             node['arguments'] = {'page': {'kind': 'literal', 'value': 1}, 'pageSize': {'kind': 'literal', 'value': 50}}
             node['paginate'] = {'maxPages': 20}
+        elif parameters == {'tableId', 'page', 'pageSize'}:
+            table = steps[node['id']].get('sourceTable')
+            if not table:
+                raise ValueError('Workspace table reads require a sourceTable from the current schema')
+            node['arguments'] = {
+                'tableId': {'kind': 'workspaceTable', 'table': table},
+                'page': {'kind': 'literal', 'value': 1},
+                'pageSize': {'kind': 'literal', 'value': 50},
+            }
+            node['paginate'] = {'maxPages': 20}
         elif len(parameters) == 1 and next(iter(parameters)).endswith('Id'):
             sources = [key for key in nx.ancestors(dag, node['id']) if set(known[selected[key]].parameters['required']) == {'page', 'pageSize'}]
             if len(sources) != 1:
@@ -257,10 +318,42 @@ def compile_intent_graph(plan, proposal, retrieval, tools, optimize=True):
             else:
                 source = selection['sourceStepId']
                 source_tool = known.get(selected.get(source))
+                source_step = steps.get(source) or {}
+                same_workspace_table = bool(
+                    steps[node['id']].get('sourceTable')
+                    and steps[node['id']].get('sourceTable') == source_step.get('sourceTable')
+                    and set(tool.parameters.get('required', [])) == {'tableId', 'page', 'pageSize'}
+                    and source_tool
+                    and set(source_tool.parameters.get('required', [])) == {'tableId', 'page', 'pageSize'}
+                )
+                if same_workspace_table:
+                    # The current schema slot is identical on both nodes.  A
+                    # second preview would merely repeat the source read, so
+                    # preserve a filtered view of that source instead.  The
+                    # executor validates the field and type against current
+                    # rows before applying the condition.
+                    node['reuse'] = {
+                        'nodeId': source,
+                        'collectionPath': ['records'],
+                        'fields': [selection['field']],
+                        'filter': dict(field=selection['field'], operator=selection['operator'], value=deepcopy(selection['value'])),
+                    }
+                    node['dependencies'] = sorted(set(node['dependencies']) | {source})
+                    node['arguments'] = {}
+                    node.pop('paginate', None)
+                    continue
                 if (not node.get('foreach') or node['foreach']['nodeId'] != source or not source_tool
                         or selection['field'] not in set(source_tool.outputs or [])):
                     raise ValueError('Plan selection cannot be bound to a declared upstream list field')
                 node['foreach']['filter'] = dict(field=selection['field'], operator=selection['operator'], value=deepcopy(selection['value']))
+    # A model-only subgoal has no deterministic executable output.  Retain
+    # any safe ancestors, but hand its whole dependency suffix back to the
+    # model instead of letting a descendant consume an empty pseudo-result.
+    deferred = {node['id'] for node in nodes if node.get('defer')}
+    if deferred:
+        for node in nodes:
+            if any(parent in deferred for parent in nx.ancestors(dag, node['id'])):
+                node['defer'] = True
     # Two model subgoals can resolve to the exact same current-data read. Keep
     # the first node and remap consumers rather than issuing duplicate calls.
     # This is based solely on executable structure, never record values.
@@ -302,10 +395,12 @@ async def execute_graph(nodes, tools, invoke, on_node, on_elide=None, on_recover
                 return
             if node.get('reuse'):
                 from .graph import reuse_output
-                values, count = await reuse_output(node, outputs, tools, invoke, on_recovery)
+                values, count, filter_detail = await reuse_output(node, outputs, tools, invoke, on_recovery)
                 outputs[node['id']] = values
                 if on_elide:
                     on_elide(node['id'], count)
+                if filter_detail and on_filter:
+                    on_filter(node['id'], filter_detail)
                 on_node(node['id'], 'reused')
                 return
             items = [None]

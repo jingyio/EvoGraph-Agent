@@ -36,6 +36,11 @@ def _slot(binding):
     if binding['kind'] == 'literal':
         value = binding['value']
         return {'kind': 'literal', 'type': type(value).__name__, 'value': value if type(value) not in (dict, list) else stable(value)}
+    if binding['kind'] == 'workspaceTable':
+        # Workspace IDs are intentionally per-session.  A reusable fragment
+        # therefore keeps the semantic table slot, which TaskRunner resolves
+        # against the current workspace immediately before graph execution.
+        return {'kind': 'workspaceTable', 'table': binding['table']}
     return {'kind': binding['kind'], 'path': list(binding['path'])}
 
 

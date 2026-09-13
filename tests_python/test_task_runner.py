@@ -61,7 +61,7 @@ async def test_phase_routing_queue_isolation_and_bounded_concurrency(tmp_path):
     assert jobs[-1]['metrics']['queueMs'] > 0
     for run in jobs:
         assert run['phaseMetrics']['plan']['requests'] == 1 and run['phaseMetrics']['graph']['requests'] == 0
-        assert run['metrics']['modelRequests'] == 3 and run['metrics']['inputTokens'] == 30
+        assert run['metrics']['modelRequests'] == 2 and run['metrics']['inputTokens'] == 20
         assert run['models']['distinctModels'] and run['graph']['status'] == 'done'
         assert run['metrics']['toolCalls'] == 2
         assert run['graphSelection'][0]['selection'] == 'local-retrieval-and-contract'
@@ -265,6 +265,59 @@ async def test_plan_and_execution_receive_task_derived_inclusive_constraint(tmp_
     assert any('>= 6' in message.get('content', '') for history in histories for message in history if message.get('role') == 'user')
 
 
+async def test_ratio_task_cannot_publish_without_a_successful_weighted_reconciliation(tmp_path):
+    class RatioBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', split='train',
+                        task='找出运费达到商品金额 20% 的订单并发布结果', suggestedBudget={'toolCalls': 80})
+
+        def tools(self, key):
+            def reconcile(args, ctx):
+                assert args['comparisons'][0]['rightTerms'] == [{'alias': 'price', 'multiplier': .2}]
+                ctx.evidence.add('finance:ratio')
+                return {'comparisons': [{'keys': ['one']}]}
+
+            def publish(args, ctx):
+                passed = ctx.evidence == {'finance:ratio'}
+                ctx.run['evaluation'] = {'status': 'passed' if passed else 'failed',
+                                         'issues': [] if passed else ['metrics']}
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('workspace_reconcile_keyed_sums', '按键确定性对账', 'compute', object_schema({
+                    'anchorTableId': {'type': 'string'}, 'keyField': {'type': 'string'},
+                    'aggregates': {'type': 'array'}, 'comparisons': {'type': 'array'},
+                }), reconcile),
+                Tool('workspace_publish_report', '发布报告', 'artifact', object_schema({
+                    'metrics': {'type': 'object'}, 'selectedIds': {'type': 'array'},
+                    'evidenceIds': {'type': 'array'}, 'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class RatioModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': []})
+            if any('比例条件发布前校验拒绝' in event.get('title', '') for event in []):
+                raise AssertionError('events are not model messages')
+            prior = [call['function']['name'] for message in messages for call in message.get('tool_calls') or []]
+            if 'workspace_reconcile_keyed_sums' not in prior and 'workspace_publish_report' not in prior:
+                return result('workspace_publish_report', {'metrics': {}, 'selectedIds': [], 'evidenceIds': [], 'summary': '先提交'})
+            if 'workspace_reconcile_keyed_sums' not in prior:
+                return result('workspace_reconcile_keyed_sums', {
+                    'anchorTableId': 'orders', 'keyField': 'order_id', 'aggregates': [],
+                    'comparisons': [{'leftAlias': 'freight', 'rightTerms': [{'alias': 'price', 'multiplier': .2}]}],
+                })
+            return result('workspace_publish_report', {'metrics': {}, 'selectedIds': [], 'evidenceIds': [], 'summary': '已对账'})
+
+    runner = TaskRunner(RatioBank(tmp_path), lambda role: RatioModel(role, []), learning_enabled=False)
+    run = await runner.start(TaskRunRequest(taskId='ratio', strategy='plan_react'))
+    await runner.tasks[run['id']]
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['semanticConstraintGuards'] >= 1
+    assert any(event['type'] == 'semantic_guard' and '比例条件' in event['title'] for event in run['events'])
+
+
 async def test_missing_evidence_recovers_by_reading_next_page_not_by_inventing_references(tmp_path):
     class PagedBank(Bank):
         def task(self, key):
@@ -312,6 +365,157 @@ async def test_missing_evidence_recovers_by_reading_next_page_not_by_inventing_r
     assert [trace['arguments']['page'] for trace in run['toolTrace'] if trace['tool'] == 'finance_list_orders'] == [1, 2]
     assert run['reportRecovery']['attempts'][0]['kind'] == 'missing_evidence'
     assert run['reportRecovery']['attempts'][0]['missingObservedEvidenceRefs'] == ['finance:two']
+
+
+async def test_public_delivery_scope_recovery_resubmits_without_another_model_turn(tmp_path):
+    """Both arms may repair public workspace scope without seeing private rows.
+
+    The first report contains correct business fields but only the first page's
+    observation.  The runtime may read the publicly declared table slot and
+    re-submit that unchanged report.  It must not ask the model to infer which
+    hidden evidence row was missing.
+    """
+    histories = []
+
+    class ScopeRecoveryBank(Bank):
+        def task(self, key):
+            return {
+                'id': key, 'scenario': 'finance', 'family': 'scope_recovery', 'split': 'train',
+                'task': '核对当前订单资料并提交完整报告', 'tableBindings': {'orders': 'orders-table'},
+                'deliveryContract': {
+                    'requiredSources': ['orders.csv'], 'requiredTableSlots': ['orders'],
+                    'metrics': {'count': '当前订单数量。'},
+                },
+                'privateValidation': {
+                    'metrics': {'count': 2}, 'selectedIds': [], 'ordered': False,
+                    'requiredEvidenceIds': ['workspace:scope:one', 'workspace:scope:two'],
+                },
+                'suggestedBudget': {'toolCalls': 80},
+            }
+
+        def tools(self, key):
+            def preview(args, ctx):
+                rows = [
+                    {'id': 'one', '_evidenceRef': 'workspace:scope:one'},
+                    {'id': 'two', '_evidenceRef': 'workspace:scope:two'},
+                ]
+                start = (args['page'] - 1) * args['pageSize']
+                page = rows[start:start + args['pageSize']]
+                ctx.evidence.update(row['_evidenceRef'] for row in page)
+                return {'tableId': args['tableId'], 'records': page, 'page': args['page'],
+                        'mayHaveMore': start + args['pageSize'] < len(rows)}
+
+            def publish(args, ctx):
+                ctx.run['submission'] = deepcopy(args)
+                passed = (args.get('metrics') == {'count': 2} and args.get('selectedIds') == []
+                          and args.get('evidenceIds') == ['workspace:scope:one', 'workspace:scope:two'])
+                ctx.run['evaluation'] = {'status': 'passed' if passed else 'failed',
+                                         'issues': [] if passed else ['evidence_coverage']}
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('workspace_preview_rows', '分页预览当前资料行', 'read', object_schema({
+                    'tableId': {'type': 'string'}, 'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'},
+                }), preview, outputs=['records', 'page', 'mayHaveMore']),
+                Tool('workspace_publish_report', '提交完整业务报告', 'artifact', object_schema({
+                    'metrics': object_schema({'count': {'type': 'integer'}}),
+                    'selectedIds': {'type': 'array', 'items': {'type': 'string'}},
+                    'evidenceIds': {'type': 'array', 'items': {'type': 'string'}},
+                    'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class ScopeRecoveryModel(Model):
+        async def complete(self, messages, tools):
+            histories.append(deepcopy(messages))
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': [
+                    {'id': 'preview', 'intent': '分页预览当前资料行', 'dependencies': []},
+                ]})
+            if tools and tools[0].name == 'submit_graph':
+                return result('submit_graph', {'nodes': [{'id': 'preview', 'tool': 'workspace_preview_rows'}]})
+            calls = [call for message in messages for call in message.get('tool_calls') or []]
+            names = [call['function']['name'] for call in calls]
+            if 'workspace_preview_rows' not in names:
+                return result('workspace_preview_rows', {'tableId': 'orders-table', 'page': 1, 'pageSize': 1})
+            if 'workspace_publish_report' not in names:
+                return result('workspace_publish_report', {
+                    'metrics': {'count': 2}, 'selectedIds': [],
+                    'evidenceIds': ['workspace:scope:one'], 'summary': '已完成当前订单核对。',
+                })
+            return result()
+
+    for strategy in ['plan_react', 'graph_rsi']:
+        histories.clear()
+        runner = TaskRunner(ScopeRecoveryBank(tmp_path / strategy),
+                            lambda role: ScopeRecoveryModel(role, histories), learning_enabled=False)
+        run = await runner.start(TaskRunRequest(taskId='scope-recovery', strategy=strategy))
+        await runner.tasks[run['id']]
+
+        assert run['status'] == 'completed'
+        assert run['evaluation']['status'] == 'passed'
+        assert run['submission']['metrics'] == {'count': 2}
+        assert run['metrics']['reportAttempts'] == 2
+        assert run['metrics']['failedReportAttempts'] == 1
+        assert run['metrics']['deterministicScopeRecoveryReads'] == 1
+        assert run['metrics']['deterministicReportResubmits'] == 1
+        assert run['metrics']['recoveryToolCalls'] == 1
+        recovery_index = next(index for index, event in enumerate(run['events'])
+                              if event['type'] == 'report_recovery')
+        assert not any(event['type'] == 'model_start' for event in run['events'][recovery_index + 1:])
+        assert any(event['type'] == 'evidence_scope_recovery' and '重提原报告' in event['title']
+                   for event in run['events'])
+        model_text = json.dumps(histories, ensure_ascii=False)
+        assert 'privateValidation' not in model_text
+    assert 'workspace:scope:two' not in model_text
+
+
+async def test_duplicate_deterministic_compute_is_rejected_for_both_arms(tmp_path):
+    """A repeated pure computation must not consume the whole agent budget."""
+    compute_calls = []
+
+    class ComputeBank(Bank):
+        def tools(self, key):
+            def aggregate(args, ctx):
+                compute_calls.append(deepcopy(args))
+                return {'count': 10}
+
+            def publish(args, ctx):
+                ctx.run['evaluation'] = {'status': 'passed', 'issues': []}
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('workspace_aggregate_rows', '确定性计数', 'compute', object_schema({
+                    'tableId': {'type': 'string'}, 'operation': {'type': 'string'},
+                }), aggregate),
+                Tool('workspace_publish_report', '提交报告', 'artifact', object_schema({
+                    'metrics': {'type': 'object'}, 'selectedIds': {'type': 'array'},
+                    'evidenceIds': {'type': 'array'}, 'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class RepeatComputeModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': []})
+            calls = [call['function']['name'] for message in messages for call in message.get('tool_calls') or []]
+            saw_guard = any('相同确定性计算结果' in message.get('content', '') for message in messages)
+            if 'workspace_aggregate_rows' not in calls or not saw_guard:
+                return result('workspace_aggregate_rows', {'tableId': 'current', 'operation': 'count'})
+            return result('workspace_publish_report', {
+                'metrics': {'count': 10}, 'selectedIds': [], 'evidenceIds': [], 'summary': '已复用确定性计算结果。',
+            })
+
+    for strategy in ['plan_react', 'graph_rsi']:
+        compute_calls.clear()
+        runner = TaskRunner(ComputeBank(tmp_path / strategy), lambda role: RepeatComputeModel(role, []), learning_enabled=False)
+        run = await runner.start(TaskRunRequest(taskId='compute-repeat', strategy=strategy))
+        await runner.tasks[run['id']]
+
+        assert run['evaluation']['status'] == 'passed'
+        assert len(compute_calls) == 1
+        assert run['metrics']['duplicateComputeGuardRejects'] == 1
+        assert any(event['type'] == 'compute_guard' for event in run['events'])
 
 
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):
@@ -405,4 +609,101 @@ async def test_trace_captures_pending_model_and_concurrent_tool_correlation(tmp_
     assert run['events'][-1]['type'] == 'finished'
     assert run['events'][-1]['metrics'] == run['metrics']
     assert run['events'][-1]['detail']['evaluation']['status'] == 'passed'
-    assert run['metrics']['modelRequests'] == 3 and run['metrics']['toolCalls'] == 2
+    assert run['metrics']['modelRequests'] == 2 and run['metrics']['toolCalls'] == 2
+
+
+async def test_optional_null_plan_selection_is_normalized_without_a_planner_retry(tmp_path):
+    class NullSelectionModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': [
+                    {'id': 'list', 'intent': '分页列出订单 ID', 'dependencies': [], 'selection': None},
+                ]})
+            if not any(message.get('role') == 'tool' for message in messages):
+                return result('finance_list_orders', {'page': 1, 'pageSize': 50})
+            return result('finance_publish_report', {})
+
+    runner = TaskRunner(Bank(tmp_path), lambda role: NullSelectionModel(role, []), learning_enabled=False)
+    run = await runner.start(TaskRunRequest(taskId='null-selection', strategy='plan_react'))
+    await runner.tasks[run['id']]
+
+    assert run['evaluation']['status'] == 'passed'
+    assert run['phaseMetrics']['plan']['requests'] == 1
+    assert run['metrics']['controlErrors'] == 0
+    assert run['plan']['steps'][0].get('selection') is None
+    normalized = next(event for event in run['events'] if event['type'] == 'normalization')
+    assert normalized['detail']['stepIds'] == ['list']
+
+
+async def test_completed_scope_prevents_evidence_rereads_without_leaking_private_validation(tmp_path):
+    read_calls, histories = [], []
+
+    class ScopeBank(Bank):
+        def task(self, key):
+            return {
+                'id': key, 'scenario': 'finance', 'family': 'scope', 'split': 'train',
+                'task': '读取本任务全部订单并发布核对结果',
+                'deliveryContract': {'requiredSources': ['orders.csv'], 'metrics': {'count': '当前订单数。'}},
+                'privateValidation': {'metrics': {'count': 1}, 'selectedIds': [], 'ordered': False,
+                                      'requiredEvidenceIds': ['finance:one']},
+                'suggestedBudget': {'toolCalls': 80},
+            }
+
+        def tools(self, key):
+            def listing(args, ctx):
+                read_calls.append(deepcopy(args))
+                ctx.evidence.add('finance:one')
+                return {'records': [{'id': 'one', '_evidenceRef': 'finance:one'}], 'page': 1, 'mayHaveMore': False}
+
+            def publish(args, ctx):
+                ctx.run['evaluation'] = {
+                    'status': 'passed' if args == {'metrics': {'count': 1}, 'selectedIds': [],
+                                                    'evidenceIds': ['finance:one'], 'summary': '已完成'} else 'failed',
+                    'issues': [],
+                }
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('finance_list_orders', '分页列出订单 ID', 'read',
+                     object_schema({'page': {'type': 'integer'}, 'pageSize': {'type': 'integer'}}), listing, outputs=['id']),
+                Tool('finance_publish_report', '发布报告', 'artifact', object_schema({
+                    'metrics': object_schema({'count': {'type': 'integer'}}),
+                    'selectedIds': {'type': 'array', 'items': {'type': 'string'}},
+                    'evidenceIds': {'type': 'array', 'items': {'type': 'string'}},
+                    'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class ScopeModel(Model):
+        async def complete(self, messages, tools):
+            histories.append(deepcopy(messages))
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': [
+                    {'id': 'list', 'intent': '分页列出订单 ID', 'dependencies': [], 'selection': None},
+                ]})
+            tool_calls = [call for message in messages for call in message.get('tool_calls') or []
+                          if call['function']['name'] == 'finance_list_orders']
+            saw_guard = any('当前运行已成功获得相同只读观察' in message.get('content', '') for message in messages)
+            if not tool_calls or not saw_guard:
+                return result('finance_list_orders', {'page': 1, 'pageSize': 50})
+            return result('finance_publish_report', {
+                'metrics': {'count': 1}, 'selectedIds': [], 'evidenceIds': ['mistyped'], 'summary': '已完成',
+            })
+
+    for strategy in ['plan_react', 'graph_rsi']:
+        read_calls.clear()
+        runner = TaskRunner(ScopeBank(tmp_path / strategy), lambda role: ScopeModel(role, histories), learning_enabled=False)
+        run = await runner.start(TaskRunRequest(taskId='scope', strategy=strategy))
+        await runner.tasks[run['id']]
+
+        assert run['evaluation']['status'] == 'passed'
+        assert len(read_calls) == 1
+        assert run['metrics']['duplicateReadGuardRejects'] == 1
+        assert run['metrics']['observedScopeCompletions'] == 1
+        assert run['metrics']['reportEvidenceCanonicalizations'] == 1
+        assert any(event['type'] == 'evidence_scope' for event in run['events'])
+
+    model_text = json.dumps(histories, ensure_ascii=False)
+    assert 'privateValidation' not in model_text
+    assert 'requiredEvidenceIds' not in model_text
+    assert '_evidenceRef' not in model_text

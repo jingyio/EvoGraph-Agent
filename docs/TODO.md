@@ -2,6 +2,18 @@
 
 日期：2026-09-11。目标见 [mentor-goals.md](mentor-goals.md)，已确认边界见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。此表是工作优先级，不是已完成能力清单。最终严格串行 36-task 对照已经完成；任何后续实验必须另建协议和实验 ID，不能回写或拼接现有结果。
 
+## P0.3 Workpack V12 服务与恢复诊断
+
+状态：**full train 已完成但不合格，2026-09-13**。V12 的共享重复 compute guard
+通过 smoke 和 12-task precheck；48 对 full 出现 Baseline 3 次有界业务/报告失败、
+一条 Baseline 模型超时，以及末尾两条两臂共同模型网络失败。详情见
+[V12 结果](workspace-workpack-v12-results-2026-09-13.md)。
+
+- 不重跑或拼接 V12 成功子集；表面 token -40.513% 不能作为同质量结论。
+- 若继续 Workpack，先以独立诊断定位模型网络连接失败与 Baseline 报告恢复差异；稳定后
+  建立新的 runtime/service 版本，从 smoke 开始，不覆盖任何 V11/V12 artifact。
+- Composition 仍为 0；下一步不能通过调低阈值制造命中。
+
 ## P0.0 端到端在线对照
 
 状态：**完成，2026-09-11**。`online-rsi-serial-final-v4` 使用独立空经验、固定36条 train manifest 和 `run=model=read=1`。两臂均36/36；Agent token 539,468→347,368（-35.6%），达到约30%目标；模型请求203→114；工具274→277。全部六个 family 正向，`cancelled_payments` 为 -44.0%。结果、Judge 覆盖缺口和展示入口见 [online-rsi-serial-final-results-2026-09-11.md](online-rsi-serial-final-results-2026-09-11.md)。

@@ -21,6 +21,10 @@ class Tool:
     handler: Callable
     origin: Any = None
     outputs: Any = None
+    # Some transports include request-local enum values (for example, a
+    # workspace's generated table IDs).  ``contract`` keeps the reusable
+    # semantic API identity separate from those per-run bindings.
+    contract: Any = None
 
     def __post_init__(self):
         Draft7Validator.check_schema(self.parameters)

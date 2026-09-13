@@ -1,10 +1,16 @@
 # 项目状态快照
 
-更新时间：2026-09-11。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
+更新时间：2026-09-13。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
 
 - 项目：RSI 数字员工 Lab。
 - 仓库：`/Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab`。
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
+- 2026-09-13 Workpack V12：V11 Fast 路径的重复确定性 compute 长尾已用两臂共享
+  guard 修复，并通过 smoke `2413c09a`（3/3）与 precheck `587d7c50`（12/12）。
+  full `f8acd9e2` 为 Baseline 42/48、RSI 46/48；表面 token 1,813,753→1,078,947
+  （-40.513%）因质量门槛失败且末尾两臂共同网络失败，只能作诊断。RSI 有12个 G0、
+  36次 Fast、0 Composition、0维护错误；详情见
+  `docs/workspace-workpack-v12-results-2026-09-13.md`，不得与 V4 主结论拼接。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
 - 最终主证据是严格串行 `online-rsi-serial-final-v4`：固定 36 个不同 train 任务、独立空 RSI 经验、`run_limit=model_limit=read_limit=1`、同 session 交替运行。Baseline/RSI 均 36/36；Agent token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277。RSI 形成 6 个 G0，后续实际 Fast 复用 24 次；无 Composition、无 G1/G2。全部 Agent usage 完整、工具/维护错误均为0；Judge 26/36完成、10个服务超时、同模型且15个顺序分歧。详见 `docs/online-rsi-serial-final-results-2026-09-11.md`。运行 artifacts 不入 Git。
@@ -52,6 +58,21 @@ npm run build
 在新机器或 worktree 中这些文件不一定存在。先核查，不静默重造数据或复制凭据。Linux需要时用户已允许 `ssh v100`；当前任务库可在本地运行。ERPNext/Zammad是另一条已部署的只读平台路径，连接状态需现场检查。
 
 ## 下一步
+
+2026-09-12 在途工作：新增交互式工作区/三场景 Workpack 运行路径后，V6 预检发现
+Baseline 的公开资料范围恢复缺陷，故 V6 不可用于同质量成本结论。V7 的公开
+`requiredTableSlots` 确定性恢复已回归并实际运行 Smoke `59892bb0-66ab-4d7f-93b9-0ee7dc8e95e4`：
+Baseline 3/3，RSI 1/3，故 V7 不可作为同质量成本结论。财务 RSI 已读取正确资料却模型手工
+汇总错误；技术 RSI 是人工停止后的取消，成本和失败 artifact 均保留。
+
+当前工作树新增 V8 共享确定性键控对账能力 `workspace_reconcile_keyed_sums`：只接受当前
+工作区表/字段/键/别名/阈值并回传证据，不访问私有验收或自动改写报告。两臂同样可用，故
+V8 是新的独立 staged runtime。Smoke `57c295a5-d7d9-4a22-b77c-d1893fef696f` 为 6/6；
+预检 `31313718-fb89-491f-81d5-9ee7cb925433` 为 24/24，RSI token 比 Baseline 高10.0%，
+但已验证财务实际调用对账工具、5 个 G0 形成和4次 Fast 复用。预检中的3次 schema/tool
+拒绝与4次一次性公开范围恢复均可审计，没有维护错误或无界循环；正式 V8 train 将在不改
+runtime 的前提下执行。详见 `docs/workspace-workpack-v8-reconciliation-protocol-2026-09-12.md`。
+旧 V5/V6/V7 artifacts 保留。
 
 当前可展示结论是在线经验积累与 Fast 复用：六个 family 均在最终严格串行 V4 中降低 token，全量达到 -35.6%。这不证明多代结构进化、Composition 收益、独立 Judge 优势或通用低延迟。不要重跑该实验直到结果好看；若继续研究，必须建立新版本、固定新协议，validation/test 反馈不得回写 Workflow/TinyEdge。
 

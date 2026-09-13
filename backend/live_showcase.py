@@ -1,9 +1,10 @@
 """Isolated, real-time comparison runs used only by the recording UI.
 
 The live demonstration is intentionally separate from frozen evaluations.  It
-uses train tasks, writes to its own artifact tree and starts RSI with an empty
-experience store.  Its results are replayable but never merged into a formal
-experiment summary.
+uses train tasks or an explicitly marked showcase task, writes to its own
+artifact tree and starts RSI with an empty experience store.  Showcase tasks
+always run as one cold-start pair and never update experience.  Results are
+replayable but never merged into a formal experiment summary.
 """
 from __future__ import annotations
 
@@ -49,8 +50,12 @@ class LiveShowcase:
 
     def _family_sequence(self, task_id: str, steps: int) -> list[str]:
         task = self.bank.task(task_id)
+        if task.get('split') == 'showcase':
+            if steps != 1:
+                raise ValueError('进阶展示任务只运行单条冷启动对照，不建立或复用经验')
+            return [task_id]
         if task.get('split') != 'train':
-            raise ValueError('在线展示仅允许 train 任务，避免验证/测试数据进入 RSI 经验')
+            raise ValueError('在线展示仅允许 train 或 showcase 任务，避免验证/测试数据进入 RSI 经验')
         peers = sorted(
             (row for row in self.bank.tasks.values()
              if row.get('split') == 'train' and row.get('scenario') == task['scenario'] and row.get('family') == task.get('family')),
@@ -102,6 +107,8 @@ class LiveShowcase:
         if steps not in [1, 2]:
             raise ValueError('steps_must_be_1_or_2')
         sequence = self._family_sequence(task_id, steps)
+        source_task = self.bank.task(task_id)
+        is_showcase = source_task.get('split') == 'showcase'
         item_id = str(uuid4())
         directory = self.root / item_id
         baseline = TaskRunner(self.bank, self.provider_factory, run_limit=1, model_limit=1, read_limit=1,
@@ -109,7 +116,7 @@ class LiveShowcase:
                               evolution_path=directory / 'baseline' / 'experience.json', learning_enabled=False)
         rsi = TaskRunner(self.bank, self.provider_factory, run_limit=1, model_limit=1, read_limit=1,
                          run_directory=directory / 'rsi' / 'runs',
-                         evolution_path=directory / 'rsi' / 'experience.json', learning_enabled=True)
+                         evolution_path=directory / 'rsi' / 'experience.json', learning_enabled=not is_showcase)
         item = {
             'id': item_id,
             'status': 'queued',
@@ -117,12 +124,13 @@ class LiveShowcase:
             'taskIds': sequence,
             'protocol': {
                 'purpose': 'recording_demo_only_not_formal_evaluation',
-                'split': 'train',
+                'split': source_task['split'],
                 'runLimit': 1,
                 'modelLimit': 1,
                 'readLimit': 1,
                 'baseline': 'plan_react_without_cross_task_learning',
-                'rsi': 'graph_rsi_empty_isolated_experience_then_sequential_updates',
+                'rsi': ('graph_rsi_empty_isolated_cold_start_no_learning' if is_showcase
+                        else 'graph_rsi_empty_isolated_experience_then_sequential_updates'),
                 'judge': 'not_run',
                 'shadowRollouts': 0,
                 'model': None,

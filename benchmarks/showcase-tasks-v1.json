@@ -1,0 +1,59 @@
+[
+  {
+    "id": "finance-weekly-risk-review-v1",
+    "scenario": "finance",
+    "family": "weekly_risk_review",
+    "title": "订单异常综合风险复核",
+    "split": "showcase",
+    "asOf": "2026-09-09T16:41:44.294Z",
+    "sourceUrl": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+    "recordCount": 12,
+    "recordIds": ["127f3dbf0dfc0da17005ba12e05d988c", "3198796f14214053998f8f2eca1c9c59", "139be8870b91e71fd70bb366305c8cde", "00010242fe8c5a6d1ba2dd792cb16214", "0046e1d57f4c07c8c92ab26be8c3dfc0", "004b62108b876867938746ad3154167f", "006127b8b9a1681a982313ed7129c3c0", "01c139e11e826da7bf9782cf1ee904bf", "027e4543814c3b3509bbe890c569a841", "033729e95819665323119db0291d0f0c", "039749cde6a67a679fa5602f776cefa4", "046735e8e55ac5d5eee44e008b9e9720"],
+    "task": "请为财务运营负责人完成一次订单异常综合风险复核。仅分析当前工作范围的 12 条订单：(1) 找出状态为 canceled 且存在支付记录的订单，并汇总其支付金额；(2) 找出支付金额与商品金额加运费金额相差超过 1 BRL 分的订单；(3) 找出商品金额大于零且运费达到商品金额 20% 的订单。将任一规则命中的订单合并为 priority selectedIds，按订单 ID 升序。返回 metrics 字段 cancelled_paid_count、cancelled_paid_cents、reconciliation_mismatch_count、freight_burden_count、priority_order_count、priority_paid_cents，并给出全部当前范围记录的 evidenceIds 和简短风险简报。金额单位为 BRL 分；不将金额差异或取消状态直接认定为欺诈、退款或会计结论。",
+    "acceptance": {
+      "metricKeys": ["cancelled_paid_count", "cancelled_paid_cents", "reconciliation_mismatch_count", "freight_burden_count", "priority_order_count", "priority_paid_cents"],
+      "selectedIdsOrderMatters": false,
+      "evidence": "引用本任务实际观察过的所有记录",
+      "prose": "仅保存，不自动评估全部自然语言质量"
+    },
+    "suggestedBudget": {"modelRequests": 24, "toolCalls": 80}
+  },
+  {
+    "id": "support-escalation-review-v1",
+    "scenario": "support",
+    "family": "escalation_review",
+    "title": "投诉升级优先级复核",
+    "split": "showcase",
+    "asOf": "2026-09-09T16:41:44.294Z",
+    "sourceUrl": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+    "recordCount": 10,
+    "recordIds": ["9705681", "9713357", "9740858", "9775414", "9996240", "9996257", "9996274", "9996279", "9996312", "9996361"],
+    "task": "请为客服运营负责人完成一次投诉升级优先级复核。仅分析当前工作范围的 10 条投诉：(1) 找出 timely 为 No 且有非空公开叙述的投诉；(2) 计算 date_received 至 date_sent_to_company 的转交时差，找出超过 86400 秒的投诉；(3) 将任一规则命中的投诉合并为 priority selectedIds，按投诉 ID 升序，并统计其中涉及的企业数和这些优先投诉的转交时差总秒数。返回 metrics 字段 late_with_narrative_count、forwarded_over_day_count、priority_complaint_count、priority_company_count、priority_forwarding_seconds，并给出全部当前范围记录的 evidenceIds 和简短升级简报。公开叙述是消费者陈述，转交时差不是企业响应时长；不要据此进行监管风险定级。",
+    "acceptance": {
+      "metricKeys": ["late_with_narrative_count", "forwarded_over_day_count", "priority_complaint_count", "priority_company_count", "priority_forwarding_seconds"],
+      "selectedIdsOrderMatters": false,
+      "evidence": "引用本任务实际观察过的所有记录",
+      "prose": "仅保存，不自动评估全部自然语言质量"
+    },
+    "suggestedBudget": {"modelRequests": 24, "toolCalls": 80}
+  },
+  {
+    "id": "tickets-engineering-attention-review-v1",
+    "scenario": "tickets",
+    "family": "engineering_attention_review",
+    "title": "研发待办优先级复核",
+    "split": "showcase",
+    "asOf": "2026-09-09T16:41:44.294Z",
+    "sourceUrl": "https://github.com/zammad/zammad/issues",
+    "recordCount": 10,
+    "recordIds": ["2533", "2635", "2643", "2822", "2841", "5620", "5634", "5639", "5642", "5655"],
+    "task": "请为研发运营负责人完成一次待办优先级复核。仅分析当前工作范围的 10 条 Issue：选取 state 为 open、assignee_count 为 0，且满足没有 milestone 或 updated_at 相对参考时刻已超过 30 天的 Issue。priority selectedIds 按评论数降序、并列按 Issue ID 升序。返回 metrics 字段 priority_issue_count、stale_priority_count、bug_priority_count、priority_comment_total，并给出全部当前范围记录的 evidenceIds 和简短研发待办简报。bug 仅按标签名是否包含 bug（不区分大小写）判断；不要把标签、未分派或长期未更新直接解释为严重度、客户影响或人员可用性。",
+    "acceptance": {
+      "metricKeys": ["priority_issue_count", "stale_priority_count", "bug_priority_count", "priority_comment_total"],
+      "selectedIdsOrderMatters": true,
+      "evidence": "引用本任务实际观察过的所有记录",
+      "prose": "仅保存，不自动评估全部自然语言质量"
+    },
+    "suggestedBudget": {"modelRequests": 24, "toolCalls": 80}
+  }
+]

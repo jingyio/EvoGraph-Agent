@@ -9,10 +9,22 @@ from .graph import contract_hash, ordered_nodes
 async def build_data_plan(task, tools, submit):
     """Separate planner role; injected submit keeps HTTP and metering centralized."""
     from .intent_graph import plan_tool, validate_plan
+    workspace_tables = (task.get('schemaContract') or {}).get('tables') or []
+    workspace_instruction = ''
+    if workspace_tables:
+        workspace_instruction = (' 当前资料工作区有明确表槽。每个读取当前资料表的步骤必须填写 sourceTable，'
+                                 '值只能是 workspaceTables 中列出的 id；不得填写生成的 tableId、文件路径或旧任务值。'
+                                 '规划前逐项核对任务要求的指标、筛选和交付物与 workspaceTables 的字段；某个当前表提供必要字段时，'
+                                 '必须读取该表，不能因字段不在首张表而猜测其值。只读取完成工作要求所需的表，'
+                                 '不能假设表之间存在未声明的关联。')
     plan = await submit([
-        {'role': 'system', 'content': '只规划数据获取阶段。每一步描述一种字段读取能力，运行时自动遍历所有记录。严禁按第一条、第二条等逐条规划；每种能力只能出现一次。先列出本任务记录，再获取任务明确要求的必要字段，不得为解释或背景追加任务未要求的字段。如果列表工具的 outputs 已包含所需字段，直接使用列表结果，不要再规划详情读取。独立字段读取仅依赖记录列表，不要串行依赖彼此。若详情只对可由上游列表已声明字段确定的一部分记录必要，在详情步骤增加 selection：{kind:"match",sourceStepId:"列表步骤",field:"列表字段",operator:"equals",value:字面量}；筛选只允许精确相等，不能猜记录 ID 或答案。若确有条件但列表字段不能可靠决定，使用 selection：{kind:"model",reason:"具体缺口"}，让执行模型处理该子图；全部记录都需要详情时省略 selection。不要计算或发布结果，不输出内部推理。steps 必须是 JSON 数组，不能是转义后的字符串。必须调用 submit_plan。'},
-        {'role': 'user', 'content': json.dumps({'task': task['task'], 'capabilities': [{'name': t.name, 'description': t.description, 'outputs': list(t.outputs or [])} for t in tools]}, ensure_ascii=False)}], plan_tool())
+        {'role': 'system', 'content': '只规划数据获取阶段。每一步描述一种字段读取能力，运行时自动遍历所有记录。严禁按第一条、第二条等逐条规划；每种能力只能出现一次。先列出本任务记录，再获取任务明确要求的必要字段，不得为解释或背景追加任务未要求的字段。如果列表工具的 outputs 已包含所需字段，直接使用列表结果，不要再规划详情读取。独立字段读取仅依赖记录列表，不要串行依赖彼此。根步骤不得填写 selection。若下游步骤只对可由上游列表已声明字段确定的一部分记录必要，在该下游步骤增加 selection：{kind:"match",sourceStepId:"列表步骤",field:"列表字段",operator:"equals",value:字面量}；筛选只允许精确相等，不能猜记录 ID 或答案。相同 sourceTable 的下游筛选可复用上游列表；跨表、范围或组合条件不能伪装成 match。若确有条件但列表字段不能可靠决定，使用 selection：{kind:"model",reason:"具体缺口"}，让执行模型处理该子图；全部记录都需要详情时省略 selection。不要计算或发布结果，不输出内部推理。steps 必须是 JSON 数组，不能是转义后的字符串。必须调用 submit_plan。' + workspace_instruction},
+        {'role': 'user', 'content': json.dumps({'task': task['task'], 'capabilities': [{'name': t.name, 'description': t.description, 'outputs': list(t.outputs or [])} for t in tools], 'workspaceTables': workspace_tables}, ensure_ascii=False)}], plan_tool(), validate_plan)
     validate_plan(plan)
+    valid_tables = {str(item.get('id')) for item in workspace_tables if isinstance(item, dict) and item.get('id')}
+    unknown_tables = sorted({step['sourceTable'] for step in plan['steps'] if step.get('sourceTable') and step['sourceTable'] not in valid_tables})
+    if unknown_tables:
+        raise ValueError('Plan 引用了当前资料 schema 中不存在的表槽：' + '、'.join(unknown_tables))
     return plan
 
 

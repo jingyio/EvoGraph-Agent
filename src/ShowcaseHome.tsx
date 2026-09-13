@@ -6,12 +6,12 @@ import './showcase.css';
 import './employee-console.css';
 
 type Scenario = 'finance' | 'support' | 'tickets';
-type Capability = { scenario: Scenario; label: string; role: string; request: string; deliverable: string; icon: typeof Landmark };
+type Capability = { scenario: Scenario; label: string; role: string; request: string; deliverable: string; advancedTaskId: string; icon: typeof Landmark };
 
 const capabilities: Capability[] = [
-  { scenario: 'finance', label: '财务分析', role: '财务运营', request: '请基于当前订单工作台，生成订单异常风险简报。', deliverable: '订单异常风险简报', icon: Landmark },
-  { scenario: 'support', label: '客服分析', role: '客服运营', request: '请基于当前投诉工作台，生成投诉渠道与响应健康简报。', deliverable: '投诉渠道与响应健康简报', icon: Headphones },
-  { scenario: 'tickets', label: '研发运营', role: '技术研发管理', request: '请基于当前 Issue 工作台，生成研发健康与待办简报。', deliverable: '研发健康与待办简报', icon: Wrench },
+  { scenario: 'finance', label: '财务分析', role: '财务运营', request: '请基于当前订单工作台，生成订单异常风险简报。', deliverable: '订单异常风险简报', advancedTaskId: 'finance-weekly-risk-review-v1', icon: Landmark },
+  { scenario: 'support', label: '客服分析', role: '客服运营', request: '请基于当前投诉工作台，生成投诉渠道与响应健康简报。', deliverable: '投诉渠道与响应健康简报', advancedTaskId: 'support-escalation-review-v1', icon: Headphones },
+  { scenario: 'tickets', label: '研发运营', role: '技术研发管理', request: '请基于当前 Issue 工作台，生成研发健康与待办简报。', deliverable: '研发健康与待办简报', advancedTaskId: 'tickets-engineering-attention-review-v1', icon: Wrench },
 ];
 
 const toolLabels: Record<string, string> = {
@@ -109,7 +109,7 @@ export default function ShowcaseHome() {
         <header><div><small>业务需求</small><strong>{capability.role}</strong></div><span>工作记录回放</span></header>
         <div className="console-capabilities">{capabilities.map(item => { const CapabilityIcon = item.icon; return <button key={item.scenario} className={item.scenario === scenario ? 'selected' : ''} onClick={() => setScenario(item.scenario)}><CapabilityIcon size={15} />{item.label}</button>; })}</div>
         <div className="console-request">{capability.request}</div>
-        <footer><button className="console-start" onClick={() => setPlaying(current => !current)}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? '暂停分析' : step >= maxStep ? '重新分析' : '开始分析'}</button><a href="#live">运行一次真实任务 <ArrowUpRight size={15} /></a></footer>
+        <footer><button className="console-start" onClick={() => setPlaying(current => !current)}>{playing ? <Pause size={16} /> : <Play size={16} />}{playing ? '暂停分析' : step >= maxStep ? '重新分析' : '开始分析'}</button><a href={`#live?task=${capability.advancedTaskId}`}>运行进阶业务复核 <ArrowUpRight size={15} /></a></footer>
       </div>
     </section>
 

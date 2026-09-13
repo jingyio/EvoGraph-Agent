@@ -39,12 +39,13 @@ class OnlineEvolution:
 
     def context_key(self, task, tools):
         # Only the taskbank's explicit record-count/clock slots are generalized.
-        text = task['task'].replace(task['id'], '<task>')
+        text = task.get('template') or task['task'].replace(task['id'], '<task>')
         text = re.sub(r'工具可见的\s*\d+\s*条记录', '工具可见的 <N> 条记录', text)
         if task.get('asOf'):
             text = text.replace(task['asOf'], '<clock>')
         return digest(dict(scenario=task['scenario'], family=task.get('family', task['id']), template=text,
-                           contract=contract_hash(tools), corpus=getattr(self.bank, 'manifest', None), executor=2))
+                           schema=task.get('schemaContract'), contract=contract_hash(tools),
+                           corpus=getattr(self.bank, 'manifest', None), executor=2))
 
     def latest(self, task, tools):
         key = self.context_key(task, tools)
@@ -147,6 +148,23 @@ class OnlineEvolution:
         info['tinyEdgeMaintenance'] = maintenance
 
     @staticmethod
+    def has_workspace_table_slots(nodes):
+        """Whether a graph relies on workspace-local semantic table slots.
+
+        These slots are executable through ``TaskRunner.resolve_runtime_nodes``
+        but are outside the generic intent-graph compiler's fixed list/detail
+        binding signatures.  Treating that compiler limitation as a failed
+        evolution step used to turn healthy workspace G0s into maintenance
+        errors after they had already been saved.
+        """
+        return any(
+            binding.get('kind') == 'workspaceTable'
+            for node in nodes
+            for binding in (node.get('arguments') or {}).values()
+            if isinstance(binding, dict)
+        )
+
+    @staticmethod
     def safe_plan(plan, nodes, tools):
         # Store field requirements, not old record IDs, dates, answers or model prose.
         known = {t.name: t for t in tools}
@@ -229,6 +247,16 @@ class OnlineEvolution:
                 info['generatedVersionIds'].append(parent['id'])
                 # Seed is not proof of improvement. A distinct child requires a real patch.
             nodes, patches = deepcopy(parent['nodes']), []
+            if self.has_workspace_table_slots(nodes):
+                info['graphOptimization'] = dict(
+                    status='not_applicable',
+                    reasonCode='workspace_table_slots',
+                    reason='工作区图使用语义表槽；当前 runtime 可在执行前绑定当前资料表，但通用列表/详情编译器不重编译此类节点',
+                )
+                info['note'] = ('保存初始工作区图；通用补丁编译不适用，后续同契约任务可 Fast 绑定当前表槽'
+                                if info['generatedVersionIds'] else
+                                '工作区图已记录；通用补丁编译不适用，不将其误记为维护失败或虚构后继版本')
+                return
             failures = [t for t in run.get('toolTrace', []) if t.get('executor') == 'graph' and t.get('ok') is False and t.get('nodeId')]
             repaired = []
             for failure in failures:

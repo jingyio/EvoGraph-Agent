@@ -80,6 +80,20 @@ class TaskBank:
             gold_path = self.root / 'artifacts/taskbank/gold.json'
             if gold_path.exists():
                 self.gold = json.loads(gold_path.read_text())
+            # These three higher-complexity tasks are an isolated recording
+            # set. They are not part of the frozen 300-task corpus or V4.
+            from .showcase_tasks import load as load_showcase_tasks
+            showcase_tasks, showcase_gold = load_showcase_tasks(self.root)
+            self.tasks.update(showcase_tasks)
+            self.gold.update(showcase_gold)
+            if showcase_tasks and self.manifest is not None:
+                self.manifest = dict(self.manifest, showcaseTaskSets={
+                    'higherComplexityV1': {
+                        'taskCount': len(showcase_tasks),
+                        'split': 'showcase',
+                        'purpose': 'recording_demo_only_not_formal_evaluation',
+                    }
+                })
 
     def task(self, key):
         if key not in self.tasks:

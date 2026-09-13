@@ -12,7 +12,16 @@ def task_key(task):
 
 
 def contract_hash(tools):
-    return digest(sorted([{'name': t.name, 'description': t.description, 'parameters': t.parameters, 'effect': t.effect, 'outputs': list(t.outputs or [])} for t in tools], key=lambda t: t['name']))
+    return digest(sorted([
+        {
+            'name': t.name,
+            'description': t.description,
+            'parameters': t.contract if t.contract is not None else t.parameters,
+            'effect': t.effect,
+            'outputs': list(t.outputs or []),
+        }
+        for t in tools
+    ], key=lambda t: t['name']))
 
 
 def candidates(samples, tool_name, parameter, value):
@@ -153,6 +162,11 @@ def ordered_nodes(nodes, tools):
                     actual.add(binding['nodeId'])
                 elif not node.get('foreach'):
                     raise ValueError('item 绑定缺少遍历来源')
+            elif kind == 'workspaceTable':
+                if parameter != 'tableId' or set(binding) != {'kind', 'table'}:
+                    raise ValueError('工作区表绑定无效')
+                if not isinstance(binding['table'], str) or not re.fullmatch('[a-z][a-z0-9_]{0,80}', binding['table']):
+                    raise ValueError('工作区表绑定名称无效')
             else:
                 raise ValueError('未知参数绑定类型')
         if node.get('foreach'):
@@ -172,7 +186,7 @@ def ordered_nodes(nodes, tools):
                     raise ValueError('筛选 Motif 条件无效')
         if node.get('reuse'):
             reuse = node['reuse']
-            if (not isinstance(reuse, dict) or set(reuse) - {'nodeId', 'collectionPath', 'fields', 'onMissing'}
+            if (not isinstance(reuse, dict) or set(reuse) - {'nodeId', 'collectionPath', 'fields', 'onMissing', 'filter'}
                     or not {'nodeId', 'collectionPath', 'fields'}.issubset(reuse) or node['arguments'] or node.get('foreach') or node.get('paginate')):
                 raise ValueError('复用节点结构无效')
             if 'onMissing' in reuse:
@@ -184,6 +198,14 @@ def ordered_nodes(nodes, tools):
                 raise ValueError('复用路径无效')
             if not isinstance(fields, list) or not fields or any(not isinstance(field, str) or field in UNSAFE for field in fields):
                 raise ValueError('复用字段无效')
+            condition = reuse.get('filter')
+            if condition is not None:
+                if (path != ['records'] or not isinstance(condition, dict) or set(condition) != {'field', 'operator', 'value'}
+                        or not isinstance(condition['field'], str) or not re.fullmatch('[A-Za-z][A-Za-z0-9_]{0,80}', condition['field'])
+                        or condition['field'] in UNSAFE or condition['operator'] != 'equals'
+                        or type(condition['value']) not in [str, int, bool, type(None)]
+                        or condition['field'] not in fields):
+                    raise ValueError('复用筛选条件无效')
             actual.add(reuse['nodeId'])
         if 'defer' in node and node['defer'] is not True:
             raise ValueError('无效模型交接标记')
@@ -209,19 +231,21 @@ async def reuse_output(node, outputs, tools, invoke, on_recovery=None):
     rows = []
     for page in pages:
         values = path_value(page, reuse['collectionPath'])
-        if not isinstance(values, list) or any(not isinstance(row, dict) or 'id' not in row for row in values):
-            raise ValueError('复用来源必须是包含 ID 的记录列表')
+        if not isinstance(values, list) or any(not isinstance(row, dict) for row in values):
+            raise ValueError('复用来源必须是记录列表')
         rows.extend(values)
     if len(rows) > 1000:
         raise ValueError('复用超过 1000 条记录')
-    for row in rows:
-        identity = canonical(row['id'])
+    for index, row in enumerate(rows):
+        identity = canonical(row.get('id', row.get('_evidenceRef', index)))
         missing = [field for field in reuse['fields'] if field not in row]
         if not missing:
             elided.add(identity)
             continue
         if reuse.get('onMissing') != 'detail':
             raise ValueError('复用字段缺失：' + ','.join(missing))
+        if 'id' not in row:
+            raise ValueError('缺字段补查需要上游记录提供 id')
         tool = next(t for t in tools if t.name == node['tool'])
         if identity not in seen:
             args = {tool.parameters['required'][0]: row['id']}
@@ -233,7 +257,21 @@ async def reuse_output(node, outputs, tools, invoke, on_recovery=None):
             if on_recovery:
                 on_recovery(node['id'], dict(kind='missing_fields', recordId=row['id'], fields=missing, tool=tool.name))
         row.update({field: seen[identity][field] for field in reuse['fields']})
-    return pages, len(elided - set(seen))
+    detail = None
+    condition = reuse.get('filter')
+    if condition:
+        field, expected = condition['field'], condition['value']
+        if any(field not in row for row in rows):
+            raise ValueError('复用筛选字段不在当前列表记录中')
+        if any(type(row[field]) is not type(expected) for row in rows):
+            raise ValueError('复用筛选值类型与当前列表不一致')
+        total = len(rows)
+        for page in pages:
+            page['records'] = [row for row in page['records'] if row[field] == expected]
+        selected = sum(len(page['records']) for page in pages)
+        detail = dict(sourceNodeId=reuse['nodeId'], condition=deepcopy(condition), totalRecords=total,
+                      selectedRecords=selected, filteredOutRecords=total - selected)
+    return pages, len(elided - set(seen)), detail
 
 
 async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: None):
@@ -245,7 +283,7 @@ async def run_read_graph(nodes, tools, invoke, node_event=lambda key, state: Non
             if node.get('defer'):
                 raise ValueError('读取子图要求交接模型')
             if node.get('reuse'):
-                outputs[node['id']], _ = await reuse_output(node, outputs, tools, invoke)
+                outputs[node['id']], _, _ = await reuse_output(node, outputs, tools, invoke)
                 node_event(node['id'], 'reused')
                 continue
             items = [None]

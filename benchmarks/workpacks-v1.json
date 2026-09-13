@@ -1,0 +1,20 @@
+{
+  "version": "workspace-workpacks-v1",
+  "frozenOn": "2026-09-12",
+  "instanceSourceIndexes": [1, 2, 3, 4, 7, 9],
+  "splitByPosition": ["train", "train", "train", "train", "validation", "test"],
+  "workflows": [
+    {"id": "finance-reconciliation", "scenario": "finance", "sourceFamily": "reconciliation", "title": "订单、支付与商品金额核对", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "finance-cancel-installments", "scenario": "finance", "sourceFamily": "cancelled_payments", "title": "取消订单与分期支付风险队列", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "finance-freight-contribution", "scenario": "finance", "sourceFamily": "freight_burden", "title": "运费异常贡献与金额口径复核", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "finance-link-completeness", "scenario": "finance", "sourceFamily": "multiple_payments", "title": "订单关联完整性与重复支付核查", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "support-health-rollup", "scenario": "support", "sourceFamily": "channels", "title": "投诉渠道与产品响应健康汇总", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "support-escalation-queue", "scenario": "support", "sourceFamily": "timeliness", "title": "公开叙述与延迟响应升级队列", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "support-policy-draft", "scenario": "support", "sourceFamily": "forwarding", "title": "企业响应与政策依据内部草稿", "difficulty": ["A", "B", "B", "C", "B", "C"], "authoredPolicy": true},
+    {"id": "support-period-comparison", "scenario": "support", "sourceFamily": "recent", "title": "投诉期间变化与待核查事项比较", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "tickets-triage", "scenario": "tickets", "sourceFamily": "unassigned", "title": "未分派、里程碑与时效工程分诊", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "tickets-blocker-summary", "scenario": "tickets", "sourceFamily": "labels", "title": "标签、正文与阻塞事项摘要", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "tickets-activity-followup", "scenario": "tickets", "sourceFamily": "activity", "title": "活动记录与评论跟进清单", "difficulty": ["A", "B", "B", "C", "B", "C"]},
+    {"id": "tickets-export-comparison", "scenario": "tickets", "sourceFamily": "stale", "title": "双导出工程状态变化比较", "difficulty": ["A", "B", "B", "C", "B", "C"], "injectedAnomaly": true}
+  ]
+}
