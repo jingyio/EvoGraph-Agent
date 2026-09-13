@@ -102,6 +102,38 @@ async def test_workspace_parses_supported_files_scopes_evidence_and_never_learns
     await runner.shutdown()
 
 
+def test_workspace_followup_uses_only_parent_visible_report_context(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'orders.csv', b'order_id,status\na-1,canceled\n')
+    first, questions = manager.create_task(workspace['id'], '核对当前订单并形成内部复核简报。')
+    assert first and not questions
+    current = manager.workspace(workspace['id'])
+    current['reports'].append({
+        'id': 'report-parent', 'runId': 'run-parent', 'taskId': first['id'], 'title': first['title'],
+        'createdAt': '2026-09-13T00:00:00Z', 'metrics': {'reviewed_rows': 1}, 'selectedIds': ['a-1'],
+        'evidenceCount': 1, 'summary': '上一份用户可见的订单复核结论。',
+    })
+
+    followup, questions = manager.create_task(
+        workspace['id'], '请补充上一份结论的风险说明。', followup_run_id='run-parent')
+    assert followup and not questions
+    stored = manager.task(followup['id'])
+    assert followup['followupRunId'] == 'run-parent'
+    assert stored['followupContext'] == {
+        'parentRunId': 'run-parent', 'parentReportId': 'report-parent', 'title': first['title'],
+        'metrics': {'reviewed_rows': 1}, 'selectedIds': ['a-1'], 'evidenceCount': 1,
+        'summary': '上一份用户可见的订单复核结论。', 'summaryTruncated': False,
+    }
+    assert 'privateValidation' not in stored['followupContext']
+    public_tasks = manager.public_workspace(workspace['id'])['tasks']
+    public_followup = next(task for task in public_tasks if task['id'] == followup['id'])
+    assert public_followup['followupRunId'] == 'run-parent'
+    assert 'followupContext' not in public_followup
+    with pytest.raises(ValueError, match='已保存的工作成果'):
+        manager.create_task(workspace['id'], '尝试关联其他工作区运行。', followup_run_id='not-in-this-workspace')
+
+
 async def test_workspace_reconcile_keyed_sums_uses_only_current_tables_and_records_source_evidence(tmp_path):
     manager = WorkspaceManager(tmp_path)
     workspace = manager.create('finance')
@@ -240,6 +272,58 @@ async def test_workspace_aggregate_count_rejects_ambiguous_group_by_and_group_co
     }
 
 
+async def test_workspace_nonempty_count_ignores_null_and_blank_strings(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('support')
+    manager.add_source(workspace['id'], 'narratives.json', json.dumps([
+        {'complaint_id': 'c-1', 'narrative': 'detail'},
+        {'complaint_id': 'c-2', 'narrative': '   '},
+        {'complaint_id': 'c-3', 'narrative': None},
+        {'complaint_id': 'c-4', 'narrative': 'second'},
+    ]).encode())
+    task, _ = manager.create_task(workspace['id'], '统计当前公开叙述。')
+    table_id = manager.public_workspace(workspace['id'])['tables'][0]['id']
+    tool = {tool.name: tool for tool in manager.tools(task['id'])}['workspace_aggregate_rows']
+    context = type('Context', (), {'run': {'id': 'manual'}, 'evidence': set()})()
+
+    result = await tool.execute({
+        'tableId': table_id, 'operation': 'nonempty_count', 'field': 'narrative',
+    }, context)
+
+    assert result == {'nonemptyCount': 2, 'rowCount': 4}
+    assert len(context.evidence) == 4
+
+
+async def test_workspace_ordered_partition_uses_floor_prior_and_one_to_one_current_join(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('support')
+    manager.add_source(workspace['id'], 'responses_dates.csv', b'complaint_id,date_received\nc-1,2024-01-01\nc-2,2024-01-02\nc-3,2024-01-03\nc-4,2024-01-04\nc-5,2024-01-05\n')
+    manager.add_source(workspace['id'], 'complaints.csv', b'complaint_id,timely\nc-1,No\nc-2,Yes\nc-3,No\nc-4,Yes\nc-5,No\n')
+    task, _ = manager.create_task(workspace['id'], '按日期比较两期投诉。')
+    tables = {table['sheet']: table['id'] for table in manager.public_workspace(workspace['id'])['tables']}
+    tool = {tool.name: tool for tool in manager.tools(task['id'])}['workspace_ordered_partition']
+    context = type('Context', (), {'run': {'id': 'manual'}, 'evidence': set()})()
+
+    result = await tool.execute({
+        'primaryTableId': tables['responses_dates'], 'primaryKey': 'complaint_id', 'sortField': 'date_received',
+        'relatedTableId': tables['complaints'], 'relatedKey': 'complaint_id',
+        'measures': [
+            {'name': 'prior_late_count', 'segment': 'prior', 'source': 'related',
+             'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+            {'name': 'current_late_count', 'segment': 'current', 'source': 'related',
+             'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+        ],
+        'selectedIds': {'segment': 'current', 'source': 'related',
+                        'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+    }, context)
+
+    assert result['totalCount'] == 5
+    assert result['priorCount'] == 2 and result['currentCount'] == 3
+    assert result['metricValues'] == {'prior_late_count': 1, 'current_late_count': 2}
+    assert result['selectedIds'] == ['c-3', 'c-5']
+    assert len(context.evidence) == 10
+
+
 async def test_workspace_draft_is_not_counted_as_a_report_attempt(tmp_path):
     manager = WorkspaceManager(tmp_path)
     workspace = manager.create('finance')
@@ -300,6 +384,19 @@ async def test_workspace_http_accepts_raw_file_bytes_and_rejects_json_body_requi
             clarification = await client.post(f'/api/workspaces/{workspace_id}/tasks', json={'request': '请比较两期投诉变化。'})
             assert clarification.status_code == 201
             assert clarification.json()['status'] == 'needs_clarification'
+            prepared = await client.post(f'/api/workspaces/{workspace_id}/tasks', json={'request': '统计当前投诉渠道并形成内部复核简报。'})
+            assert prepared.status_code == 201
+            task_id = prepared.json()['task']['id']
+            app.state.workspace_runner.runs['report-download'] = {
+                'id': 'report-download', 'taskId': task_id, 'status': 'completed', 'events': [],
+                'evaluation': {'status': 'user_review_required', 'issues': []},
+                'submission': {'metrics': {'reviewed_rows': 1}, 'selectedIds': [], 'evidenceIds': [], 'summary': '基于当前上传资料形成内部复核简报。'},
+            }
+            downloaded = await client.get('/api/workspaces/runs/report-download/report/download')
+            assert downloaded.status_code == 200
+            assert downloaded.headers['content-type'].startswith('text/html')
+            assert 'attachment; filename="operations-report-report-download.html"' == downloaded.headers['content-disposition']
+            assert '内部复核简报' in downloaded.text
             installed = await client.post('/api/workpacks/example/workspace')
             assert installed.status_code == 201
             assert installed.json()['task']['id'] == 'task'
@@ -612,6 +709,128 @@ async def test_workspace_delivery_contract_is_public_trace_context_not_private_v
     assert 'privateValidation' not in model_text
     assert 'requiredEvidenceIds' not in model_text
     assert run['evaluation']['status'] == 'passed'
+    await runner.shutdown()
+
+
+async def test_workspace_declared_fact_recovery_runs_once_without_reads_or_report_rewrite(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    manager = WorkspaceManager(tmp_path)
+    _, public_task = install_workpack(manager, bank, 'support-policy-draft-01')
+    internal = manager.task(public_task['id'])
+    expected = internal['privateValidation']
+    tables = manager.public_workspace(internal['workspaceId'])['tables']
+
+    class FactRecoveryModel:
+        model = 'fact-recovery-regression'
+        settings = {}
+
+        async def complete(self, messages, tools):
+            prior_calls = [call for message in messages for call in message.get('tool_calls') or []]
+            prior_names = {call['function']['name'] for call in prior_calls}
+            if 'workspace_preview_rows' not in prior_names:
+                return {
+                    'message': {
+                        'role': 'assistant', 'content': '读取当前资料。',
+                        'tool_calls': [
+                            {'id': 'preview-' + str(index), 'type': 'function', 'function': {
+                                'name': 'workspace_preview_rows',
+                                'arguments': json.dumps({'tableId': table['id'], 'page': 1, 'pageSize': 200}),
+                            }}
+                            for index, table in enumerate(tables, start=1)
+                        ],
+                    },
+                    'usage': {'input': 4, 'output': 1}, 'finishReason': 'stop',
+                }
+            evidence = _evidence_from_messages(messages)
+            runtime_fact_seen = any(
+                str(message.get('tool_call_id') or '').startswith('facts_')
+                for message in messages if message.get('role') == 'tool'
+            )
+            if 'workspace_publish_report' not in prior_names:
+                metrics = dict(expected['metrics'])
+                metrics['narrative_count'] += 1
+                return response('workspace_publish_report', {
+                    'metrics': metrics, 'selectedIds': expected['selectedIds'],
+                    'evidenceIds': evidence, 'summary': '基于当前资料形成内部草稿。',
+                })
+            if runtime_fact_seen:
+                return response('workspace_publish_report', {
+                    'metrics': expected['metrics'], 'selectedIds': expected['selectedIds'],
+                    'evidenceIds': evidence, 'summary': '依据当前观察与确定性统计修正内部草稿。',
+                })
+            return response()
+
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: FactRecoveryModel(), learning_enabled=False,
+                        run_directory=tmp_path / 'runs', evolution_path=tmp_path / 'experience.json')
+    run = await runner.start(TaskRunRequest(taskId=public_task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'completed'
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['reportAttempts'] == 2
+    assert run['metrics']['failedReportAttempts'] == 1
+    assert run['metrics']['deterministicFactRecoveryComputes'] == 1
+    assert run['metrics']['deterministicFactRecoveryFailures'] == 0
+    read_traces = [trace for trace in run['toolTrace'] if trace['effect'] == 'read']
+    assert len(read_traces) == len(tables)
+    assert all(trace['executor'] == 'model' for trace in read_traces)
+    fact_traces = [trace for trace in run['toolTrace'] if trace['tool'] == 'workspace_aggregate_rows']
+    assert len(fact_traces) == 1 and fact_traces[0]['executor'] == 'runtime' and fact_traces[0]['ok'] is True
+    assert run['submission']['metrics'] == expected['metrics']
+    await runner.shutdown()
+
+
+async def test_workspace_deadline_guard_reserves_completed_scope_for_report(tmp_path, monkeypatch):
+    import backend.task_runner as runner_module
+
+    bank = TaskBank()
+    bank.load()
+    manager = WorkspaceManager(tmp_path)
+    _, public_task = install_workpack(manager, bank, 'support-policy-draft-01')
+    internal = manager.task(public_task['id'])
+    expected = internal['privateValidation']
+    tables = manager.public_workspace(internal['workspaceId'])['tables']
+    monkeypatch.setattr(runner_module.config, 'RUN_TIMEOUT', .5)
+    monkeypatch.setattr(runner_module.config, 'MODEL_TIMEOUT', .3)
+
+    class DeadlineModel:
+        model = 'deadline-guard-regression'
+        settings = {}
+
+        async def complete(self, messages, tools):
+            prior_calls = [call for message in messages for call in message.get('tool_calls') or []]
+            if not prior_calls:
+                await asyncio.sleep(.24)
+                return {
+                    'message': {
+                        'role': 'assistant', 'content': '读取完整公开范围。',
+                        'tool_calls': [
+                            {'id': 'preview-' + str(index), 'type': 'function', 'function': {
+                                'name': 'workspace_preview_rows',
+                                'arguments': json.dumps({'tableId': table['id'], 'page': 1, 'pageSize': 200}),
+                            }}
+                            for index, table in enumerate(tables, start=1)
+                        ],
+                    },
+                    'usage': {'input': 4, 'output': 1}, 'finishReason': 'stop',
+                }
+            assert {tool.name for tool in tools} == {'workspace_publish_report'}
+            return response('workspace_publish_report', {
+                'metrics': expected['metrics'], 'selectedIds': expected['selectedIds'],
+                'evidenceIds': _evidence_from_messages(messages), 'summary': '在当前证据范围内完成最终报告。',
+            })
+
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: DeadlineModel(), learning_enabled=False,
+                        run_directory=tmp_path / 'runs', evolution_path=tmp_path / 'experience.json')
+    run = await runner.start(TaskRunRequest(taskId=public_task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'completed'
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['deadlineFinalizationGuards'] == 1
+    assert not any(trace['tool'] == 'workspace_save_draft' for trace in run['toolTrace'])
+    assert any(event['type'] == 'deadline_guard' for event in run['events'])
     await runner.shutdown()
 
 

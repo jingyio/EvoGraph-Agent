@@ -1,6 +1,6 @@
 # 当前架构
 
-核对日期：2026-09-10；功能演进基线：`9520ae7`，本文包含其后的沙箱清理，当前行为以本文所属提交为准。本文件描述已实现状态，未实现方向见 [TODO.md](TODO.md)，设计约束见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。
+核对日期：2026-09-13；功能演进基线：`9520ae7`，本文包含其后的沙箱清理和交互式工作区，当前行为以本文所属提交为准。本文件描述已实现状态，未实现方向见 [TODO.md](TODO.md)，设计约束见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。
 
 ## 目标与边界
 
@@ -11,10 +11,10 @@
 ## 当前任务库路径
 
 ```text
-React: ShowcaseHome（企业运营数字员工工作台） / CompareExperience / RsiInsights / TaskReplay
-       └─ ExecutionDemo / TaskBankPanel / OnlineEvolutionPanel / EvaluationPanel（实验工作台）
+React: WorkspaceWorkbench（默认 `/#home`） / WorkpackExperimentPanel（`/#experiments`）
+       └─ CompareExperience / RsiInsights / TaskReplay / 历史实验面板
                  ↓ JSON API
-backend/app.py → Showcase DTO（只读最终 artifact + 派生审计） / TaskRunner
+backend/app.py → WorkspaceManager（上传/预览/追问） / WorkpackExperiment / TaskRunner
                  ├─ ReAct / Strong ReAct
                  ├─ Plan + ReAct
                  ├─ Plan DAG（每次规划）
@@ -38,6 +38,8 @@ backend/app.py → Showcase DTO（只读最终 artifact + 派生审计） / Task
 | `backend/paired_evaluation.py` | 固定验证/测试任务与图，运行明确的两臂对照，保留失败成本 | 不从评测结果生成经验 |
 | `backend/llm_judge.py` | 匿名双顺序报告评分、reward、独立裁判计量 | 不执行 Agent，不改写事实评分，不训练图 |
 | `backend/business_report.py` | 所有 Agent 共用 HTML 报告与实际工具证据展示；按场景标注岗位与简报名称 | 不读取 gold 来补写业务结果，也不生成 PPTX |
+| `backend/workspace.py` / `workpacks.py` | 隔离用户文件、受限只读资料工具、确定性澄清、同工作区报告/追问、公开来源工作包的相同解析入口 | 不把用户资料写入共享 RSI 经验、评测库或生产平台 |
+| `backend/workpack_experiment.py` | 用独立经验库串行运行冻结工作包的 Plan + ReAct / Graph RSI，对所有已启动尝试、恢复和 usage 做配对账本 | 不重写历史工件，不将私有校验或 Judge 反馈回写学习 |
 | `backend/showcase.py` | 只读聚合最终严格串行 artifact，生成全量/三领域聚合、成对任务、保存事件时间步（模型/结构化/控制通道）、DAG/绑定回放和严格报告审计 DTO | 不运行 Agent/Judge，不写经验，不向前端泄漏 gold 或把有限摘要审计称为全面文字事实评分 |
 
 用户粘贴的架构示例中的 `Resolver`、`MotifContext` 是说明性概念，不是当前仓库类名。不要据此未经任务需要重建框架。
@@ -61,6 +63,7 @@ AutoTool/TIG 惯性执行已经退役：保留历史轨迹读取与共享参数�
 - 公开历史任务库：Olist 财务、CFPB 投诉、Zammad GitHub Issues 技术工单，各 100 任务；每场景 10 family，每 family 10 实例，6 train / 2 validation / 2 test。
 - 财务/客服/工单每任务分别 10/5/3 条记录。同 family 指令高度模板化，记录不同；不是 300 种独立需求。
 - 来源数据库在 `artifacts/taskbank/records.sqlite3`。`gold.json` 仅供确定性评分，不进入 Agent 或裁判输入。
+- 工作包数据：公开历史记录经同一文件解析器重组为 CSV/JSON/TXT；总库 72 项，每场景四类工作流，每类 4 train、1 validation、1 test。V17 全量实验只使用冻结的 48 条 train 工作包；私有声明式校验不进入模型上下文。
 - LLM 裁判分别输出事实、覆盖、可读性 0–10 分；后端计算 `(0.5F+0.3C+0.2R)/10`，两次顺序取均值。reward 不含成本，不是成功概率。
 
 ## 平台路径与已删除沙箱
@@ -71,7 +74,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173` 默认 `#home`，并提供 `#compare`、`#insights` 和 `#replay?task=<id>` 录制入口；旧 `#demo`、`#evaluation`、`#evolution`、`#taskbank` 是实验工作台。`#home` 是一个企业运营数字员工工作台：财务分析、客服分析和研发运营作为同一员工的能力切换，读取同一只读 V4 DTO，展示业务需求、保存的实际执行过程、当前参数绑定、提交指标和 HTML 简报。主页不显示任务 ID 或 train/benchmark 分类；旧 `#employees` 会重定向至主页。它不运行 Agent、不生成 PPTX、也不改变严格实验。`#compare` 默认展示固定 manifest 的全部 36 对，并按财务、客服、技术工单各 12 对聚合；三条动态轨迹是保存事件的累计指标回放，技术代表任务使用 `labels`，但 `unassigned` 仍留在技术领域/全量分母中。数据来源、SQLite/JSON Schema 只读边界和生产平台限制放在验证与技术说明入口。展示 API 是 `/api/showcase/online-rsi-serial-final-v4` 和 `/pairs/{taskId}`；后端 `4317`，主路由在 `app.py`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，并提供 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>`。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，可上传 CSV/XLSX/JSON/TXT、预览资料、获得确定性澄清、确认费用并运行当前工作区 Agent；同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。普通用户运行使用独立目录且 `learning_enabled=False`，不会读取或更新正式实验经验。`#experiments` 读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本；它不写死结果数字。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 

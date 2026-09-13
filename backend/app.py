@@ -81,7 +81,8 @@ class WorkpackExperimentRequest(BaseModel):
                   'smoke_v8', 'precheck_v8', 'full_train_v6', 'smoke_v9', 'precheck_v9', 'full_train_v7',
                   'smoke_v10', 'precheck_v10', 'full_train_v8', 'smoke_v11', 'precheck_v11', 'full_train_v9',
                   'smoke_v12', 'precheck_v12', 'full_train_v10', 'smoke_v13', 'precheck_v13', 'full_train_v11',
-                  'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13'] = 'smoke_v15'
+                  'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13',
+                  'smoke_v16', 'precheck_v16', 'full_train_v14', 'smoke_v17', 'precheck_v17', 'full_train_v15'] = 'smoke_v17'
     confirmCost: bool = False
 
 
@@ -327,12 +328,13 @@ def create_app(service=None):
                                                    'smoke_v8', 'precheck_v8', 'full_train_v6', 'smoke_v9', 'precheck_v9', 'full_train_v7',
                                                    'smoke_v10', 'precheck_v10', 'full_train_v8', 'smoke_v11', 'precheck_v11', 'full_train_v9',
                                                    'smoke_v12', 'precheck_v12', 'full_train_v10', 'smoke_v13', 'precheck_v13', 'full_train_v11',
-                                                   'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13'] = 'smoke_v15'):
+                                                   'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13',
+                                                   'smoke_v16', 'precheck_v16', 'full_train_v14', 'smoke_v17', 'precheck_v17', 'full_train_v15'] = 'smoke_v17'):
         return workpack_experiment.protocol(mode)
 
     @app.get('/api/workpack-experiments')
     def workpack_experiment_list():
-        return workpack_experiment.list()
+        return workpack_experiment.list_summaries()
 
     @app.post('/api/workpack-experiments', status_code=202)
     async def workpack_experiment_start(request: WorkpackExperimentRequest):
@@ -345,12 +347,12 @@ def create_app(service=None):
             item = await workpack_experiment.start(request.mode)
         except ValueError as error:
             raise HTTPException(400, str(error))
-        return {'id': item['id'], 'status': item['status'], 'protocol': item['protocol']}
+        return workpack_experiment.dashboard(item['id'])
 
     @app.get('/api/workpack-experiments/{key}')
     def workpack_experiment_get(key: str):
         try:
-            return workpack_experiment.get(key)
+            return workpack_experiment.dashboard(key)
         except KeyError:
             raise HTTPException(404, '工作包在线实验不存在')
 
@@ -466,6 +468,17 @@ def create_app(service=None):
             raise HTTPException(404, '工作区执行记录不存在')
         run = workspace_runner.runs[run_id]
         return HTMLResponse(render_report(run, workspace_manager.task(run['taskId'])), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
+
+    @app.get('/api/workspaces/runs/{run_id}/report/download')
+    def workspace_run_report_download(run_id: str):
+        if run_id not in workspace_runner.runs:
+            raise HTTPException(404, '工作区执行记录不存在')
+        run = workspace_runner.runs[run_id]
+        body = render_report(run, workspace_manager.task(run['taskId']))
+        return Response(body, media_type='text/html; charset=utf-8', headers={
+            'Content-Disposition': f'attachment; filename="operations-report-{run_id}.html"',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'",
+        })
 
     @app.post('/api/workspaces/runs/{run_id}/cancel')
     async def workspace_run_cancel(run_id: str):

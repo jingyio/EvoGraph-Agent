@@ -36,6 +36,8 @@
 | D31 | 多对一锚定对账按业务键计算并保留完整行级证据；传输重试必须有界且计量未知用量 | 2026-09-13。V12 财务订单行按 `order_id` 对账被错误要求唯一，导致正常一对多资料无法完成比例校验。V13 将 `anchorCount` 定义为唯一键、另记 `anchorRowCount` 与原始证据行；不改变聚合键语义。模型 HTTP 仅对 timeout/传输/408/429/5xx 重试一次，记录逻辑请求、实际 provider attempts 与 retry；失败尝试 usage 不可验证时标记不完整。两项对两臂共享，属于正确性和成本透明度修复，非 RSI 学习收益。详见 [V13 协议](workspace-workpack-v13-repair-protocol-2026-09-13.md)。 |
 | D32 | 行数与不同分组数不得共享含糊的聚合调用 | 2026-09-13。V13 smoke 的 Baseline 将 `count + groupBy` 静默返回的总行数误作渠道/产品不同值数，报告被 metrics 校验拒绝。`count` 现拒绝 `groupBy`；不同分组必须显式 `group_count` 并从 `counts` 获取数量。该修复不填报告或暴露答案，影响两臂，故 V14 另起 staged runtime。 |
 | D33 | 取消的 Workpack pair 不得进入配对成本或完成度曲线 | 2026-09-13。取消可发生在两个 arm 之间，甚至留下两条终态 run；这些尝试必须保留在各 arm 的失败、token、provider attempt 与 usage-incomplete 账本中，但仅 `pair.status=completed` 才可进入 `pairedCompleted`、累计 token 曲线和同任务成本差。旧 artifact 不改写，读取时重算展示摘要；缺少该字段的旧格式工件仅为兼容视作已完成。 |
+| D34 | 默认主页是交互式工作区，实验展示单列 | 2026-09-13。`#home` 不再只是 V4 的只读 DTO：上传、资料预览、澄清、真实 Agent、报告下载、导出、追问和历史工作必须共用同一 workspace/run ID。普通用户任务保持独立目录和 `learning_enabled=False`；公开父报告摘要仅可作为追问上下文，不能替代本次证据。`#experiments` 才显示冻结工作包、训练经验和成本曲线；不保留旧 benchmark 作为默认入口。 |
+| D35 | V17 Workpack full 作为独立的同质量在线工作包证据 | 2026-09-13。V17 运行时在 V16 基础上增加两臂共享的截止时间终态报告保护，因此建立全新 smoke/precheck/full 链。完整工件 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe` 的 mode 名为 `full_train_v15`，但不得与旧 V15 cancelled full 混淆；它以 48 个冻结 train 工作包、独立空 RSI 经验和串行 1/1/1 形成独立结论。Judge 单列且尚未运行；Composition/G1/G2 未触发时不得宣称相应收益。 |
 | D15 | 将当前讨论 session 与用户将建立的执行 session 分工 | 文档承接设计和状态，不依赖聊天长上下文；不绑定具体型号的能力假设 |
 
 ## 明确没有确认成结论的说法

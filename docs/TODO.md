@@ -1,28 +1,23 @@
 # 下一阶段任务
 
-日期：2026-09-11。目标见 [mentor-goals.md](mentor-goals.md)，已确认边界见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。此表是工作优先级，不是已完成能力清单。最终严格串行 36-task 对照已经完成；任何后续实验必须另建协议和实验 ID，不能回写或拼接现有结果。
+日期：2026-09-13。目标见 [mentor-goals.md](mentor-goals.md)，已确认边界见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。此表是工作优先级，不是已完成能力清单。最终严格串行 36-task 对照已经完成；任何后续实验必须另建协议和实验 ID，不能回写或拼接现有结果。
 
-## P0.3 Workpack V15 对账命中汇总与恢复验证
+## P0.3 Workpack V17 完整在线结果与交互式交付
 
-状态：**V15 48-task full train 已取消且不完整，2026-09-13**。V15 precheck 为两臂 12/12，
-token -35.197%、第二轮 6 次实际 Fast，详情见
-[V15 Precheck](workspace-workpack-v15-precheck-results-2026-09-13.md)。V15 smoke 为两臂 3/3，通过质量门槛；
-详情见 [V15 Smoke](workspace-workpack-v15-smoke-results-2026-09-13.md)。V14 财务两臂已正确对账却手工汇总命中金额而失败；
-V15 返回 comparison `matchingTotals`，详情见 [V14 Smoke 诊断](workspace-workpack-v14-results-2026-09-13.md)。V13 财务一对多对账已通过，但 Baseline 在
-客服任务将 `count + groupBy` 的总行数误作不同分组数，故 V13 2/3 vs 3/3 不合格，详情见
-[V13 Smoke 诊断](workspace-workpack-v13-results-2026-09-13.md)。V12 的共享重复 compute guard
-通过 smoke 和 12-task precheck；48 对 full 出现 Baseline 3 次有界业务/报告失败、
-一条 Baseline 模型超时，以及末尾两条两臂共同模型网络失败。详情见
-[V12 结果](workspace-workpack-v12-results-2026-09-13.md)。
+状态：**完成，2026-09-13**。V17 / `full_train_v15` 工件
+`005ffeb9-964e-42ac-86e9-fb9e8f2212fe` 在冻结 48 个 train 工作包、串行 1/1/1 下，
+两臂均 48/48 私有结构化事实/证据通过，usage 完整。Baseline/RSI token
+2,244,017→1,243,546（-44.5839%），模型请求 258→149，工具 422→325；RSI 形成 12 个
+G0 并在后续实际 Fast 35 次。详见
+[V17 全量结果](workspace-workpack-v17-full-results-2026-09-13.md)。
 
-- V15 full `6c56245b` 在 pair 2 中因 Baseline 两次 transport retry 后使用量未知而取消；保留已发生的
-  尝试、费用下界和失败记录，不得把 pair 1 或旧摘要 token 差包装为全量结果。修复后 `pairedCompleted=1`，
-  取消 pair 只保留在 arm-level 账本，不进入配对曲线；详见
-  [V15 Full 取消诊断](workspace-workpack-v15-full-cancelled-diagnostic-2026-09-13.md)。
-- 不重跑或拼接 V12 成功子集；表面 token -40.513% 不能作为同质量结论。
-- V14 已拒绝含糊 `count + groupBy` 并明确要求 `group_count`；重新从 smoke 开始，不能复用
-  V13 通过子集。通过后才启动 V14 预检。
-- Composition 仍为 0；下一步不能通过调低阈值制造命中。
+- 旧 V12 的质量门槛失败和旧 V15 full `6c56245b` 的 usage-incomplete 取消均保留为诊断，
+  不与 V17 拼接。旧 V15 precheck 仍是 staged 证据，不替代 V17 full。
+- 默认 `#home` 已是上传、澄清、真实执行、报告下载、导出、追问和历史 replay 的工作台；
+  `#experiments` 使用保存的 V17 工件展示族内经验与成本，普通用户任务不学习。
+- 2026-09-13 已用财务、客服、技术工单的主任务和追问逐一核验：资料、执行轨迹、报告与
+  下载均由同一保存 run 关联；实验中心改用轻量摘要载入，避免首屏复制完整历史 trace。
+- 未完成：独立/全量 Judge、真实 Composition 命中、G1/G2 多代结构修订、生产写入验证和长期重复稳定性。
 
 ## P0.0 端到端在线对照
 

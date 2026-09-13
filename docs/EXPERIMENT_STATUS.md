@@ -1,8 +1,24 @@
 # 实验状态与可主张的结论
 
-更新时间：2026-09-11；实验功能基线 `9520ae7`，本文另记录其后的修复和最终串行验证。本文件为状态索引，原始数字与协议见链接，执行轨迹保存在本地 artifacts（不随 Git 分发）。
+更新时间：2026-09-13；实验功能基线 `9520ae7`，本文另记录其后的修复、最终串行验证和 Workpack V17。本文件为状态索引，原始数字与协议见链接，执行轨迹保存在本地 artifacts（不随 Git 分发）。
 
 ## 已完成的真实验证
+
+> **Workpack V17 full** `005ffeb9-964e-42ac-86e9-fb9e8f2212fe` 已完成：48 个冻结
+> train 工作包、每臂 48 次、串行 `1/1/1`、独立空 RSI 经验。两臂私有结构化事实/证据
+> 校验均为 48/48，usage 完整且没有 transport retry。Baseline/RSI Agent token 为
+> 2,244,017→1,243,546（**-44.5839%**），模型请求 258→149，工具调用 422→325。
+> RSI 形成 12 个 G0，后续 Fast 35 次，Fallback 13 次，Composition 0；没有 G1/G2。
+> 报告恢复和工具错误计入全部尝试，不把初次失败过滤掉。它是新的、可比较的工作包结论，
+> 不与旧 V12/V15 取消或 V4 任务库工件拼接；完整边界见
+> [V17 全量结果](workspace-workpack-v17-full-results-2026-09-13.md)。
+
+> **2026-09-13 交互交付验收**：默认 `/#home` 已不是历史 benchmark 入口，而是同一
+> Workspace/`runId` 贯通的上传、预览、澄清、真实 Agent、轨迹、报告下载与追问工作台。
+> 已用保存的财务、客服、技术工单三组主任务与追问 run 实际核验；它们不学习，也不污染
+> V17 经验。实验中心 `/#experiments` 的列表和仪表盘摘要不再重复传输所有 48 对的原始
+> trace：列表约 29,869 B、V17 摘要约 290,393 B；点击单 run 才请求 DAG、观察、Plan 与报告。
+> 这是展示性能与关联正确性的交付验证，不是新的 Agent 成本或质量实验。
 
 > 2026-09-12 工作区 Workpack 后续实验：V5 Smoke、V6 Smoke 均保留为
 > 诊断；V6 的 12-task 预检因 Baseline `tickets-triage-01` 发生共享
@@ -46,6 +62,7 @@
 
 | 实验 | 覆盖与 ID | 结果 | 结论边界 |
 |---|---|---|---|
+| **Workpack V17 full** | `005ffeb9-964e-42ac-86e9-fb9e8f2212fe`；48 对 train workpack、串行 1/1/1、独立空经验 | 两臂 48/48；token 2,244,017→1,243,546（**-44.5839%**），请求 258→149，工具 422→325；Fast 35、G0 12、Composition 0 | 同一保存工件的结构化质量门槛和 usage 完整；分时 provider 延迟不作通用优势。Judge 未运行；没有 G1/G2 或 Composition 结论。详见 [V17 结果](workspace-workpack-v17-full-results-2026-09-13.md)。 |
 | Workpack V12 staged train | smoke `2413c09a`、precheck `587d7c50`、full `f8acd9e2`；48 对 train workpack、串行 1/1/1 | Smoke 3/3、预检12/12均通过；full Baseline/RSI 42/48、46/48，token 1,813,753→1,078,947，Fast 36、Composition 0 | full 有三次 Baseline 有界失败、一条 Baseline 模型超时、两条两臂共同网络失败；质量门槛失败且服务异常，表面 -40.513% 仅诊断，不能替代 V4。 |
 | Strong ReAct vs RSI | 30 对 validation；`6d01875c-ceaa-4640-9511-f29c2c6e3fc4` | 双方 30/30；token 628397→439413（-30.1%）；均延迟 33.56→22.98s；工具 324→339 | 27 次冷启动、3 次历史图命中；不是纯 Motif/递归贡献；文字未全量评分 |
 | Plan + ReAct vs RSI | 同一批 30 validation 任务；`1535dc8e-a865-4f7c-b00f-69d606f5a4e7` | 29/30 vs 30/30；token 673279→485075；均延迟 34.90→31.39s；工具错误 0→6 | 全量 token -28.0%、延迟 -10.1% 受基线一次失败影响；双方通过的29对为 -15.5%/-4.9% |
@@ -56,7 +73,7 @@
 | 最小 AutoTool / TIG 惯性预检 | 三条正常 train 模型轨迹 `35234b93`、`e8312d69`、`f24650ef`；`motif_first` `381f3fa5` | 三条 train 均通过，产生模型来源路径/参数契约；预检通过且惯性尝试 1 次，`finance_get_order_payments` 支持 2、CIPS 0.1348 < 0.55，拒绝且回到模型 | 没有实际惯性调用、没有模型/token/工具/延迟净收益；不扩大成对评测、不降低阈值制造命中。较早 `3ae50cb8` 暴露并发上下文误用，已保留并用串行边规则修正，不能作为机制收益证据。 |
 | **最终严格串行在线对照** | `online-rsi-serial-final-v4`；36 个固定 train 任务，独立空 RSI 经验，`run=model=read=1` | Baseline/RSI 均 36/36；token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277；Fast 24、Composition 0、G0 6、G1/G2 0 | 主交付结论：全量 Agent token 达到约30%目标；六个 family 均正向，`cancelled_payments` 修复后 -44.0%。延迟为同 session 交替串行观测，不能作稳定 provider 优势。Judge 26/36 完成、10 个服务超时、同模型且15个顺序分歧；详见 [最终结果](online-rsi-serial-final-results-2026-09-11.md)。 |
 | 最终展示与严格摘要审计 | 只读 `online-rsi-serial-final-v4` artifact；`/api/showcase/...` | 默认全量 36 对、财务/客服/技术工单各 12 对；三领域播放器与具体任务回放按保存事件逐步推进，显示累计 LLM/token/工具/时间、模型/结构化/控制通道、执行器和 DAG 绑定。结构化精确通过 Baseline/RSI 均 36/36；额外摘要 audit 为 Baseline 25/36、RSI 26/36 | 新 audit 和动态展示没有重跑 Agent/Judge、没有改写历史结果或泄漏 gold。事件粒度不按不同长度 trace 的比例插值；结构化步骤不直接计作 LLM 节省。技术 `unassigned` 留在指标分母但不作代表回放。公开历史数据通过本地 SQLite + JSON Schema 只读接口模拟岗位读取，非生产平台写入部署；严格文字质量仍受同模型 Judge 覆盖 26/36 和顺序分歧限制。 |
-| 企业运营数字员工主工作台 | `#home`；只读 V4 DTO 和保存 HTML 报告 | 一个员工提供财务、客服和研发运营三项能力；首页显示业务需求、历史流程匹配、当前参数绑定、工作记录回放、关键业务指标与完整简报入口 | 这是产品/录制层，不是新实验：没有模型调用、没有新学习、没有新报告评分。36 个案例与严格审计保留在验证入口；报告为可打印 HTML，不是 PPTX，也不能表述为生产企业系统部署。详见 [展示设计](enterprise-operations-employee-showcase-2026-09-11.md)。 |
+| 企业运营数字员工主工作台 | `#home`；交互式 Workspace API 与保存 HTML 报告 | 财务、客服、研发运营共用一套工作台：上传、预览、确定性澄清、真实 Agent、同 run 的 DAG/轨迹、报告下载、导出、追问和历史工作均可用；`#experiments` 展示冻结 Workpack 结果 | 普通用户工作区不会学习或污染实验经验；公开历史资料经本地受限只读工具模拟，非生产企业写入。报告为可打印 HTML，不是 PPTX。 |
 | V3 全 family 冷启动诊断 | `online-rsi-all-train-saturation-v3`；30 个 train family 的第一个实例各一对 | Baseline 29/30、613,523 token、181 请求、311 工具；RSI 30/30、500,157 token、129 请求、358 工具。RSI token `-18.48%`、请求 `-28.73%`；保存端到端时长为分时交替观察 | 仅可作为冷启动诊断，按设计 Fast=0，不能替代或拼接最终 V4。V3 的本地 overhead 归因错误：约14.3s Composition 模型等待被计入 `compositionLocalMs`；token、请求、工具、任务结果与端到端时长未受影响，但不得用此工件支持 overhead 结论。 |
 | 36-task 在线训练对照 | `online-e2e-train-v1`；36 个固定 train 任务 × `plan_react` / `motif_first`，六轮串行 | 基线 36/36、601,435 token、737.62s；RSI 35/36、766,076 token、890.26s。RSI Fast 5 次，Composition/AutoTool 运行时调用均为 0；双顺序 Judge 平均 reward 两臂同为 0.9714，另耗 339,938 token | 历史 Workflow 在 `support-channels-02...06` 实际复用且跳过 Plan，但全量 RSI token +27.4%、延迟 +20.7%，并有一次确定性失败；不能主张总体净收益。完整协议、审计修复和结果见 `online-e2e-train-results-2026-09-10.md`。 |
 | 修复后 36-task 分时匹配对照 | RSI source `online-rsi-graph-precheck-v3` + 新 Baseline `online-rsi-graph-matched-v4`；同一固定 train manifest | Baseline 32/36、509,630 token、648.18s；RSI 36/36、386,813 token、502.10s；RSI token -24.1%，模型请求 -93，工具 +65；Judge 72 请求/336,757 token，平均 reward 0.9768/0.9746 | 记录模型名、预算、契约和源码 runtime revision 均匹配，但 provider endpoint 历史指纹未保存，且为分时执行；可主张匹配记录下 token/结构化质量结果，不能称严格同时段或独立 Judge 结论。30% token 目标未达到；六 family 中 `cancelled_payments` +77.7% 为负收益，其余五个获益。详见 `online-rsi-matched-results-2026-09-10.md`。 |

@@ -112,16 +112,38 @@ WORKFLOW_DELIVERY_CONTRACTS = {
             'followup_count': 'selectedIds 中不同 complaint_id 的数量。',
             'policy_matches': '成功读取并使用当前随附政策资料时为 1，否则为 0。',
         },
+        'deterministicFactRecovery': [{
+            'tool': 'workspace_aggregate_rows',
+            'tableSlots': {'tableId': 'narratives'},
+            'arguments': {'operation': 'nonempty_count', 'field': 'narrative'},
+            'purpose': '从当前 narratives 表确定性统计非空公开叙述数量。',
+        }],
     },
     'support-period-comparison': {
         'requiredSources': ['complaints.csv', 'responses_dates.csv'],
-        'selectedIds': '将当前 records 按 date_received 排序后等分为较早与较晚两期，仅列出较晚半段 timely 为 No 的 complaint_id。',
+        'selectedIds': '将当前 records 按 date_received 升序排序后分为较早与较晚两期：较早期为前 floor(n/2) 条，较晚期为其余条；仅列出较晚期 timely 为 No 的 complaint_id。',
         'metrics': {
             'prior_count': '较早半段记录数。',
             'current_count': '较晚半段记录数。',
             'prior_late_count': '较早半段 timely 为 No 的记录数。',
             'current_late_count': '较晚半段 timely 为 No 的记录数。',
         },
+        'deterministicFactRecovery': [{
+            'tool': 'workspace_ordered_partition',
+            'tableSlots': {'primaryTableId': 'responses_dates', 'relatedTableId': 'complaints'},
+            'arguments': {
+                'primaryKey': 'complaint_id', 'sortField': 'date_received', 'relatedKey': 'complaint_id',
+                'measures': [
+                    {'name': 'prior_late_count', 'segment': 'prior', 'source': 'related',
+                     'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+                    {'name': 'current_late_count', 'segment': 'current', 'source': 'related',
+                     'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+                ],
+                'selectedIds': {'segment': 'current', 'source': 'related',
+                                'filters': [{'field': 'timely', 'operator': 'equals', 'value': 'No'}]},
+            },
+            'purpose': '按当前 date_received 排序并依公开规则确定 prior/current 分段、未及时数量与当前期清单。',
+        }],
     },
     'tickets-triage': {
         'requiredSources': ['issues.csv', 'activity.csv'],
@@ -237,7 +259,7 @@ def _support_prompt(workflow: str) -> tuple[str, list[str]]:
     if workflow == 'support-policy-draft':
         return ('请依据当前投诉资料与随附政策资料形成内部草稿。统计有公开叙述、缺少企业公开回复和需跟进的投诉数量；清单使用 complaint_id。不要发送给消费者，政策资料仅作内部建议依据。',
                 ['narrative_count', 'missing_public_response_count', 'followup_count', 'policy_matches'])
-    return ('请比较当前工作区中的较早与较晚投诉资料。统计两期投诉量和未及时数量，并列出较晚期间的未及时 complaint_id。两期由当前导出中的日期范围确定，不把观察到的变化解释为因果。',
+    return ('请比较当前工作区中的较早与较晚投诉资料。按 date_received 升序排序，较早期为前 floor(n/2) 条、较晚期为其余条；统计两期投诉量和未及时数量，并列出较晚期间的未及时 complaint_id。不要把观察到的变化解释为因果。',
             ['prior_count', 'current_count', 'prior_late_count', 'current_late_count'])
 
 

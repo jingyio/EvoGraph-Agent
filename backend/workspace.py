@@ -345,7 +345,7 @@ class WorkspaceManager:
         task = self.tasks[task_id]
         return {key: deepcopy(task.get(key)) for key in ['id', 'workspaceId', 'scenario', 'family', 'split', 'title', 'task', 'createdAt',
                                                            'asOf', 'workpackId', 'difficulty', 'clarifications', 'schemaContract',
-                                                           'deliveryContract', 'sourceProvenance'] if key in task}
+                                                           'deliveryContract', 'sourceProvenance', 'followupRunId'] if key in task}
 
     def add_source(self, workspace_id: str, filename: str, content: bytes, *, provenance: dict[str, Any] | None = None) -> dict[str, Any]:
         workspace = self.workspace(workspace_id)
@@ -421,6 +421,31 @@ class WorkspaceManager:
             questions = [question for question in questions if question['id'] not in supplied]
         return questions
 
+    @staticmethod
+    def _followup_context(workspace: dict[str, Any], followup_run_id: str | None) -> dict[str, Any] | None:
+        """Return only the prior, user-visible report fields for a follow-up.
+
+        A follow-up may reference a saved report in the same workspace, but it
+        never receives private validation state or cached row data. The next
+        run must still use its own tool observations as report evidence.
+        """
+        if not followup_run_id:
+            return None
+        report = next((item for item in workspace['reports'] if item.get('runId') == followup_run_id), None)
+        if report is None:
+            raise ValueError('追问必须关联当前工作区内一份已保存的工作成果')
+        summary = str(report.get('summary') or '')
+        return {
+            'parentRunId': followup_run_id,
+            'parentReportId': report.get('id'),
+            'title': str(report.get('title') or '')[:180],
+            'metrics': deepcopy(report.get('metrics') or {}),
+            'selectedIds': deepcopy(report.get('selectedIds') or []),
+            'evidenceCount': int(report.get('evidenceCount') or 0),
+            'summary': summary[:2000],
+            'summaryTruncated': len(summary) > 2000,
+        }
+
     def create_task(self, workspace_id: str, request: str, *, title: str | None = None, answers: dict[str, str] | None = None,
                     followup_run_id: str | None = None, split: str = 'user', workpack: dict[str, Any] | None = None) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
         workspace = self.workspace(workspace_id)
@@ -432,6 +457,7 @@ class WorkspaceManager:
         clarifications = self.clarify(workspace_id, request, answers=answers)
         if clarifications:
             return None, clarifications
+        followup_context = self._followup_context(workspace, followup_run_id)
         task_id = str(uuid4())
         table_ids = sorted(workspace['tables'])
         task = {'id': task_id, 'workspaceId': workspace_id, 'scenario': workspace['role'],
@@ -441,7 +467,8 @@ class WorkspaceManager:
                 'recordCount': sum(workspace['tables'][table_id]['rowCount'] for table_id in table_ids),
                 'suggestedBudget': {'modelRequests': 24, 'toolCalls': 80}, 'schemaContract': self._schema_contract(workspace),
                 'tableBindings': _semantic_table_ids(workspace),
-                'clarifications': deepcopy(answers or {}), 'followupRunId': followup_run_id, 'sourceStatus': 'ready'}
+                'clarifications': deepcopy(answers or {}), 'followupRunId': followup_run_id,
+                'followupContext': followup_context, 'sourceStatus': 'ready'}
         if workpack:
             task.update({key: deepcopy(value) for key, value in workpack.items()
                          if key in {'workpackId', 'difficulty', 'deliveryContract', 'sourceProvenance', 'privateValidation'}})
@@ -626,6 +653,16 @@ class WorkspaceManager:
                 if group:
                     raise ValueError('count 不接受 groupBy；按分组计数必须使用 group_count 并从 counts 得到不同分组数量')
                 return {'count': len(rows)}
+            if operation == 'nonempty_count':
+                if group:
+                    raise ValueError('nonempty_count 不接受 groupBy')
+                if not field:
+                    raise ValueError('nonempty_count 必须提供 field')
+                count = sum(
+                    value is not None and (not isinstance(value, str) or bool(value.strip()))
+                    for value in (row['values'].get(field) for row in rows)
+                )
+                return {'nonemptyCount': count, 'rowCount': len(rows)}
             if operation == 'group_count':
                 if not group:
                     raise ValueError('group_count 必须提供 groupBy')
@@ -654,6 +691,118 @@ class WorkspaceManager:
                         'rowCount': len(rows)}
             result = {'sum': sum(values), 'avg': statistics.fmean(values) if values else None, 'min': min(values) if values else None, 'max': max(values) if values else None}[operation]
             return {operation: result, 'rowCount': len(rows)}
+
+        def ordered_partition(args, context):
+            """Partition a current table with an optional one-to-one join.
+
+            This is intentionally a workspace primitive rather than a task
+            evaluator: callers name current table IDs, fields, filters and
+            output measure labels. It fails closed when the requested stable
+            ordering or one-to-one relation cannot be established.
+            """
+            primary = get_table({'tableId': args['primaryTableId']})
+            primary_key, sort_field = args['primaryKey'], args['sortField']
+            self._validate_field(primary, primary_key)
+            self._validate_field(primary, sort_field)
+
+            primary_by_key: dict[str, dict[str, Any]] = {}
+            for row in primary['rows']:
+                key = row['values'].get(primary_key)
+                sort_value = row['values'].get(sort_field)
+                if key in [None, ''] or sort_value in [None, '']:
+                    raise ValueError('有序分段要求主表键和排序字段完整')
+                string_key = str(key)
+                if string_key in primary_by_key:
+                    raise ValueError('有序分段要求主表键唯一')
+                primary_by_key[string_key] = row
+
+            related = None
+            related_by_key: dict[str, dict[str, Any]] = {}
+            has_related = args.get('relatedTableId') is not None
+            if has_related:
+                if not args.get('relatedKey'):
+                    raise ValueError('关联表必须提供 relatedKey')
+                related = get_table({'tableId': args['relatedTableId']})
+                self._validate_field(related, args['relatedKey'])
+                for row in related['rows']:
+                    key = row['values'].get(args['relatedKey'])
+                    if key in [None, '']:
+                        continue
+                    string_key = str(key)
+                    if string_key in primary_by_key:
+                        if string_key in related_by_key:
+                            raise ValueError('有序分段要求关联表对主表键一对一')
+                        related_by_key[string_key] = row
+                missing = sorted(set(primary_by_key) - set(related_by_key))
+                if missing:
+                    raise ValueError('有序分段缺少主表键的关联记录')
+            elif args.get('relatedKey'):
+                raise ValueError('relatedKey 只能与 relatedTableId 一起提供')
+
+            def source_table(source: str) -> dict[str, Any]:
+                if source == 'primary':
+                    return primary
+                if source == 'related' and related is not None:
+                    return related
+                raise ValueError('关联字段需要已声明的一对一关联表')
+
+            measure_names: set[str] = set()
+            for measure in args['measures']:
+                name = measure['name']
+                if name in measure_names:
+                    raise ValueError('分段指标名称必须唯一')
+                measure_names.add(name)
+                table = source_table(measure['source'])
+                for item in measure.get('filters', []):
+                    self._validate_field(table, item['field'])
+            selection = args.get('selectedIds')
+            if selection:
+                table = source_table(selection['source'])
+                for item in selection.get('filters', []):
+                    self._validate_field(table, item['field'])
+
+            ordered = sorted(
+                primary_by_key.items(),
+                key=lambda item: (str(item[1]['values'][sort_field]), item[0]),
+            )
+            cutoff = len(ordered) // 2
+            partitions = {
+                'prior': ordered[:cutoff],
+                'current': ordered[cutoff:],
+            }
+
+            def matches_filters(row: dict[str, Any], filters: list[dict[str, Any]]) -> bool:
+                return all(_matches(row['values'].get(item['field']), item['operator'], item['value']) for item in filters)
+
+            metric_values = {}
+            for measure in args['measures']:
+                pairs = partitions[measure['segment']]
+                filters = measure.get('filters', [])
+                metric_values[measure['name']] = sum(
+                    matches_filters(primary_row if measure['source'] == 'primary' else related_by_key[key], filters)
+                    for key, primary_row in pairs
+                )
+            selected_ids: list[str] = []
+            if selection:
+                filters = selection.get('filters', [])
+                selected_ids = [
+                    key for key, primary_row in partitions[selection['segment']]
+                    if matches_filters(primary_row if selection['source'] == 'primary' else related_by_key[key], filters)
+                ]
+
+            evidence_rows = list(primary_by_key.values())
+            if related is not None:
+                evidence_rows.extend(related_by_key[key] for key in primary_by_key)
+            self._record_evidence(workspace_id, context, evidence_rows)
+            return {
+                'primaryTableId': primary['id'],
+                'relatedTableId': related['id'] if related is not None else None,
+                'totalCount': len(ordered),
+                'priorCount': len(partitions['prior']),
+                'currentCount': len(partitions['current']),
+                'metricValues': metric_values,
+                'selectedIds': selected_ids,
+            }
 
         def reconcile_keyed_sums(args, context):
             """Compute keyed numeric sums and comparisons from current tables.
@@ -898,7 +1047,23 @@ class WorkspaceManager:
             Tool('workspace_filter_rows', '按声明字段和条件筛选当前表，并分页返回命中行。', 'read', object_schema({'tableId': table_id_schema(), 'filters': {'type': 'array', 'minItems': 1, 'maxItems': 8, 'items': filter_item}, **paging}), filtered, outputs=['matchedCount', 'records', 'mayHaveMore']),
             Tool('workspace_sort_rows', '按一个当前字段排序并分页返回记录。', 'read', object_schema({'tableId': table_id_schema(), 'field': {'type': 'string', 'minLength': 1}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, **paging}), sorted_rows, outputs=['records', 'mayHaveMore']),
             Tool('workspace_join_rows', '按显式键关联两张当前表；不猜测关联键。', 'read', object_schema({'leftTableId': table_id_schema(), 'rightTableId': table_id_schema(), 'leftKey': {'type': 'string', 'minLength': 1}, 'rightKey': {'type': 'string', 'minLength': 1}, **paging}), joined, outputs=['matchedCount', 'records']),
-            Tool('workspace_aggregate_rows', '在当前表上执行可验证的计数或数值聚合。count 只返回总行数且不能提供 groupBy；需要不同分组数量时必须使用 group_count，它返回每组 counts。提供 groupBy 时，sum、avg、min、max 返回每组 groups。', 'compute', object_schema({'tableId': table_id_schema(), 'operation': {'type': 'string', 'enum': ['count', 'sum', 'avg', 'min', 'max', 'group_count']}, 'field': {'type': 'string'}, 'groupBy': {'type': 'string'}, 'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item}}, required=['tableId', 'operation']), aggregate, outputs=['sum', 'avg', 'min', 'max', 'groups', 'counts', 'rowCount']),
+            Tool('workspace_aggregate_rows', '在当前表上执行可验证的计数或数值聚合。count 只返回总行数且不能提供 groupBy；nonempty_count 统计指定字段非空值（字符串会忽略空白）；需要不同分组数量时必须使用 group_count，它返回每组 counts。提供 groupBy 时，sum、avg、min、max 返回每组 groups。', 'compute', object_schema({'tableId': table_id_schema(), 'operation': {'type': 'string', 'enum': ['count', 'nonempty_count', 'sum', 'avg', 'min', 'max', 'group_count']}, 'field': {'type': 'string'}, 'groupBy': {'type': 'string'}, 'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item}}, required=['tableId', 'operation']), aggregate, outputs=['sum', 'avg', 'min', 'max', 'groups', 'counts', 'nonemptyCount', 'rowCount']),
+            Tool('workspace_ordered_partition', '按当前主表的稳定排序字段确定性分为 prior 与 current 两段：prior 为前 floor(n/2) 行，current 为其余行。可显式一对一关联另一张当前表，再按声明字段条件计算分段指标和 current/prior 的 selectedIds；缺少或重复关联键时失败关闭。', 'compute', object_schema({
+                'primaryTableId': table_id_schema(), 'primaryKey': {'type': 'string', 'minLength': 1}, 'sortField': {'type': 'string', 'minLength': 1},
+                'relatedTableId': table_id_schema(), 'relatedKey': {'type': 'string', 'minLength': 1},
+                'measures': {'type': 'array', 'minItems': 1, 'maxItems': 20, 'items': object_schema({
+                    'name': {'type': 'string', 'minLength': 1, 'maxLength': 80},
+                    'segment': {'type': 'string', 'enum': ['prior', 'current']},
+                    'source': {'type': 'string', 'enum': ['primary', 'related']},
+                    'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item},
+                }, required=['name', 'segment', 'source'])},
+                'selectedIds': object_schema({
+                    'segment': {'type': 'string', 'enum': ['prior', 'current']},
+                    'source': {'type': 'string', 'enum': ['primary', 'related']},
+                    'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item},
+                }, required=['segment', 'source']),
+            }, required=['primaryTableId', 'primaryKey', 'sortField', 'measures']), ordered_partition,
+                 outputs=['totalCount', 'priorCount', 'currentCount', 'metricValues', 'selectedIds']),
             Tool('workspace_reconcile_keyed_sums', '按显式键在当前多张表上确定性汇总数值、派生总额并比较阈值；比例条件必须用 rightTerms 的显式别名和权重表达，例如 left >= 0.2×right 写为 leftAlias=left、rightTerms=[{alias:right,multiplier:0.2}]、operator=gte、threshold=0。comparisons 会返回命中键及 matchingTotals，报告需要命中项金额时必须使用 matchingTotals，不能手工累加 perKey。所有表、键、字段、别名、权重和阈值必须由当前任务明确提供。', 'compute', object_schema({
                 'anchorTableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1},
                 'aggregates': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': object_schema({

@@ -28,6 +28,12 @@ PRECHECK_WORKFLOWS = (
     'tickets-triage', 'tickets-blocker-summary',
 )
 
+PRECHECK_WORKFLOWS_V16 = (
+    'finance-freight-contribution', 'finance-cancel-installments',
+    'support-policy-draft', 'support-period-comparison',
+    'tickets-triage', 'tickets-blocker-summary',
+)
+
 ALL_TRAIN_WORKFLOWS = (
     'finance-reconciliation', 'finance-cancel-installments',
     'finance-freight-contribution', 'finance-link-completeness',
@@ -115,6 +121,20 @@ FULL_TRAIN_MODE_V12 = 'full_train_v12'
 SMOKE_MODE_V15 = 'smoke_v15'
 PRECHECK_MODE_V15 = 'precheck_v15'
 FULL_TRAIN_MODE_V13 = 'full_train_v13'
+# V16 adds two shared, publicly declared fact-recovery computes after the V15
+# retry exposed model-side nonempty-count and odd-row partition failures. The
+# tools operate only on current workspace data and both arms receive them, so
+# all later comparisons start from a separate staged runtime line.
+SMOKE_MODE_V16 = 'smoke_v16'
+PRECHECK_MODE_V16 = 'precheck_v16'
+FULL_TRAIN_MODE_V14 = 'full_train_v14'
+# V17 follows V16's Baseline deadline exhaustion: complete public scope could
+# still be followed by a non-terminal draft tool call, leaving no provider turn
+# for the required report. The shared finalization guard changes both arms, so
+# V16 artifacts remain diagnostics and V17 starts from a fresh smoke stage.
+SMOKE_MODE_V17 = 'smoke_v17'
+PRECHECK_MODE_V17 = 'precheck_v17'
+FULL_TRAIN_MODE_V15 = 'full_train_v15'
 EXPERIMENT_MODES = {PRECHECK_MODE, FULL_TRAIN_MODE, SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                     SMOKE_MODE_V5, PRECHECK_MODE_V5, FULL_TRAIN_MODE_V3,
                     SMOKE_MODE_V6, PRECHECK_MODE_V6, FULL_TRAIN_MODE_V4,
@@ -126,7 +146,9 @@ EXPERIMENT_MODES = {PRECHECK_MODE, FULL_TRAIN_MODE, SMOKE_MODE_V4, PRECHECK_MODE
                     SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10,
                     SMOKE_MODE_V13, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
                     SMOKE_MODE_V14, PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12,
-                    SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}
+                    SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13,
+                    SMOKE_MODE_V16, PRECHECK_MODE_V16, FULL_TRAIN_MODE_V14,
+                    SMOKE_MODE_V17, PRECHECK_MODE_V17, FULL_TRAIN_MODE_V15}
 STARTABLE_MODES = {SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                    SMOKE_MODE_V5, PRECHECK_MODE_V5, FULL_TRAIN_MODE_V3,
                    SMOKE_MODE_V6, PRECHECK_MODE_V6, FULL_TRAIN_MODE_V4,
@@ -138,7 +160,9 @@ STARTABLE_MODES = {SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                    SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10,
                    SMOKE_MODE_V13, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
                    SMOKE_MODE_V14, PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12,
-                   SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}
+                   SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13,
+                   SMOKE_MODE_V16, PRECHECK_MODE_V16, FULL_TRAIN_MODE_V14,
+                   SMOKE_MODE_V17, PRECHECK_MODE_V17, FULL_TRAIN_MODE_V15}
 
 RUNTIME_SOURCE_FILES = (
     'backend/agent_prompts.py',
@@ -151,6 +175,13 @@ RUNTIME_SOURCE_FILES = (
     'backend/intent_graph.py',
     'backend/online_evolution.py',
 )
+# The controller persists/checkpoints experiments, while the remaining files
+# determine an Agent arm's planning, execution, tools and learning behavior.
+# Bump this only when controller changes alter the frozen manifest, arm order,
+# limits, cancellation semantics, or task/experience isolation. Dashboard-only
+# summary changes must not invalidate a completed staged predecessor.
+EXPERIMENT_CONTROLLER_FILE = 'backend/workpack_experiment.py'
+EXPERIMENT_CONTROLLER_BEHAVIOR_VERSION = 1
 
 
 class ExperimentCancelled(Exception):
@@ -181,7 +212,7 @@ def _failure_category(run: dict) -> list[str]:
     evaluation = run.get('evaluation') or {}
     for issue in evaluation.get('issues') or []:
         categories.append(f'evaluation:{issue}')
-    if not run.get('submission') and 'evaluation:missing_report' not in categories:
+    if not _has_submission(run) and 'evaluation:missing_report' not in categories:
         categories.append('missing_report')
     return categories
 
@@ -194,12 +225,46 @@ def _counter(rows: list[str]) -> dict[str, int]:
 
 
 def _compact(run: dict) -> dict:
+    """Keep the experiment ledger small; raw replay stays in the run file.
+
+    Workpack experiments write a complete TaskRunner record per arm under the
+    arm-specific ``runs`` directory.  The controller only needs a stable
+    accounting projection for summaries, quality gates, and run links.  Do
+    not duplicate traces, plans, graphs, or report content into
+    ``experiment.json``: a completed 48-pair experiment otherwise becomes a
+    multi-megabyte list payload before the dashboard can render.
+    """
     return {key: deepcopy(run.get(key)) for key in [
         'id', 'taskId', 'scenario', 'split', 'strategy', 'status', 'phase',
-        'createdAt', 'startedAt', 'finishedAt', 'models', 'modelSettings',
-        'metrics', 'evaluation', 'evolution', 'runtimeOverhead', 'error',
-        'graph', 'plan', 'modelPlan', 'submission', 'events', 'phaseMetrics',
+        'createdAt', 'startedAt', 'finishedAt', 'models', 'metrics',
+        'evaluation', 'evolution', 'runtimeOverhead', 'error',
     ]}
+
+
+def _has_submission(run: dict) -> bool:
+    """Read compact and pre-compaction ledger records without rewriting history."""
+    return bool(run.get('hasSubmission') or run.get('submission'))
+
+
+def _dashboard_run(run: dict | None) -> dict | None:
+    """Return a trace-free run projection for the experiment dashboard."""
+    if not run:
+        return None
+    evolution = run.get('evolution') or {}
+    return {
+        key: deepcopy(run.get(key)) for key in [
+            'id', 'taskId', 'scenario', 'split', 'strategy', 'status', 'phase',
+            'createdAt', 'startedAt', 'finishedAt', 'models', 'metrics',
+            'evaluation', 'runtimeOverhead', 'error',
+        ]
+    } | {
+        'evolution': {
+            key: deepcopy(evolution.get(key)) for key in [
+                'usedVersionId', 'sourceGraphId', 'generation', 'planningPath',
+                'note', 'generatedVersionIds', 'tinyEdgeMaintenance',
+            ]
+        } if evolution else {},
+    }
 
 
 def _frozen_manifest(bank, *, workflows: tuple[str, ...], positions: tuple[int, ...], label: str) -> list[dict]:
@@ -279,6 +344,37 @@ def smoke_manifest_v9(bank) -> list[dict]:
     return selected
 
 
+def smoke_manifest_v16(bank) -> list[dict]:
+    """Exercise both public fact-recovery capabilities in real arm traces."""
+    rows = {item['id']: item for item in list_workpacks(bank)}
+    selected = []
+    for workflow_id in (
+        'finance-freight-contribution',
+        'support-policy-draft',
+        'support-period-comparison',
+        'tickets-triage',
+    ):
+        row = rows.get(f'{workflow_id}-01')
+        if not row or row.get('split') != 'train':
+            raise ValueError('V16 smoke 缺少冻结 train 工作包：' + workflow_id)
+        selected.append({
+            'workpackId': row['id'], 'scenario': row['scenario'], 'workflowType': row['workflowType'],
+            'sourceTaskId': row['sourceTaskId'], 'recordCount': row['recordCount'],
+            'difficulty': row['difficulty'], 'round': 1,
+        })
+    return selected
+
+
+def precheck_manifest_v16(bank) -> list[dict]:
+    """Keep consecutive family reuse while including both repaired support flows."""
+    return _frozen_manifest(
+        bank,
+        workflows=PRECHECK_WORKFLOWS_V16,
+        positions=(1, 2),
+        label='V16 冻结工作包预检',
+    )
+
+
 def full_train_manifest(bank) -> list[dict]:
     """Freeze all four train instances for every source-traceable workflow."""
     return _frozen_manifest(
@@ -321,7 +417,41 @@ class WorkpackExperiment:
                 raise ValueError('运行时源文件缺失：' + relative)
             files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
         serialized = json.dumps(files, sort_keys=True, ensure_ascii=True).encode('utf-8')
-        return {'files': files, 'digest': hashlib.sha256(serialized).hexdigest()}
+        execution_files = {key: value for key, value in files.items() if key != EXPERIMENT_CONTROLLER_FILE}
+        execution_serialized = json.dumps(execution_files, sort_keys=True, ensure_ascii=True).encode('utf-8')
+        return {
+            'files': files,
+            'digest': hashlib.sha256(serialized).hexdigest(),
+            'executionDigest': hashlib.sha256(execution_serialized).hexdigest(),
+            'controllerBehaviorVersion': EXPERIMENT_CONTROLLER_BEHAVIOR_VERSION,
+        }
+
+    @staticmethod
+    def _runtime_matches(prior: dict, current: dict) -> bool:
+        """Allow a summary-only controller repair to reuse staged evidence.
+
+        Older artifacts contain only the complete file digest. Their persisted
+        per-file hashes still let us reconstruct the execution digest. A
+        changed execution source, or a bumped controller behavior version,
+        always requires a fresh predecessor experiment.
+        """
+        if prior.get('digest') == current.get('digest'):
+            return True
+        prior_files = prior.get('files') or {}
+        current_files = current.get('files') or {}
+        if not prior_files or not current_files:
+            return False
+        prior_execution = prior.get('executionDigest')
+        if not prior_execution:
+            files = {key: value for key, value in prior_files.items() if key != EXPERIMENT_CONTROLLER_FILE}
+            prior_execution = hashlib.sha256(json.dumps(files, sort_keys=True, ensure_ascii=True).encode('utf-8')).hexdigest()
+        current_execution = current.get('executionDigest')
+        if not current_execution:
+            files = {key: value for key, value in current_files.items() if key != EXPERIMENT_CONTROLLER_FILE}
+            current_execution = hashlib.sha256(json.dumps(files, sort_keys=True, ensure_ascii=True).encode('utf-8')).hexdigest()
+        return (prior_execution == current_execution
+                and int(prior.get('controllerBehaviorVersion', 1))
+                == int(current.get('controllerBehaviorVersion', 1)))
 
     @staticmethod
     def _quality_gate(item: dict, summary: dict) -> dict:
@@ -374,6 +504,10 @@ class WorkpackExperiment:
             FULL_TRAIN_MODE_V12: PRECHECK_MODE_V14,
             PRECHECK_MODE_V15: SMOKE_MODE_V15,
             FULL_TRAIN_MODE_V13: PRECHECK_MODE_V15,
+            PRECHECK_MODE_V16: SMOKE_MODE_V16,
+            FULL_TRAIN_MODE_V14: PRECHECK_MODE_V16,
+            PRECHECK_MODE_V17: SMOKE_MODE_V17,
+            FULL_TRAIN_MODE_V15: PRECHECK_MODE_V17,
         }.get(mode)
         if not required:
             return None
@@ -384,12 +518,13 @@ class WorkpackExperiment:
             summary = self._summary(item)
             if self._quality_gate(item, summary).get('status') != 'passed':
                 continue
-            if mode in {PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14, PRECHECK_MODE_V15}:
+            if mode in {PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14,
+                        PRECHECK_MODE_V15, PRECHECK_MODE_V16, PRECHECK_MODE_V17}:
                 weighted = (item.get('coverage') or {}).get('weightedRatioReconcile') or {}
                 if weighted.get('arms') != ['baseline', 'rsi']:
                     continue
             prior = (item.get('protocol') or {}).get('runtimeFingerprint') or {}
-            if prior.get('digest') == runtime.get('digest'):
+            if self._runtime_matches(prior, runtime):
                 matches.append(item)
         return max(matches, key=lambda row: row.get('finishedAt') or row.get('createdAt') or '') if matches else None
 
@@ -418,7 +553,8 @@ class WorkpackExperiment:
             'versions': [
                 {'id': row['id'], 'parentGraphId': row.get('parentGraphId'), 'generation': row.get('generation'),
                  'scenario': row.get('scenario'), 'family': row.get('family'), 'status': row.get('status'),
-                 'sourceRunId': row.get('sourceRunId'), 'evidenceCount': len(row.get('evidence') or []),
+                 'sourceRunId': row.get('sourceRunId'), 'sourceTaskId': row.get('sourceTaskId'),
+                 'evidenceCount': len(row.get('evidence') or []),
                  'patches': deepcopy(row.get('patches') or [])}
                 for row in evolution.versions
             ],
@@ -478,7 +614,10 @@ class WorkpackExperiment:
                 'contextCompactedCharacters': sum(int(metric.get('contextCompactedCharacters') or 0) for metric in metrics),
                 'deterministicScopeRecoveryReads': sum(int(metric.get('deterministicScopeRecoveryReads') or 0) for metric in metrics),
                 'deterministicReportResubmits': sum(int(metric.get('deterministicReportResubmits') or 0) for metric in metrics),
-                'missingReports': sum(not run.get('submission') for run in runs),
+                'deterministicFactRecoveryComputes': sum(int(metric.get('deterministicFactRecoveryComputes') or 0) for metric in metrics),
+                'deterministicFactRecoveryFailures': sum(int(metric.get('deterministicFactRecoveryFailures') or 0) for metric in metrics),
+                'deadlineFinalizationGuards': sum(int(metric.get('deadlineFinalizationGuards') or 0) for metric in metrics),
+                'missingReports': sum(not _has_submission(run) for run in runs),
                 'failureCategories': categories,
             }
 
@@ -613,14 +752,15 @@ class WorkpackExperiment:
         result['qualityGate'] = WorkpackExperiment._quality_gate(item, result)
         return result
 
-    def protocol(self, mode: str = SMOKE_MODE_V15) -> dict:
+    def protocol(self, mode: str = SMOKE_MODE_V17) -> dict:
         if mode not in EXPERIMENT_MODES:
             raise ValueError('未知工作包实验模式')
         is_legacy_precheck = mode == PRECHECK_MODE
-        is_precheck = mode in {PRECHECK_MODE, PRECHECK_MODE_V4, PRECHECK_MODE_V5, PRECHECK_MODE_V6, PRECHECK_MODE_V7, PRECHECK_MODE_V8, PRECHECK_MODE_V9, PRECHECK_MODE_V10, PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14, PRECHECK_MODE_V15}
-        is_smoke = mode in {SMOKE_MODE_V4, SMOKE_MODE_V5, SMOKE_MODE_V6, SMOKE_MODE_V7, SMOKE_MODE_V8, SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15}
-        manifest = (smoke_manifest_v9(self.bank) if mode in {SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15} else smoke_manifest(self.bank)
-                    if is_smoke else precheck_manifest(self.bank)
+        is_precheck = mode in {PRECHECK_MODE, PRECHECK_MODE_V4, PRECHECK_MODE_V5, PRECHECK_MODE_V6, PRECHECK_MODE_V7, PRECHECK_MODE_V8, PRECHECK_MODE_V9, PRECHECK_MODE_V10, PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14, PRECHECK_MODE_V15, PRECHECK_MODE_V16, PRECHECK_MODE_V17}
+        is_smoke = mode in {SMOKE_MODE_V4, SMOKE_MODE_V5, SMOKE_MODE_V6, SMOKE_MODE_V7, SMOKE_MODE_V8, SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15, SMOKE_MODE_V16, SMOKE_MODE_V17}
+        manifest = (smoke_manifest_v16(self.bank) if mode in {SMOKE_MODE_V16, SMOKE_MODE_V17}
+                    else smoke_manifest_v9(self.bank) if mode in {SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15} else smoke_manifest(self.bank)
+                    if is_smoke else precheck_manifest_v16(self.bank) if mode in {PRECHECK_MODE_V16, PRECHECK_MODE_V17} else precheck_manifest(self.bank)
                     if is_precheck else full_train_manifest(self.bank))
         # V3 showed that the earlier historical-token estimate was too low.
         # The formal estimate uses its observed 12-pair cost, not a promise of
@@ -665,7 +805,13 @@ class WorkpackExperiment:
                     FULL_TRAIN_MODE_V12: 'workspace-workpack-online-full-train-v12',
                     SMOKE_MODE_V15: 'workspace-workpack-online-smoke-v15',
                     PRECHECK_MODE_V15: 'workspace-workpack-online-precheck-v15',
-                    FULL_TRAIN_MODE_V13: 'workspace-workpack-online-full-train-v13'}.get(
+                    FULL_TRAIN_MODE_V13: 'workspace-workpack-online-full-train-v13',
+                    SMOKE_MODE_V16: 'workspace-workpack-online-smoke-v16',
+                    PRECHECK_MODE_V16: 'workspace-workpack-online-precheck-v16',
+                    FULL_TRAIN_MODE_V14: 'workspace-workpack-online-full-train-v14',
+                    SMOKE_MODE_V17: 'workspace-workpack-online-smoke-v17',
+                    PRECHECK_MODE_V17: 'workspace-workpack-online-precheck-v17',
+                    FULL_TRAIN_MODE_V15: 'workspace-workpack-online-full-train-v15'}.get(
                         mode,
                         'workspace-workpack-online-precheck-v3' if is_legacy_precheck else 'workspace-workpack-online-full-train-v1')),
             'mode': mode,
@@ -693,9 +839,14 @@ class WorkpackExperiment:
                                              SMOKE_MODE_V8, PRECHECK_MODE_V8, SMOKE_MODE_V9, PRECHECK_MODE_V9,
                                              SMOKE_MODE_V10, PRECHECK_MODE_V10, SMOKE_MODE_V11, PRECHECK_MODE_V11,
                                              SMOKE_MODE_V12, PRECHECK_MODE_V12, SMOKE_MODE_V13, PRECHECK_MODE_V13,
-                                             SMOKE_MODE_V14, PRECHECK_MODE_V14, SMOKE_MODE_V15, PRECHECK_MODE_V15},
+                                             SMOKE_MODE_V14, PRECHECK_MODE_V14, SMOKE_MODE_V15, PRECHECK_MODE_V15,
+                                             SMOKE_MODE_V16, PRECHECK_MODE_V16,
+                                             SMOKE_MODE_V17, PRECHECK_MODE_V17},
             },
             'requiredSmokeCoverage': ('baseline_and_rsi_must_call_workspace_reconcile_keyed_sums_with_rightTerms '
+                                      'for_finance_freight_contribution; declared_fact_recovery_is_observed_only_after_a_real_first_business_fact_failure '
+                                      'and_never_forced_by_a_synthetic_failure' if mode in {SMOKE_MODE_V16, SMOKE_MODE_V17}
+                                      else 'baseline_and_rsi_must_call_workspace_reconcile_keyed_sums_with_rightTerms '
                                       'for_finance_freight_contribution' if mode in {SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15} else None),
             'order': (f'{len(set(item["round"] for item in manifest))} rounds; '
                       f'{len({item["workflowType"] for item in manifest})} workflows per round; '
@@ -712,7 +863,7 @@ class WorkpackExperiment:
             },
         }
 
-    async def start(self, mode: str = SMOKE_MODE_V15) -> dict:
+    async def start(self, mode: str = SMOKE_MODE_V17) -> dict:
         if self.tasks:
             raise ValueError('已有工作包在线实验在运行')
         if mode not in STARTABLE_MODES:
@@ -723,7 +874,9 @@ class WorkpackExperiment:
                     PRECHECK_MODE_V8, FULL_TRAIN_MODE_V6, PRECHECK_MODE_V9, FULL_TRAIN_MODE_V7,
                     PRECHECK_MODE_V10, FULL_TRAIN_MODE_V8, PRECHECK_MODE_V11, FULL_TRAIN_MODE_V9,
                     PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
-                    PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}:
+                    PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13,
+                    PRECHECK_MODE_V16, FULL_TRAIN_MODE_V14,
+                    PRECHECK_MODE_V17, FULL_TRAIN_MODE_V15}:
             predecessor = self._eligible_predecessor(mode, protocol['runtimeFingerprint'])
             if not predecessor:
                 stage = {
@@ -751,6 +904,10 @@ class WorkpackExperiment:
                     FULL_TRAIN_MODE_V12: 'V14 质量通过的在线预检',
                     PRECHECK_MODE_V15: 'V15 三场景 smoke',
                     FULL_TRAIN_MODE_V13: 'V15 质量通过的在线预检',
+                    PRECHECK_MODE_V16: 'V16 四项 smoke（含两种公开事实恢复计算）',
+                    FULL_TRAIN_MODE_V14: 'V16 质量通过的在线预检',
+                    PRECHECK_MODE_V17: 'V17 四项 smoke（含截止时间报告保护）',
+                    FULL_TRAIN_MODE_V15: 'V17 质量通过的在线预检',
                 }[mode]
                 raise ValueError('启动前置条件未满足：需要当前 runtime 下已完成且质量门槛通过的' + stage)
             protocol['predecessorExperimentId'] = predecessor['id']
@@ -769,7 +926,13 @@ class WorkpackExperiment:
                           'rsiExperience': str(directory / 'rsi' / 'experience.json')},
             'pairs': [dict(index=index, **deepcopy(row), status='pending', runs={}, snapshots=[])
                       for index, row in enumerate(protocol['manifest'], start=1)],
-            'coverage': {'weightedRatioReconcile': {'arms': [], 'workpackId': None}},
+            'coverage': {
+                'weightedRatioReconcile': {'arms': [], 'workpackId': None},
+                'deterministicFactRecovery': {
+                    'workspace_aggregate_rows': {'arms': [], 'workpackId': None},
+                    'workspace_ordered_partition': {'arms': [], 'workpackId': None},
+                },
+            },
             'cancelRequested': False, 'events': [], 'summary': self._summary({'pairs': []}),
         }
         self.items[item_id] = item
@@ -805,6 +968,7 @@ class WorkpackExperiment:
                         self._save(item)
                         run = await runner.start(TaskRunRequest(taskId=task['id'], strategy=strategy))
                         pair['runs'][arm] = _compact(run)
+                        pair['runs'][arm]['hasSubmission'] = bool(run.get('submission'))
                         self.active_runs[item_id] = (runner, run['id'])
                         item['protocol']['model'] = run.get('models', {}).get('executor')
                         item['summary'] = self._summary(item)
@@ -812,6 +976,7 @@ class WorkpackExperiment:
                         await runner.tasks[run['id']]
                         self.active_runs.pop(item_id, None)
                         pair['runs'][arm] = _compact(run)
+                        pair['runs'][arm]['hasSubmission'] = bool(run.get('submission'))
                         if pair['workpackId'].startswith('finance-freight-contribution-'):
                             used_weighted = any(
                                 trace.get('tool') == 'workspace_reconcile_keyed_sums'
@@ -825,6 +990,21 @@ class WorkpackExperiment:
                                 if arm not in coverage['arms']:
                                     coverage['arms'].append(arm)
                                 coverage['arms'].sort()
+                        expected_fact_tool = {
+                            'support-policy-draft': 'workspace_aggregate_rows',
+                            'support-period-comparison': 'workspace_ordered_partition',
+                        }.get(pair['workflowType'])
+                        if expected_fact_tool and any(
+                            trace.get('executor') == 'runtime'
+                            and trace.get('tool') == expected_fact_tool
+                            and trace.get('ok') is True
+                            for trace in run.get('toolTrace') or []
+                        ):
+                            coverage = item['coverage']['deterministicFactRecovery'][expected_fact_tool]
+                            coverage['workpackId'] = pair['workpackId']
+                            if arm not in coverage['arms']:
+                                coverage['arms'].append(arm)
+                            coverage['arms'].sort()
                         after = self._experience_snapshot(runner, kind='after', pair=pair, arm=arm)
                         pair['snapshots'].append(after)
                         write_private(directory / arm / 'snapshots' / f'{pair["index"]:02d}-after.json', after)
@@ -875,7 +1055,93 @@ class WorkpackExperiment:
             self.items[item_id]['summary'] = self._summary(self.items[item_id])
         return deepcopy(self.items[item_id])
 
+    @staticmethod
+    def _dashboard_protocol(protocol: dict) -> dict:
+        """Expose the frozen public experiment contract, not source hashes or paths."""
+        return {
+            key: deepcopy(protocol.get(key)) for key in [
+                'id', 'mode', 'purpose', 'taskCountPerArm', 'agentRuns',
+                'estimatedAgentModelRequests', 'estimatedAgentTokens',
+                'estimatedSerialDurationMs', 'estimateBasis', 'judge', 'limits',
+                'baseline', 'rsi', 'graphCompilation', 'qualityGate',
+                'requiredSmokeCoverage', 'order', 'manifest', 'saturationRule',
+                'predecessorExperimentId', 'model',
+            ]
+        }
+
+    @staticmethod
+    def _dashboard_pair(pair: dict) -> dict:
+        """Keep just the immutable task identity, accounting, and experience lineage."""
+        rsi_run = (pair.get('runs') or {}).get('rsi') or {}
+        used_version_id = (rsi_run.get('evolution') or {}).get('usedVersionId')
+        before = next((snapshot for snapshot in pair.get('snapshots') or []
+                       if snapshot.get('kind') == 'before' and snapshot.get('arm') == 'rsi'), None)
+        snapshots = []
+        if before and used_version_id:
+            version = next((row for row in before.get('versions') or [] if row.get('id') == used_version_id), None)
+            if version:
+                source_run_id = version.get('sourceRunId')
+                source = next((row for row in before.get('workflows') or []
+                               if row.get('id') == source_run_id or row.get('sourceRunId') == source_run_id), {})
+                snapshots.append({
+                    key: deepcopy(before.get(key)) for key in ['id', 'at', 'kind', 'arm', 'pairIndex', 'workpackId']
+                } | {
+                    'versions': [{
+                        key: deepcopy(version.get(key)) for key in [
+                            'id', 'parentGraphId', 'generation', 'scenario', 'family', 'status',
+                            'sourceRunId', 'sourceTaskId', 'evidenceCount',
+                        ]
+                    } | {'sourceTaskId': version.get('sourceTaskId') or source.get('sourceTaskId')}],
+                })
+        return {
+            key: deepcopy(pair.get(key)) for key in [
+                'index', 'workpackId', 'scenario', 'workflowType', 'sourceTaskId',
+                'recordCount', 'difficulty', 'round', 'status', 'armOrder',
+            ]
+        } | {
+            'runs': {arm: _dashboard_run((pair.get('runs') or {}).get(arm)) for arm in ['baseline', 'rsi']},
+            'snapshots': snapshots,
+        }
+
+    def dashboard(self, item_id: str) -> dict:
+        """Return the compact experiment-center view; full trace retrieval is per run."""
+        item = self.get(item_id)
+        return {
+            key: deepcopy(item.get(key)) for key in [
+                'id', 'mode', 'status', 'createdAt', 'startedAt', 'finishedAt', 'error',
+            ]
+        } | {
+            'protocol': self._dashboard_protocol(item.get('protocol') or {}),
+            'pairs': [self._dashboard_pair(pair) for pair in item.get('pairs') or []],
+            'summary': deepcopy(item.get('summary') or {}),
+            'coverage': deepcopy(item.get('coverage') or {}),
+        }
+
+    def list_summaries(self) -> list[dict]:
+        """List experiments without downloading pair traces, reports, or raw events."""
+        rows = []
+        for key in sorted(self.items, reverse=True):
+            item = self.get(key)
+            rows.append({
+                name: deepcopy(item.get(name)) for name in [
+                    'id', 'mode', 'status', 'createdAt', 'startedAt', 'finishedAt', 'error',
+                ]
+            } | {
+                'protocol': {
+                    name: deepcopy((item.get('protocol') or {}).get(name)) for name in [
+                        'id', 'mode', 'taskCountPerArm', 'agentRuns', 'limits', 'model',
+                    ]
+                },
+                'summary': {
+                    name: deepcopy((item.get('summary') or {}).get(name)) for name in [
+                        'pairedCompleted', 'tokenSavingRate', 'learning', 'qualityGate',
+                    ]
+                },
+            })
+        return rows
+
     def list(self) -> list[dict]:
+        """Compatibility method for local callers that still need the raw ledger."""
         return [self.get(key) for key in sorted(self.items, reverse=True)]
 
     def run(self, item_id: str, arm: str, run_id: str) -> dict:

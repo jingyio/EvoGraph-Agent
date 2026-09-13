@@ -5,14 +5,21 @@
 - 项目：RSI 数字员工 Lab。
 - 仓库：`/Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab`。
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
-- 2026-09-13 Workpack V15：V14 已修复客服 `count + groupBy` 语义，但财务两臂又暴露
-  对命中 `perKey` 金额手工求和的 metrics 失败；V15 增加通用 comparison `matchingTotals`。
-  Smoke `a83b9db0` 已两臂 3/3，token -25.300%、0 Fast；V15 precheck `c64f1bca` 已两臂
-  12/12、token -35.197%、第二轮 6 次真实 Fast，均为当前 runtime 的有效 staged 证据。
-  48-task full `6c56245b` 已在 pair 2 中取消：Baseline 发生两次实际 transport retry，失败尝试
-  的 provider usage 未知，故 `usageComplete=false`，full 工件不可用于成本/质量结论。汇总代码现只把
-  `pair.status=completed` 纳入 paired curve，修复了旧序列化摘要把取消 pair 计作 `pairedCompleted` 的显示问题；
-  原 artifact 不改写。V14 `c071e0ac` 为 2/3 vs 2/3，仅诊断。
+- 2026-09-13 Workpack V17 full 已完成：`005ffeb9-964e-42ac-86e9-fb9e8f2212fe` 的 mode
+  名为 `full_train_v15`，但运行时修订线是 V17，不能与旧 V15 cancelled full 混淆。48 个
+  冻结 train 工作包、两臂各48次、串行 `run=model=read=1`，两臂均48/48私有结构化事实与
+  证据通过且 usage 完整。Baseline/RSI token 2,244,017→1,243,546（**-44.5839%**），模型
+  请求258→149，工具422→325；RSI形成12个Workflow，后续Fast35次、Fallback13次、
+  Composition0。报告恢复、工具拒绝/错误和本地开销均保留，详情见
+  `docs/workspace-workpack-v17-full-results-2026-09-13.md`。旧V15 full `6c56245b` 仍是
+  pair2 transport retry usage未知的取消诊断，绝不覆盖或拼接。
+- 2026-09-13 交付验收完成：默认 `/#home` 通过实际三岗位工作区运行验证了资料加载、任务、
+  真实 Agent、同 run 轨迹、HTML 下载和同工作区追问。财务主任务/追问为
+  `dfb877a2`/`136ef9c8`，客服为 `a2886561`/`4d307152`，技术工单为
+  `d16052ad`/`2807d3ae`；六个 run 均完成、usage 完整、各一次报告。客服主任务保留
+  3 次工具错误/拒绝，不能写成零错误。`/#experiments` 首屏改用轻量实验 DTO：列表约
+  29,869 B，V17 摘要约 290,393 B；原始图、观察、Plan 和报告仍须从单 run 接口按需读取。
+  HTML 下载接口均返回 `Content-Disposition: attachment`，不会另做示例数据或伪造进度。
 - 2026-09-13 Workpack V14 在途：V13 财务一对多对账已通过，但客服 Baseline 暴露
   `count + groupBy` 静默返回总行数、被误作不同分组数的问题。V14 明确拒绝该调用并要求
   `group_count`，重新从隔离 smoke 开始。V13 结果 `5dbcb2fc` 为 2/3 vs 3/3，保留诊断，
@@ -54,7 +61,7 @@ npm run build
 
 已有 `.venv`，前端 Node 22+。后端 `npm run dev:backend` 或 `.venv/bin/python -m backend serve`（4317），前端 `npm run dev:frontend`（5173）。启动前检查端口，避免重复服务；重启前确认没有在途模型任务。
 
-主展示页面（开发基址 `http://127.0.0.1:5173`）：`/#home` 是单一企业运营数字员工的主工作台；财务、客服、研发运营是其业务能力而非三个产品。页面从业务需求、已保存工作记录回放、RSI 结构化运行时和 HTML 业务简报开始，不显示任务 ID 或 `train`/benchmark 语言。主工作台只读最终 V4 DTO，不发模型请求、不改变经验或实验；财务 `cents` 指标仅在展示层格式化为 BRL，原始整数仍在报告与回放中可审计。旧 `/#employees` 会重定向至 `/#home`。`/#compare` 默认全量 36 个同任务对比并聚合为财务/客服/技术工单各12项。三领域播放器按保存事件的实际索引逐步前进（不按不同轨迹长度比例抽帧），可切换领域聚焦轨道，并显示累计 LLM/token/工具/时间和 M（模型）/S（结构化运行时）/C（控制）事件。`/#insights` 为 RSI 效果与严格报告审计；`/#replay?task=finance-cancelled_payments-02` 会区分模型调度工具、图执行器调度工具、当前观察参数绑定、筛选和活跃 DAG 节点。技术 `unassigned` 未从任何汇总删除，但不作主讲回放。公开历史数据经本地 SQLite + 强 JSON Schema 的只读工具暴露，不能称生产企业写入部署。旧工作台仍在 `/#demo`、`/#evaluation`、`/#evolution`、`/#taskbank`、`/#platforms`。FastAPI 文档：`http://127.0.0.1:4317/docs`。
+主展示页面（开发基址 `http://127.0.0.1:5173`）：`/#home` 是交互式企业运营数字员工工作台；财务、客服、研发运营是同一员工的业务能力。页面支持 CSV/XLSX/JSON/TXT 上传、资料预览、确定性澄清、费用确认后的真实 Agent、同 run 的 DAG/模型/结构化/工具轨迹、HTML报告下载、导出、追问和历史工作。普通用户工作区使用独立存储且 `learning_enabled=False`，不会污染实验经验；追问只加载同工作区父报告的公开摘要，仍需本次观察证据。`/#experiments` 默认展示保存的 V17 48-task 结果和同族经验使用；`/#compare`、`/#insights`、`/#replay` 保留 V4 历史审计。公开历史数据经本地 JSON Schema 的只读工具访问，不能称生产企业写入部署。FastAPI 文档：`http://127.0.0.1:4317/docs`。
 - 展示 API `GET /api/showcase/online-rsi-serial-final-v4` 和任务细节 `GET /api/showcase/online-rsi-serial-final-v4/pairs/{taskId}` 只读地从最终 V4 artifact 派生 DTO。它使用 gold 计算 audit，但不返回 gold、不调用模型、不改写 artifact：两臂结构化精确检查均 36/36；加上已知 ID、可追溯数字和金额单位措辞的有限摘要审计为 Baseline 25/36、RSI 26/36。后者不是全面自然语言事实判定。
 
 清理前为104个Python测试；旧沙箱专用测试移除，共用协议测试改用注入工具。当前为92个Python测试、4个前端回放测试、类型检查和构建通过；展示 API/严格审计/事件执行来源的协议回归已覆盖。300条契约校验（10,400 次工具调用、0 次模型调用）通过。真实 train 尝试 `800f792f`、`9ef504a8`、`acfa3b5e`、`504f58d7`、`982d7e44` 未 materialize 可组合 TinyEdge：保留编译歧义/模型超时/网络失败，不声称 Composition 收益。

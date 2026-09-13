@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -35,11 +36,19 @@ from backend.workpack_experiment import (
     PRECHECK_MODE_V14,
     SMOKE_MODE_V14,
     FULL_TRAIN_MODE_V12,
+    FULL_TRAIN_MODE_V13,
+    FULL_TRAIN_MODE_V14,
+    PRECHECK_MODE_V16,
+    SMOKE_MODE_V16,
+    FULL_TRAIN_MODE_V15,
+    PRECHECK_MODE_V17,
+    SMOKE_MODE_V17,
     WorkpackExperiment,
     full_train_manifest,
     precheck_manifest,
     smoke_manifest,
     smoke_manifest_v9,
+    smoke_manifest_v16,
 )
 
 
@@ -274,6 +283,165 @@ def test_workpack_v14_starts_a_new_staged_line_and_fingerprints_prompt_guidance(
     assert 'backend/agent_prompts.py' in protocol['runtimeFingerprint']['files']
     assert experiment.protocol(PRECHECK_MODE_V14)['mode'] == PRECHECK_MODE_V14
     assert experiment.protocol(FULL_TRAIN_MODE_V12)['mode'] == FULL_TRAIN_MODE_V12
+
+
+def test_workpack_v16_keeps_declared_fact_recovery_observational_before_precheck(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+    protocol = experiment.protocol(SMOKE_MODE_V16)
+
+    assert protocol['id'] == 'workspace-workpack-online-smoke-v16'
+    assert protocol['taskCountPerArm'] == 4
+    assert [item['workflowType'] for item in smoke_manifest_v16(bank)] == [
+        'finance-freight-contribution', 'support-policy-draft',
+        'support-period-comparison', 'tickets-triage',
+    ]
+    assert 'never_forced_by_a_synthetic_failure' in protocol['requiredSmokeCoverage']
+    assert experiment.protocol(PRECHECK_MODE_V16)['taskCountPerArm'] == 12
+    assert experiment.protocol(FULL_TRAIN_MODE_V14)['taskCountPerArm'] == 48
+
+    def successful_pair(index, workflow):
+        return {
+            'index': index, 'status': 'completed', 'workpackId': workflow + '-01',
+            'workflowType': workflow, 'scenario': 'support' if workflow.startswith('support-') else 'finance', 'round': 1,
+            'runs': {arm: {
+                'status': 'completed', 'evaluation': {'status': 'passed'},
+                'metrics': {'inputTokens': 1, 'outputTokens': 1, 'usageComplete': True},
+            } for arm in ['baseline', 'rsi']},
+        }
+
+    smoke = {
+        'id': 'v16-smoke', 'mode': SMOKE_MODE_V16, 'status': 'completed', 'finishedAt': '2026-09-13T00:00:00Z',
+        'protocol': {'taskCountPerArm': 4, 'runtimeFingerprint': protocol['runtimeFingerprint']},
+        'pairs': [
+            successful_pair(1, 'finance-freight-contribution'),
+            successful_pair(2, 'support-policy-draft'),
+            successful_pair(3, 'support-period-comparison'),
+            successful_pair(4, 'tickets-triage'),
+        ],
+        'coverage': {
+            'weightedRatioReconcile': {'arms': ['baseline', 'rsi']},
+            'deterministicFactRecovery': {
+                'workspace_aggregate_rows': {'arms': ['baseline']},
+                'workspace_ordered_partition': {'arms': ['baseline', 'rsi']},
+            },
+        },
+    }
+    experiment.items[smoke['id']] = smoke
+    assert experiment._eligible_predecessor(PRECHECK_MODE_V16, protocol['runtimeFingerprint'])['id'] == smoke['id']
+
+
+def test_workpack_v17_isolated_after_shared_deadline_finalization_guard(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+
+    protocol = experiment.protocol(SMOKE_MODE_V17)
+    assert protocol['id'] == 'workspace-workpack-online-smoke-v17'
+    assert protocol['taskCountPerArm'] == 4
+    assert experiment.protocol(PRECHECK_MODE_V17)['taskCountPerArm'] == 12
+    assert experiment.protocol(FULL_TRAIN_MODE_V15)['taskCountPerArm'] == 48
+    assert protocol['runtimeFingerprint']['files']['backend/task_runner.py']
+
+
+def test_runtime_compatibility_allows_summary_only_controller_repair_but_rejects_agent_runtime_change(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+    current = experiment._runtime_fingerprint()
+
+    prior_files = dict(current['files'])
+    prior_files['backend/workpack_experiment.py'] = 'old-controller-summary-only-hash'
+    prior = {'files': prior_files, 'digest': 'old-full-fingerprint'}
+
+    assert WorkpackExperiment._runtime_matches(prior, current) is True
+
+    changed_files = dict(prior_files)
+    changed_files['backend/task_runner.py'] = 'changed-agent-runtime-hash'
+    assert WorkpackExperiment._runtime_matches({'files': changed_files, 'digest': 'another-old-fingerprint'}, current) is False
+    assert experiment.protocol(FULL_TRAIN_MODE_V13)['runtimeFingerprint']['controllerBehaviorVersion'] == 1
+
+
+def test_workpack_dashboard_dtos_keep_v17_kpis_and_exclude_raw_traces_and_reports(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+    item = {
+        'id': 'v17-dashboard', 'mode': FULL_TRAIN_MODE_V15, 'status': 'completed',
+        'createdAt': '2026-09-13T00:00:00Z', 'finishedAt': '2026-09-13T01:00:00Z',
+        'protocol': {
+            'id': 'workspace-workpack-online-full-train-v15', 'mode': FULL_TRAIN_MODE_V15,
+            'taskCountPerArm': 1, 'agentRuns': 2, 'limits': {'run': 1, 'model': 1, 'read': 1},
+            'manifest': [{'workpackId': 'finance-reconciliation-01', 'scenario': 'finance',
+                          'workflowType': 'finance-reconciliation', 'recordCount': 10,
+                          'difficulty': 'normal', 'round': 1}],
+            'saturationRule': {'window': 4},
+            'runtimeFingerprint': {'files': {'backend/task_runner.py': 'private-hash'}},
+        },
+        'pairs': [{
+            'index': 1, 'workpackId': 'finance-reconciliation-01', 'scenario': 'finance',
+            'workflowType': 'finance-reconciliation', 'sourceTaskId': 'finance-task-01',
+            'recordCount': 10, 'difficulty': 'normal', 'round': 1, 'status': 'completed',
+            'runs': {
+                'baseline': {
+                    'id': 'baseline-run', 'status': 'completed', 'strategy': 'plan_react',
+                    'metrics': {'inputTokens': 100, 'outputTokens': 20, 'durationMs': 50,
+                                'modelRequests': 2, 'toolCalls': 3, 'usageComplete': True,
+                                'reportAttempts': 1},
+                    'evaluation': {'status': 'passed'}, 'submission': {'summary': 'private report body'},
+                    'events': [{'private': 'raw model trace'}], 'graph': {'nodes': ['private graph']},
+                    'plan': {'steps': ['private plan']},
+                    'phaseMetrics': {'plan': {'private': 'raw plan metric'}, 'graph': {'private': 'raw graph metric'}},
+                },
+                'rsi': {
+                    'id': 'rsi-run', 'status': 'completed', 'strategy': 'graph_rsi',
+                    'metrics': {'inputTokens': 70, 'outputTokens': 10, 'durationMs': 40,
+                                'modelRequests': 1, 'toolCalls': 2, 'usageComplete': True,
+                                'reportAttempts': 1},
+                    'evaluation': {'status': 'passed'},
+                    'evolution': {'planningPath': 'fast', 'usedVersionId': 'workflow-1'},
+                    'submission': {'summary': 'private RSI report body'},
+                    'events': [{'private': 'raw tool trace'}], 'graph': {'nodes': ['private graph']},
+                    'modelPlan': {'steps': ['private model plan']},
+                    'phaseMetrics': {'plan': {'private': 'raw plan metric'}, 'graph': {'private': 'raw graph metric'}},
+                },
+            },
+            'snapshots': [{
+                'id': 'snapshot-1', 'kind': 'before', 'arm': 'rsi', 'pairIndex': 1,
+                'workpackId': 'finance-reconciliation-01',
+                'versions': [{'id': 'workflow-1', 'sourceTaskId': 'finance-task-00'}],
+                'workflows': [], 'tinyEdges': [],
+            }],
+        }],
+    }
+    item['summary'] = experiment._summary(item)
+    experiment.items[item['id']] = item
+
+    rows = experiment.list_summaries()
+    assert rows == [{
+        'id': 'v17-dashboard', 'mode': FULL_TRAIN_MODE_V15, 'status': 'completed',
+        'createdAt': '2026-09-13T00:00:00Z', 'startedAt': None,
+        'finishedAt': '2026-09-13T01:00:00Z', 'error': None,
+        'protocol': {'id': 'workspace-workpack-online-full-train-v15', 'mode': FULL_TRAIN_MODE_V15,
+                     'taskCountPerArm': 1, 'agentRuns': 2, 'limits': {'run': 1, 'model': 1, 'read': 1},
+                     'model': None},
+        'summary': {
+            'pairedCompleted': 1, 'tokenSavingRate': 0.333333,
+            'learning': {'workflowCreated': 0, 'fastReuse': 1, 'composition': 0, 'fallback': 0},
+            'qualityGate': item['summary']['qualityGate'],
+        },
+    }]
+
+    dashboard = experiment.dashboard(item['id'])
+    assert dashboard['summary']['baseline']['totalTokens'] == 120
+    assert dashboard['summary']['rsi']['totalTokens'] == 80
+    assert dashboard['pairs'][0]['runs']['rsi']['id'] == 'rsi-run'
+    assert dashboard['pairs'][0]['snapshots'][0]['versions'][0]['sourceTaskId'] == 'finance-task-00'
+    payload = json.dumps(dashboard, ensure_ascii=False)
+    for forbidden in ['private report body', 'raw model trace', 'raw tool trace', 'private graph',
+                      'private plan', 'private model plan', 'runtimeFingerprint']:
+        assert forbidden not in payload
 
 
 async def test_cancelled_workpack_experiment_does_not_start_next_arm_or_pair(tmp_path, monkeypatch):
