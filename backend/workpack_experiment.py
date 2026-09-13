@@ -98,6 +98,23 @@ FULL_TRAIN_MODE_V9 = 'full_train_v9'
 SMOKE_MODE_V12 = 'smoke_v12'
 PRECHECK_MODE_V12 = 'precheck_v12'
 FULL_TRAIN_MODE_V10 = 'full_train_v10'
+# V13 fixes a shared one-to-many reconciliation anchor defect and records a
+# single retry for transient model transport failures. Both affect correctness
+# and cost accounting for both arms, so V12 artifacts remain immutable.
+SMOKE_MODE_V13 = 'smoke_v13'
+PRECHECK_MODE_V13 = 'precheck_v13'
+FULL_TRAIN_MODE_V11 = 'full_train_v11'
+# V14 rejects ambiguous grouped row counts after V13 smoke found one arm
+# treating count(groupBy=...) as a distinct-group result. This is shared
+# semantics and prompt guidance, so it starts a new staged line.
+SMOKE_MODE_V14 = 'smoke_v14'
+PRECHECK_MODE_V14 = 'precheck_v14'
+FULL_TRAIN_MODE_V12 = 'full_train_v12'
+# V15 adds deterministic totals for the keys selected by a reconciliation
+# comparison, avoiding a second model-side sum over already-reconciled rows.
+SMOKE_MODE_V15 = 'smoke_v15'
+PRECHECK_MODE_V15 = 'precheck_v15'
+FULL_TRAIN_MODE_V13 = 'full_train_v13'
 EXPERIMENT_MODES = {PRECHECK_MODE, FULL_TRAIN_MODE, SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                     SMOKE_MODE_V5, PRECHECK_MODE_V5, FULL_TRAIN_MODE_V3,
                     SMOKE_MODE_V6, PRECHECK_MODE_V6, FULL_TRAIN_MODE_V4,
@@ -106,7 +123,10 @@ EXPERIMENT_MODES = {PRECHECK_MODE, FULL_TRAIN_MODE, SMOKE_MODE_V4, PRECHECK_MODE
                     SMOKE_MODE_V9, PRECHECK_MODE_V9, FULL_TRAIN_MODE_V7,
                     SMOKE_MODE_V10, PRECHECK_MODE_V10, FULL_TRAIN_MODE_V8,
                     SMOKE_MODE_V11, PRECHECK_MODE_V11, FULL_TRAIN_MODE_V9,
-                    SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10}
+                    SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10,
+                    SMOKE_MODE_V13, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
+                    SMOKE_MODE_V14, PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12,
+                    SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}
 STARTABLE_MODES = {SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                    SMOKE_MODE_V5, PRECHECK_MODE_V5, FULL_TRAIN_MODE_V3,
                    SMOKE_MODE_V6, PRECHECK_MODE_V6, FULL_TRAIN_MODE_V4,
@@ -115,9 +135,14 @@ STARTABLE_MODES = {SMOKE_MODE_V4, PRECHECK_MODE_V4, FULL_TRAIN_MODE_V2,
                    SMOKE_MODE_V9, PRECHECK_MODE_V9, FULL_TRAIN_MODE_V7,
                    SMOKE_MODE_V10, PRECHECK_MODE_V10, FULL_TRAIN_MODE_V8,
                    SMOKE_MODE_V11, PRECHECK_MODE_V11, FULL_TRAIN_MODE_V9,
-                   SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10}
+                   SMOKE_MODE_V12, PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10,
+                   SMOKE_MODE_V13, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
+                   SMOKE_MODE_V14, PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12,
+                   SMOKE_MODE_V15, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}
 
 RUNTIME_SOURCE_FILES = (
+    'backend/agent_prompts.py',
+    'backend/model_client.py',
     'backend/task_runner.py',
     'backend/workspace.py',
     'backend/workpacks.py',
@@ -343,6 +368,12 @@ class WorkpackExperiment:
             FULL_TRAIN_MODE_V9: PRECHECK_MODE_V11,
             PRECHECK_MODE_V12: SMOKE_MODE_V12,
             FULL_TRAIN_MODE_V10: PRECHECK_MODE_V12,
+            PRECHECK_MODE_V13: SMOKE_MODE_V13,
+            FULL_TRAIN_MODE_V11: PRECHECK_MODE_V13,
+            PRECHECK_MODE_V14: SMOKE_MODE_V14,
+            FULL_TRAIN_MODE_V12: PRECHECK_MODE_V14,
+            PRECHECK_MODE_V15: SMOKE_MODE_V15,
+            FULL_TRAIN_MODE_V13: PRECHECK_MODE_V15,
         }.get(mode)
         if not required:
             return None
@@ -353,7 +384,7 @@ class WorkpackExperiment:
             summary = self._summary(item)
             if self._quality_gate(item, summary).get('status') != 'passed':
                 continue
-            if mode in {PRECHECK_MODE_V11, PRECHECK_MODE_V12}:
+            if mode in {PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14, PRECHECK_MODE_V15}:
                 weighted = (item.get('coverage') or {}).get('weightedRatioReconcile') or {}
                 if weighted.get('arms') != ['baseline', 'rsi']:
                     continue
@@ -421,6 +452,8 @@ class WorkpackExperiment:
                 'maxTokens': max(tokens, default=0),
                 'tokensPerPassed': round(sum(tokens) / passed, 3) if passed else None,
                 'modelRequests': sum(int(metric.get('modelRequests') or 0) for metric in metrics),
+                'modelProviderAttempts': sum(int(metric.get('modelProviderAttempts') or metric.get('modelRequests') or 0) for metric in metrics),
+                'modelTransportRetries': sum(int(metric.get('modelTransportRetries') or 0) for metric in metrics),
                 'toolCalls': sum(int(metric.get('toolCalls') or 0) for metric in metrics),
                 'toolErrors': sum(int(metric.get('toolErrors') or 0) for metric in metrics),
                 'controlErrors': sum(int(metric.get('controlErrors') or 0) for metric in metrics),
@@ -479,6 +512,8 @@ class WorkpackExperiment:
                         'passed': sum(run.get('status') == 'completed' and run.get('evaluation', {}).get('status') == 'passed' for run in runs),
                         'totalTokens': sum(_total(metric) for metric in metrics),
                         'modelRequests': sum(int(metric.get('modelRequests') or 0) for metric in metrics),
+                        'modelProviderAttempts': sum(int(metric.get('modelProviderAttempts') or metric.get('modelRequests') or 0) for metric in metrics),
+                        'modelTransportRetries': sum(int(metric.get('modelTransportRetries') or 0) for metric in metrics),
                         'toolCalls': sum(int(metric.get('toolCalls') or 0) for metric in metrics),
                         'durationMs': round(sum(float(metric.get('durationMs') or 0) for metric in metrics), 3),
                     }
@@ -493,7 +528,13 @@ class WorkpackExperiment:
         base_tokens = rsi_tokens = 0
         for pair in item['pairs']:
             baseline, rsi = pair.get('runs', {}).get('baseline'), pair.get('runs', {}).get('rsi')
-            if not baseline or not rsi or baseline.get('status') in ['queued', 'running'] or rsi.get('status') in ['queued', 'running']:
+            # A cancelled pair can have two terminal arm records when the
+            # cancellation arrives between arms. Keep those arm attempts in
+            # the per-arm accounting, but never treat them as a completed,
+            # comparable pair or include them in paired cost curves.
+            if (pair.get('status') not in [None, 'completed'] or not baseline or not rsi
+                    or baseline.get('status') in ['queued', 'running']
+                    or rsi.get('status') in ['queued', 'running']):
                 continue
             completed.append(pair)
             base_tokens += _total(baseline.get('metrics'))
@@ -572,13 +613,13 @@ class WorkpackExperiment:
         result['qualityGate'] = WorkpackExperiment._quality_gate(item, result)
         return result
 
-    def protocol(self, mode: str = SMOKE_MODE_V12) -> dict:
+    def protocol(self, mode: str = SMOKE_MODE_V15) -> dict:
         if mode not in EXPERIMENT_MODES:
             raise ValueError('未知工作包实验模式')
         is_legacy_precheck = mode == PRECHECK_MODE
-        is_precheck = mode in {PRECHECK_MODE, PRECHECK_MODE_V4, PRECHECK_MODE_V5, PRECHECK_MODE_V6, PRECHECK_MODE_V7, PRECHECK_MODE_V8, PRECHECK_MODE_V9, PRECHECK_MODE_V10, PRECHECK_MODE_V11, PRECHECK_MODE_V12}
-        is_smoke = mode in {SMOKE_MODE_V4, SMOKE_MODE_V5, SMOKE_MODE_V6, SMOKE_MODE_V7, SMOKE_MODE_V8, SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12}
-        manifest = (smoke_manifest_v9(self.bank) if mode in {SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12} else smoke_manifest(self.bank)
+        is_precheck = mode in {PRECHECK_MODE, PRECHECK_MODE_V4, PRECHECK_MODE_V5, PRECHECK_MODE_V6, PRECHECK_MODE_V7, PRECHECK_MODE_V8, PRECHECK_MODE_V9, PRECHECK_MODE_V10, PRECHECK_MODE_V11, PRECHECK_MODE_V12, PRECHECK_MODE_V13, PRECHECK_MODE_V14, PRECHECK_MODE_V15}
+        is_smoke = mode in {SMOKE_MODE_V4, SMOKE_MODE_V5, SMOKE_MODE_V6, SMOKE_MODE_V7, SMOKE_MODE_V8, SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15}
+        manifest = (smoke_manifest_v9(self.bank) if mode in {SMOKE_MODE_V9, SMOKE_MODE_V10, SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15} else smoke_manifest(self.bank)
                     if is_smoke else precheck_manifest(self.bank)
                     if is_precheck else full_train_manifest(self.bank))
         # V3 showed that the earlier historical-token estimate was too low.
@@ -615,7 +656,16 @@ class WorkpackExperiment:
                     FULL_TRAIN_MODE_V9: 'workspace-workpack-online-full-train-v9',
                     SMOKE_MODE_V12: 'workspace-workpack-online-smoke-v12',
                     PRECHECK_MODE_V12: 'workspace-workpack-online-precheck-v12',
-                    FULL_TRAIN_MODE_V10: 'workspace-workpack-online-full-train-v10'}.get(
+                    FULL_TRAIN_MODE_V10: 'workspace-workpack-online-full-train-v10',
+                    SMOKE_MODE_V13: 'workspace-workpack-online-smoke-v13',
+                    PRECHECK_MODE_V13: 'workspace-workpack-online-precheck-v13',
+                    FULL_TRAIN_MODE_V11: 'workspace-workpack-online-full-train-v11',
+                    SMOKE_MODE_V14: 'workspace-workpack-online-smoke-v14',
+                    PRECHECK_MODE_V14: 'workspace-workpack-online-precheck-v14',
+                    FULL_TRAIN_MODE_V12: 'workspace-workpack-online-full-train-v12',
+                    SMOKE_MODE_V15: 'workspace-workpack-online-smoke-v15',
+                    PRECHECK_MODE_V15: 'workspace-workpack-online-precheck-v15',
+                    FULL_TRAIN_MODE_V13: 'workspace-workpack-online-full-train-v13'}.get(
                         mode,
                         'workspace-workpack-online-precheck-v3' if is_legacy_precheck else 'workspace-workpack-online-full-train-v1')),
             'mode': mode,
@@ -642,10 +692,11 @@ class WorkpackExperiment:
                                              SMOKE_MODE_V6, PRECHECK_MODE_V6, SMOKE_MODE_V7, PRECHECK_MODE_V7,
                                              SMOKE_MODE_V8, PRECHECK_MODE_V8, SMOKE_MODE_V9, PRECHECK_MODE_V9,
                                              SMOKE_MODE_V10, PRECHECK_MODE_V10, SMOKE_MODE_V11, PRECHECK_MODE_V11,
-                                             SMOKE_MODE_V12, PRECHECK_MODE_V12},
+                                             SMOKE_MODE_V12, PRECHECK_MODE_V12, SMOKE_MODE_V13, PRECHECK_MODE_V13,
+                                             SMOKE_MODE_V14, PRECHECK_MODE_V14, SMOKE_MODE_V15, PRECHECK_MODE_V15},
             },
             'requiredSmokeCoverage': ('baseline_and_rsi_must_call_workspace_reconcile_keyed_sums_with_rightTerms '
-                                      'for_finance_freight_contribution' if mode in {SMOKE_MODE_V11, SMOKE_MODE_V12} else None),
+                                      'for_finance_freight_contribution' if mode in {SMOKE_MODE_V11, SMOKE_MODE_V12, SMOKE_MODE_V13, SMOKE_MODE_V14, SMOKE_MODE_V15} else None),
             'order': (f'{len(set(item["round"] for item in manifest))} rounds; '
                       f'{len({item["workflowType"] for item in manifest})} workflows per round; '
                       'each arm sees the same workpack order; pair arm order alternates'),
@@ -661,7 +712,7 @@ class WorkpackExperiment:
             },
         }
 
-    async def start(self, mode: str = SMOKE_MODE_V12) -> dict:
+    async def start(self, mode: str = SMOKE_MODE_V15) -> dict:
         if self.tasks:
             raise ValueError('已有工作包在线实验在运行')
         if mode not in STARTABLE_MODES:
@@ -671,7 +722,8 @@ class WorkpackExperiment:
                     PRECHECK_MODE_V6, FULL_TRAIN_MODE_V4, PRECHECK_MODE_V7, FULL_TRAIN_MODE_V5,
                     PRECHECK_MODE_V8, FULL_TRAIN_MODE_V6, PRECHECK_MODE_V9, FULL_TRAIN_MODE_V7,
                     PRECHECK_MODE_V10, FULL_TRAIN_MODE_V8, PRECHECK_MODE_V11, FULL_TRAIN_MODE_V9,
-                    PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10}:
+                    PRECHECK_MODE_V12, FULL_TRAIN_MODE_V10, PRECHECK_MODE_V13, FULL_TRAIN_MODE_V11,
+                    PRECHECK_MODE_V14, FULL_TRAIN_MODE_V12, PRECHECK_MODE_V15, FULL_TRAIN_MODE_V13}:
             predecessor = self._eligible_predecessor(mode, protocol['runtimeFingerprint'])
             if not predecessor:
                 stage = {
@@ -693,6 +745,12 @@ class WorkpackExperiment:
                     FULL_TRAIN_MODE_V9: 'V11 质量通过的在线预检',
                     PRECHECK_MODE_V12: 'V12 三场景 smoke',
                     FULL_TRAIN_MODE_V10: 'V12 质量通过的在线预检',
+                    PRECHECK_MODE_V13: 'V13 三场景 smoke',
+                    FULL_TRAIN_MODE_V11: 'V13 质量通过的在线预检',
+                    PRECHECK_MODE_V14: 'V14 三场景 smoke',
+                    FULL_TRAIN_MODE_V12: 'V14 质量通过的在线预检',
+                    PRECHECK_MODE_V15: 'V15 三场景 smoke',
+                    FULL_TRAIN_MODE_V13: 'V15 质量通过的在线预检',
                 }[mode]
                 raise ValueError('启动前置条件未满足：需要当前 runtime 下已完成且质量门槛通过的' + stage)
             protocol['predecessorExperimentId'] = predecessor['id']

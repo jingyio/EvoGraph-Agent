@@ -5,6 +5,22 @@
 - 项目：RSI 数字员工 Lab。
 - 仓库：`/Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab`。
 - 当前分支：`feat/graph-rsi`。不要在父目录误建第二个仓库。
+- 2026-09-13 Workpack V15：V14 已修复客服 `count + groupBy` 语义，但财务两臂又暴露
+  对命中 `perKey` 金额手工求和的 metrics 失败；V15 增加通用 comparison `matchingTotals`。
+  Smoke `a83b9db0` 已两臂 3/3，token -25.300%、0 Fast；V15 precheck `c64f1bca` 已两臂
+  12/12、token -35.197%、第二轮 6 次真实 Fast，均为当前 runtime 的有效 staged 证据。
+  48-task full `6c56245b` 已在 pair 2 中取消：Baseline 发生两次实际 transport retry，失败尝试
+  的 provider usage 未知，故 `usageComplete=false`，full 工件不可用于成本/质量结论。汇总代码现只把
+  `pair.status=completed` 纳入 paired curve，修复了旧序列化摘要把取消 pair 计作 `pairedCompleted` 的显示问题；
+  原 artifact 不改写。V14 `c071e0ac` 为 2/3 vs 2/3，仅诊断。
+- 2026-09-13 Workpack V14 在途：V13 财务一对多对账已通过，但客服 Baseline 暴露
+  `count + groupBy` 静默返回总行数、被误作不同分组数的问题。V14 明确拒绝该调用并要求
+  `group_count`，重新从隔离 smoke 开始。V13 结果 `5dbcb2fc` 为 2/3 vs 3/3，保留诊断，
+  不得主张其 token 差。V13 此前确认财务订单行按业务键对账时被错误要求唯一，
+  已改为唯一键计算加完整行级证据；`model_client.py` 已对短暂传输失败增加一次有界重试，
+  分别记录逻辑模型请求、实际 provider attempts、retry 与 usage 不完整。V13 是独立
+  staged runtime，先运行 smoke；协议见
+  `docs/workspace-workpack-v13-repair-protocol-2026-09-13.md`，不得与 V12 混接。
 - 2026-09-13 Workpack V12：V11 Fast 路径的重复确定性 compute 长尾已用两臂共享
   guard 修复，并通过 smoke `2413c09a`（3/3）与 precheck `587d7c50`（12/12）。
   full `f8acd9e2` 为 Baseline 42/48、RSI 46/48；表面 token 1,813,753→1,078,947

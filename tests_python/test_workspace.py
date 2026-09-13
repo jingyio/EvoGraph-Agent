@@ -131,7 +131,8 @@ async def test_workspace_reconcile_keyed_sums_uses_only_current_tables_and_recor
     assert result['missingByAlias'] == {'paid': ['o-3'], 'price': ['o-3'], 'freight': ['o-3']}
     assert result['missingAnyCount'] == 1 and result['missingAnyKeys'] == ['o-3']
     assert result['comparisons'] == [{'name': 'mismatch', 'operator': 'abs_gt', 'threshold': 1,
-                                      'count': 1, 'keys': ['o-1'], 'truncated': False}]
+                                      'count': 1, 'keys': ['o-1'], 'truncated': False,
+                                      'matchingTotals': {'paid': 100, 'price': 90, 'freight': 5, 'line': 95}}]
     # Evidence comes from the current anchor and source rows used by the
     # calculation, never from any external expected-answer source.
     assert len(context.evidence) == 7
@@ -164,9 +165,36 @@ async def test_workspace_reconcile_keyed_sums_supports_explicit_weighted_ratio_c
     assert result['comparisons'] == [{
         'name': 'freight_at_least_twenty_percent', 'operator': 'gte', 'threshold': 0,
         'count': 2, 'keys': ['o-1', 'o-3'], 'truncated': False,
+        'matchingTotals': {'price': 100, 'freight': 27},
         'rightTerms': [{'alias': 'price', 'multiplier': 0.2}],
     }]
     assert len(context.evidence) == 6
+
+
+async def test_workspace_reconcile_keyed_sums_accepts_one_to_many_anchor_keys_and_keeps_all_anchor_evidence(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'items.csv', b'order_id,price_cents,freight_cents\no-1,100,20\no-1,50,10\no-2,40,3\n')
+    task, questions = manager.create_task(workspace['id'], '按订单汇总订单行中的运费和商品金额。')
+    assert task and not questions
+    tables = {table['sheet']: table['id'] for table in manager.public_workspace(workspace['id'])['tables']}
+    tool = {tool.name: tool for tool in manager.tools(task['id'])}['workspace_reconcile_keyed_sums']
+    context = type('Context', (), {'run': {'id': 'manual'}, 'evidence': set()})()
+
+    result = await tool.execute({
+        'anchorTableId': tables['items'], 'keyField': 'order_id',
+        'aggregates': [
+            {'tableId': tables['items'], 'keyField': 'order_id', 'field': 'price_cents', 'alias': 'price'},
+            {'tableId': tables['items'], 'keyField': 'order_id', 'field': 'freight_cents', 'alias': 'freight'},
+        ],
+        'comparisons': [{'name': 'freight_twenty_percent', 'leftAlias': 'freight',
+                         'rightTerms': [{'alias': 'price', 'multiplier': .2}], 'operator': 'gte', 'threshold': 0}],
+    }, context)
+
+    assert result['anchorCount'] == 2 and result['anchorRowCount'] == 3
+    assert result['perKey']['o-1'] == {'price': 150, 'freight': 30}
+    assert result['comparisons'][0]['keys'] == ['o-1']
+    assert len(context.evidence) == 3
 
 
 async def test_workspace_reconcile_keyed_sums_allows_redundant_matching_aliases_but_rejects_conflicts(tmp_path):
@@ -194,6 +222,22 @@ async def test_workspace_reconcile_keyed_sums_allows_redundant_matching_aliases_
             'comparisons': [{'name': 'conflict', 'leftAlias': 'value', 'rightAliases': ['other'],
                              'rightTerms': [{'alias': 'value', 'multiplier': 1}], 'operator': 'equals', 'threshold': 0}],
         }, context)
+
+
+async def test_workspace_aggregate_count_rejects_ambiguous_group_by_and_group_count_remains_explicit(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('support')
+    manager.add_source(workspace['id'], 'complaints.csv', b'channel\nweb\nweb\nphone\n')
+    task, _ = manager.create_task(workspace['id'], '统计当前投诉渠道。')
+    table_id = manager.public_workspace(workspace['id'])['tables'][0]['id']
+    tool = {tool.name: tool for tool in manager.tools(task['id'])}['workspace_aggregate_rows']
+    context = type('Context', (), {'run': {'id': 'manual'}, 'evidence': set()})()
+
+    with pytest.raises(ValueError, match='group_count'):
+        await tool.execute({'tableId': table_id, 'operation': 'count', 'groupBy': 'channel'}, context)
+    assert await tool.execute({'tableId': table_id, 'operation': 'group_count', 'groupBy': 'channel'}, context) == {
+        'counts': {'web': 2, 'phone': 1}, 'rowCount': 3,
+    }
 
 
 async def test_workspace_draft_is_not_counted_as_a_report_attempt(tmp_path):

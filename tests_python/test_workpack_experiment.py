@@ -29,6 +29,12 @@ from backend.workpack_experiment import (
     PRECHECK_MODE_V12,
     SMOKE_MODE_V12,
     FULL_TRAIN_MODE_V10,
+    PRECHECK_MODE_V13,
+    SMOKE_MODE_V13,
+    FULL_TRAIN_MODE_V11,
+    PRECHECK_MODE_V14,
+    SMOKE_MODE_V14,
+    FULL_TRAIN_MODE_V12,
     WorkpackExperiment,
     full_train_manifest,
     precheck_manifest,
@@ -248,6 +254,28 @@ def test_workpack_v12_isolated_after_shared_duplicate_compute_guard(tmp_path):
     assert experiment._eligible_predecessor(PRECHECK_MODE_V12, smoke['protocol']['runtimeFingerprint'])['id'] == smoke['id']
 
 
+def test_workpack_v13_starts_a_new_staged_line_and_fingerprints_model_transport(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+    protocol = experiment.protocol(SMOKE_MODE_V13)
+    assert protocol['id'] == 'workspace-workpack-online-smoke-v13'
+    assert 'backend/model_client.py' in protocol['runtimeFingerprint']['files']
+    assert PRECHECK_MODE_V13 in experiment.protocol(PRECHECK_MODE_V13)['mode']
+    assert FULL_TRAIN_MODE_V11 in experiment.protocol(FULL_TRAIN_MODE_V11)['mode']
+
+
+def test_workpack_v14_starts_a_new_staged_line_and_fingerprints_prompt_guidance(tmp_path):
+    bank = TaskBank()
+    bank.load()
+    experiment = WorkpackExperiment(bank, Path(tmp_path))
+    protocol = experiment.protocol(SMOKE_MODE_V14)
+    assert protocol['id'] == 'workspace-workpack-online-smoke-v14'
+    assert 'backend/agent_prompts.py' in protocol['runtimeFingerprint']['files']
+    assert experiment.protocol(PRECHECK_MODE_V14)['mode'] == PRECHECK_MODE_V14
+    assert experiment.protocol(FULL_TRAIN_MODE_V12)['mode'] == FULL_TRAIN_MODE_V12
+
+
 async def test_cancelled_workpack_experiment_does_not_start_next_arm_or_pair(tmp_path, monkeypatch):
     import backend.workpack_experiment as module
 
@@ -311,3 +339,37 @@ async def test_cancelled_workpack_experiment_does_not_start_next_arm_or_pair(tmp
     assert started == ['task-first']
     assert saved['pairs'][0]['status'] == 'cancelled'
     assert saved['pairs'][1]['status'] == 'pending'
+
+
+def test_workpack_summary_excludes_cancelled_pair_from_paired_curve_but_keeps_arm_attempts():
+    def run(tokens: int) -> dict:
+        return {
+            'status': 'completed',
+            'evaluation': {'status': 'passed'},
+            'metrics': {'inputTokens': tokens, 'outputTokens': 0, 'usageComplete': True},
+            'evolution': {},
+        }
+
+    item = {
+        'protocol': {'taskCountPerArm': 2},
+        'pairs': [
+            {
+                'index': 1, 'status': 'completed', 'workpackId': 'completed',
+                'workflowType': 'finance-reconciliation', 'scenario': 'finance', 'round': 1,
+                'runs': {'baseline': run(10), 'rsi': run(5)},
+            },
+            {
+                'index': 2, 'status': 'cancelled', 'workpackId': 'cancelled',
+                'workflowType': 'finance-reconciliation', 'scenario': 'finance', 'round': 1,
+                'runs': {'baseline': run(100), 'rsi': run(50)},
+            },
+        ],
+    }
+
+    summary = WorkpackExperiment._summary(item)
+
+    assert summary['baseline']['attempts'] == 2
+    assert summary['rsi']['attempts'] == 2
+    assert summary['pairedCompleted'] == 1
+    assert [point['workpackId'] for point in summary['curve']] == ['completed']
+    assert summary['tokenSavingRate'] == 0.5

@@ -19,6 +19,31 @@
 > 模型网络失败，因此表面 -40.513% token 仅为诊断，不是同质量经济性结论。完整
 > 边界见 [V12 结果](workspace-workpack-v12-results-2026-09-13.md)。
 
+> 2026-09-13 Workpack V13：V12 财务失败定位到通用一对多锚定表被错误要求唯一，
+> 另有模型服务瞬断完全不重试且缺少实际尝试计量。V13 按业务键去重对账、保留完整行证据，
+> 并对 transient transport 仅重试一次、标记未知 usage；它尚未产生真实 smoke 结果。
+> 协议见 [V13 修复协议](workspace-workpack-v13-repair-protocol-2026-09-13.md)。
+
+> V13 smoke `5dbcb2fc` 为 Baseline 2/3、RSI 3/3；财务一对多对账通过，但客服
+> Baseline 把 `count + groupBy` 的总行数误作不同分组数。V14 已将此调用改为显式拒绝，
+> V13 token 差仅诊断，详见 [V13 诊断](workspace-workpack-v13-results-2026-09-13.md)。
+
+> V15 smoke `a83b9db0` 为 3/3 vs 3/3，token 99,192→74,096（-25.300%）；财务
+> 一对多 anchor、group count 和 comparison matchingTotals 均实际通过。它是首到达
+> 小样本，0 Fast，不能主张在线复用或 30% 全量收益；详情见
+> [V15 Smoke](workspace-workpack-v15-smoke-results-2026-09-13.md)。
+
+> V15 precheck `c64f1bca` 为 12/12 vs 12/12，Agent token 419,583→271,902
+> （-35.197%）；第一轮形成 6 个 Workflow，第二轮 6 次实际 Fast 复用，0 维护错误。
+> 它通过质量门槛；详情见
+> [V15 Precheck](workspace-workpack-v15-precheck-results-2026-09-13.md)。
+
+> V15 full `6c56245b-3dc1-4218-ae81-f1e02434a88e` 在 pair 2 中取消。pair 1 完整，pair 2 的
+> RSI 已完成但 Baseline 在两次实际 transient transport retry 后被取消；失败 attempts 的 provider usage
+> 不可审计，Baseline 标记 `usageComplete=false`。因此 full 不能用于质量、token 或经济性结论。原始
+> artifact 的旧摘要曾把取消 pair 计为 2 个 `pairedCompleted`；读取侧汇总现已修复为 1，且不改写历史 artifact。
+> 详见 [V15 Full 取消诊断](workspace-workpack-v15-full-cancelled-diagnostic-2026-09-13.md)。
+
 | 实验 | 覆盖与 ID | 结果 | 结论边界 |
 |---|---|---|---|
 | Workpack V12 staged train | smoke `2413c09a`、precheck `587d7c50`、full `f8acd9e2`；48 对 train workpack、串行 1/1/1 | Smoke 3/3、预检12/12均通过；full Baseline/RSI 42/48、46/48，token 1,813,753→1,078,947，Fast 36、Composition 0 | full 有三次 Baseline 有界失败、一条 Baseline 模型超时、两条两臂共同网络失败；质量门槛失败且服务异常，表面 -40.513% 仅诊断，不能替代 V4。 |

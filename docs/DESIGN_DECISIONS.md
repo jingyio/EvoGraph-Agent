@@ -33,6 +33,9 @@
 | D28 | 工作区 Workpack 的证据范围恢复必须是公开、确定性且两臂共享 | 2026-09-12。若公开资料范围已由任务契约声明，`evidence_coverage` 失败可由 runtime 分页补齐当前表槽并原样重提报告；不得把私有缺失行、gold、预期指标或选择透露给模型，也不得改变业务字段。它是共享正确性修复，不计作 RSI 学习收益；影响两臂时必须建立新实验版本。详见 [V7 协议](workspace-workpack-v7-recovery-protocol-2026-09-12.md)。 |
 | D29 | 跨表按键数值对账使用显式、确定性工作区计算，不能让模型重复心算 | 2026-09-12。V7 财务 smoke 显示 RSI 已读取正确资料仍错误汇总。新增 `workspace_reconcile_keyed_sums` 只接收当前表/字段/键/别名/阈值，返回带 evidence 的键控汇总、缺失与比较；两臂共享提示和能力。它不访问私有答案、不填报告、不构成 RSI 学习或任务特化规则；因此必须从 V8 新运行时版本重新开始。详见 [V8 协议](workspace-workpack-v8-reconciliation-protocol-2026-09-12.md)。 |
 | D30 | 对当前工作区的重复确定性 compute 采用两臂共享的无进展保护 | 2026-09-13。V11 Fast 路径暴露模型可重复成功的同一 `compute` 调用并耗尽请求预算。对完全相同规范化签名的、模型拥有的 compute 调用，runtime 拒绝并保留 guard 事件；读取、publish/artifact 与运行时恢复不受影响。它是共享可靠性修复，不是 RSI 学习收益，因此建立 V12 独立 runtime。V12 full 仍因报告/服务失败未通过质量门槛，不能将表面 token 差写成同质量收益。详见 [V12 结果](workspace-workpack-v12-results-2026-09-13.md)。 |
+| D31 | 多对一锚定对账按业务键计算并保留完整行级证据；传输重试必须有界且计量未知用量 | 2026-09-13。V12 财务订单行按 `order_id` 对账被错误要求唯一，导致正常一对多资料无法完成比例校验。V13 将 `anchorCount` 定义为唯一键、另记 `anchorRowCount` 与原始证据行；不改变聚合键语义。模型 HTTP 仅对 timeout/传输/408/429/5xx 重试一次，记录逻辑请求、实际 provider attempts 与 retry；失败尝试 usage 不可验证时标记不完整。两项对两臂共享，属于正确性和成本透明度修复，非 RSI 学习收益。详见 [V13 协议](workspace-workpack-v13-repair-protocol-2026-09-13.md)。 |
+| D32 | 行数与不同分组数不得共享含糊的聚合调用 | 2026-09-13。V13 smoke 的 Baseline 将 `count + groupBy` 静默返回的总行数误作渠道/产品不同值数，报告被 metrics 校验拒绝。`count` 现拒绝 `groupBy`；不同分组必须显式 `group_count` 并从 `counts` 获取数量。该修复不填报告或暴露答案，影响两臂，故 V14 另起 staged runtime。 |
+| D33 | 取消的 Workpack pair 不得进入配对成本或完成度曲线 | 2026-09-13。取消可发生在两个 arm 之间，甚至留下两条终态 run；这些尝试必须保留在各 arm 的失败、token、provider attempt 与 usage-incomplete 账本中，但仅 `pair.status=completed` 才可进入 `pairedCompleted`、累计 token 曲线和同任务成本差。旧 artifact 不改写，读取时重算展示摘要；缺少该字段的旧格式工件仅为兼容视作已完成。 |
 | D15 | 将当前讨论 session 与用户将建立的执行 session 分工 | 文档承接设计和状态，不依赖聊天长上下文；不绑定具体型号的能力假设 |
 
 ## 明确没有确认成结论的说法

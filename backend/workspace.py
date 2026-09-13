@@ -623,6 +623,8 @@ class WorkspaceManager:
             self._record_evidence(workspace_id, context, rows)
             operation = args['operation']
             if operation == 'count':
+                if group:
+                    raise ValueError('count 不接受 groupBy；按分组计数必须使用 group_count 并从 counts 得到不同分组数量')
                 return {'count': len(rows)}
             if operation == 'group_count':
                 if not group:
@@ -662,15 +664,19 @@ class WorkspaceManager:
             """
             anchor = get_table({'tableId': args['anchorTableId']})
             self._validate_field(anchor, args['keyField'])
+            # The anchor can legitimately be a one-to-many table (for example
+            # order items keyed by order_id). Aggregate/comparison semantics are
+            # per distinct business key, while evidence must retain every row
+            # that supplied that key.
             anchor_rows: dict[str, dict[str, Any]] = {}
+            anchor_evidence_rows: list[dict[str, Any]] = []
             for row in anchor['rows']:
                 key = row['values'].get(args['keyField'])
                 if key in [None, '']:
                     continue
                 key = str(key)
-                if key in anchor_rows:
-                    raise ValueError('锚定表键必须唯一')
-                anchor_rows[key] = row
+                anchor_rows.setdefault(key, row)
+                anchor_evidence_rows.append(row)
 
             aggregate_rows = []
             aliases: dict[str, dict[str, Any]] = {}
@@ -769,11 +775,16 @@ class WorkspaceManager:
                     'name': spec['name'], 'operator': operator, 'threshold': threshold,
                     'count': len(keys), 'keys': keys[:MAX_RETURNED_ROWS],
                     'truncated': len(keys) > MAX_RETURNED_ROWS,
+                    'matchingTotals': {
+                        name: sum(values.get(key, 0) for key in keys)
+                        for name, values in all_values.items()
+                    },
                     **({'rightTerms': deepcopy(weighted_right)} if weighted_right else {}),
                 })
-            self._record_evidence(workspace_id, context, list(anchor_rows.values()) + aggregate_rows)
+            self._record_evidence(workspace_id, context, anchor_evidence_rows + aggregate_rows)
             return {
                 'anchorTableId': anchor['id'], 'keyField': args['keyField'], 'anchorCount': len(anchor_rows),
+                'anchorRowCount': len(anchor_evidence_rows),
                 'totals': {name: sum(values.values()) for name, values in all_values.items()},
                 'perKey': {key: per_key[key] for key in list(per_key)[:MAX_RETURNED_ROWS]},
                 'perKeyTruncated': len(per_key) > MAX_RETURNED_ROWS,
@@ -887,8 +898,8 @@ class WorkspaceManager:
             Tool('workspace_filter_rows', '按声明字段和条件筛选当前表，并分页返回命中行。', 'read', object_schema({'tableId': table_id_schema(), 'filters': {'type': 'array', 'minItems': 1, 'maxItems': 8, 'items': filter_item}, **paging}), filtered, outputs=['matchedCount', 'records', 'mayHaveMore']),
             Tool('workspace_sort_rows', '按一个当前字段排序并分页返回记录。', 'read', object_schema({'tableId': table_id_schema(), 'field': {'type': 'string', 'minLength': 1}, 'direction': {'type': 'string', 'enum': ['asc', 'desc']}, **paging}), sorted_rows, outputs=['records', 'mayHaveMore']),
             Tool('workspace_join_rows', '按显式键关联两张当前表；不猜测关联键。', 'read', object_schema({'leftTableId': table_id_schema(), 'rightTableId': table_id_schema(), 'leftKey': {'type': 'string', 'minLength': 1}, 'rightKey': {'type': 'string', 'minLength': 1}, **paging}), joined, outputs=['matchedCount', 'records']),
-            Tool('workspace_aggregate_rows', '在当前表上执行可验证的计数或数值聚合。提供 groupBy 时，sum、avg、min、max 返回每个分组的 groups 结果；group_count 返回每组计数。', 'compute', object_schema({'tableId': table_id_schema(), 'operation': {'type': 'string', 'enum': ['count', 'sum', 'avg', 'min', 'max', 'group_count']}, 'field': {'type': 'string'}, 'groupBy': {'type': 'string'}, 'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item}}, required=['tableId', 'operation']), aggregate, outputs=['sum', 'avg', 'min', 'max', 'groups', 'counts', 'rowCount']),
-            Tool('workspace_reconcile_keyed_sums', '按显式键在当前多张表上确定性汇总数值、派生总额并比较阈值；比例条件必须用 rightTerms 的显式别名和权重表达，例如 left >= 0.2×right 写为 leftAlias=left、rightTerms=[{alias:right,multiplier:0.2}]、operator=gte、threshold=0。用于跨表对账，避免把分组结果交给模型逐行心算。所有表、键、字段、别名、权重和阈值必须由当前任务明确提供。', 'compute', object_schema({
+            Tool('workspace_aggregate_rows', '在当前表上执行可验证的计数或数值聚合。count 只返回总行数且不能提供 groupBy；需要不同分组数量时必须使用 group_count，它返回每组 counts。提供 groupBy 时，sum、avg、min、max 返回每组 groups。', 'compute', object_schema({'tableId': table_id_schema(), 'operation': {'type': 'string', 'enum': ['count', 'sum', 'avg', 'min', 'max', 'group_count']}, 'field': {'type': 'string'}, 'groupBy': {'type': 'string'}, 'filters': {'type': 'array', 'maxItems': 8, 'items': filter_item}}, required=['tableId', 'operation']), aggregate, outputs=['sum', 'avg', 'min', 'max', 'groups', 'counts', 'rowCount']),
+            Tool('workspace_reconcile_keyed_sums', '按显式键在当前多张表上确定性汇总数值、派生总额并比较阈值；比例条件必须用 rightTerms 的显式别名和权重表达，例如 left >= 0.2×right 写为 leftAlias=left、rightTerms=[{alias:right,multiplier:0.2}]、operator=gte、threshold=0。comparisons 会返回命中键及 matchingTotals，报告需要命中项金额时必须使用 matchingTotals，不能手工累加 perKey。所有表、键、字段、别名、权重和阈值必须由当前任务明确提供。', 'compute', object_schema({
                 'anchorTableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1},
                 'aggregates': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': object_schema({
                     'tableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1},
@@ -910,7 +921,7 @@ class WorkspaceManager:
                     'threshold': {'type': 'number'},
                 }, required=['name', 'leftAlias', 'operator', 'threshold'])},
             }, required=['anchorTableId', 'keyField', 'aggregates']), reconcile_keyed_sums,
-                 outputs=['totals', 'perKey', 'missingByAlias', 'missingAnyCount', 'comparisons']),
+                 outputs=['totals', 'perKey', 'missingByAlias', 'missingAnyCount', 'comparisons', 'matchingTotals']),
             Tool('workspace_compare_tables', '按相同键比较两张当前表的指定字段，列出新增、缺失或变化记录。', 'read', object_schema({'leftTableId': table_id_schema(), 'rightTableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1}, 'fields': {'type': 'array', 'minItems': 1, 'maxItems': 20, 'items': {'type': 'string'}}}), compare_tables, outputs=['changedCount', 'records']),
             Tool('workspace_search_text', '在当前文本字段中检索关键词并返回命中行证据。', 'read', object_schema({'query': {'type': 'string', 'minLength': 1, 'maxLength': 300}, 'tableId': table_id_schema(), 'fields': {'type': 'array', 'maxItems': 30, 'items': {'type': 'string'}}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RETURNED_ROWS}}, required=['query', 'limit']), search_text, outputs=['matchCount', 'records']),
             Tool('workspace_find_evidence', '按已有稳定 evidence 引用定位当前资料中的具体行。', 'read', object_schema({'evidenceRefs': {'type': 'array', 'minItems': 1, 'maxItems': MAX_RETURNED_ROWS, 'uniqueItems': True, 'items': {'type': 'string'}}}), find_evidence, outputs=['records', 'missingRefs']),

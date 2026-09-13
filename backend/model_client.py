@@ -21,6 +21,14 @@ class Provider(Protocol):
     async def complete(self, messages: list, tools: list) -> dict: ...
 
 
+class ModelTransportError(RuntimeError):
+    """A bounded, transport-only failure with auditable retry count."""
+
+    def __init__(self, message: str, *, transport_retries: int = 0):
+        super().__init__(message)
+        self.transport_retries = transport_retries
+
+
 def valid_count(value):
     return type(value) is int and 0 <= value <= 9007199254740991
 
@@ -49,17 +57,34 @@ class ModelClient:
             self.settings['reasoningEnabled'] = False
 
     async def complete(self, messages, tools):
-        try:
-            async with httpx.AsyncClient(timeout=self.options.timeout, follow_redirects=False, trust_env=False, transport=self.transport) as client:
-                response = await client.post(self.options.base_url.rstrip('/') + '/chat/completions',
-                                             headers={'Authorization': 'Bearer ' + self.options.api_key},
-                                             json=request_body(self.options, messages, tools))
-        except httpx.TimeoutException:
-            raise RuntimeError('模型服务请求超时；未自动重试。') from None
-        except httpx.HTTPError:
-            raise RuntimeError('模型服务网络连接失败；请检查地址与网络。') from None
-        if response.status_code != 200:
-            raise RuntimeError(f'模型服务返回 HTTP {response.status_code}；本次请求未自动重试。')
+        retries = 0
+        retryable_statuses = {408, 429, 500, 502, 503, 504}
+        async with httpx.AsyncClient(timeout=self.options.timeout, follow_redirects=False, trust_env=False, transport=self.transport) as client:
+            while True:
+                try:
+                    response = await client.post(self.options.base_url.rstrip('/') + '/chat/completions',
+                                                 headers={'Authorization': 'Bearer ' + self.options.api_key},
+                                                 json=request_body(self.options, messages, tools))
+                except httpx.TimeoutException:
+                    if retries == 0:
+                        retries = 1
+                        await asyncio.sleep(0.2)
+                        continue
+                    raise ModelTransportError('模型服务请求超时；已重试 1 次仍失败。', transport_retries=retries) from None
+                except httpx.HTTPError:
+                    if retries == 0:
+                        retries = 1
+                        await asyncio.sleep(0.2)
+                        continue
+                    raise ModelTransportError('模型服务网络连接失败；已重试 1 次仍失败。', transport_retries=retries) from None
+                if response.status_code == 200:
+                    break
+                if response.status_code in retryable_statuses and retries == 0:
+                    retries = 1
+                    await asyncio.sleep(0.2)
+                    continue
+                suffix = '已重试 1 次仍失败。' if retries else '本次请求未自动重试。'
+                raise ModelTransportError(f'模型服务返回 HTTP {response.status_code}；{suffix}', transport_retries=retries)
         try:
             payload = response.json()
             choice = payload['choices'][0]
@@ -77,7 +102,14 @@ class ModelClient:
             clean = {'role': 'assistant', 'content': message.get('content') if isinstance(message.get('content'), str) else None}
             if calls:
                 clean['tool_calls'] = [{'id': c['id'], 'type': 'function', 'function': {'name': c['function']['name'], 'arguments': c['function']['arguments']}} for c in calls]
-            result = {'message': clean, 'finishReason': choice.get('finish_reason', 'unknown')}
+            result = {
+                'message': clean,
+                'finishReason': choice.get('finish_reason', 'unknown'),
+                'transportRetries': retries,
+                # Failed transport attempts have no reliable provider usage
+                # payload, even when the retry later succeeds.
+                'usageComplete': retries == 0,
+            }
             usage = payload.get('usage') or {}
             if valid_count(usage.get('prompt_tokens')) and valid_count(usage.get('completion_tokens')):
                 result['usage'] = {'input': usage['prompt_tokens'], 'output': usage['completion_tokens']}

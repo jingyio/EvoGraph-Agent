@@ -29,8 +29,8 @@ async def test_model_boundary_disables_thinking_and_returns_tool_observations():
     assert 'must-not-be-exposed' not in json.dumps(run) and 'test-secret' not in json.dumps(run)
 
 
-@pytest.mark.parametrize('status', [302, 401, 429, 500])
-async def test_model_http_errors_are_not_retried_or_exposed(status):
+@pytest.mark.parametrize('status,attempts', [(302, 1), (401, 1), (429, 2), (500, 2)])
+async def test_model_http_errors_use_only_one_bounded_retry_when_transient(status, attempts):
     requests = []
     def handler(request):
         requests.append(request)
@@ -38,7 +38,25 @@ async def test_model_http_errors_are_not_retried_or_exposed(status):
     client = ModelClient(ModelOptions('http://localhost/v1', 'secret', 'test'), httpx.MockTransport(handler))
     with pytest.raises(RuntimeError, match=str(status)) as error:
         await client.complete([], [])
-    assert 'sensitive-test-body' not in str(error.value) and len(requests) == 1
+    assert 'sensitive-test-body' not in str(error.value) and len(requests) == attempts
+
+
+async def test_model_transport_retry_returns_usage_but_marks_failed_attempt_usage_incomplete():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(503)
+        return httpx.Response(200, json={'choices': [{'message': {'role': 'assistant', 'content': 'done'}, 'finish_reason': 'stop'}],
+                                         'usage': {'prompt_tokens': 10, 'completion_tokens': 2}})
+
+    client = ModelClient(ModelOptions('http://localhost/v1', 'secret', 'test'), httpx.MockTransport(handler))
+    result = await client.complete([], [])
+    assert len(requests) == 2
+    assert result['transportRetries'] == 1
+    assert result['usage'] == {'input': 10, 'output': 2}
+    assert result['usageComplete'] is False
 
 
 def test_direct_qwen_uses_enable_thinking_without_router_specific_setting():

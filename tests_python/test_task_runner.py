@@ -86,6 +86,26 @@ async def test_bad_plan_falls_back_and_counts_planner_request(tmp_path):
     assert run['phaseMetrics']['plan']['requests'] == 1
 
 
+async def test_transport_retry_is_accounted_as_provider_attempt_and_marks_usage_incomplete(tmp_path):
+    class RetriedExecutor(Model):
+        async def complete(self, messages, tools):
+            response = await super().complete(messages, tools)
+            if self.role == 'executor':
+                response['transportRetries'] = 1
+                response['usageComplete'] = False
+            return response
+
+    runner = TaskRunner(Bank(tmp_path), lambda role: RetriedExecutor(role, []), learning_enabled=False)
+    run = await runner.start(TaskRunRequest(taskId='retry'))
+    await runner.tasks[run['id']]
+    assert run['status'] == 'completed'
+    assert run['metrics']['modelRequests'] == 2
+    assert run['metrics']['modelProviderAttempts'] == 3
+    assert run['metrics']['modelTransportRetries'] == 1
+    assert run['metrics']['usageComplete'] is False
+    assert any(event['type'] == 'model_retry' and event['detail']['outcome'] == 'recovered' for event in run['events'])
+
+
 async def test_current_intent_can_refresh_tool_candidates(tmp_path):
     class Rediscover(Model):
         async def complete(self, messages, tools):

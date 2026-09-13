@@ -254,7 +254,7 @@ class TaskRunner:
                    models=dict(planner=planner.model, composition=composition.model, executor=executor.model,
                                distinctModels=planner.model != executor.model, compositionDistinct=composition.model != planner.model),
                    modelSettings=dict(planner=getattr(planner, 'settings', {}), composition=getattr(composition, 'settings', {}), executor=getattr(executor, 'settings', {})),
-                   metrics=dict(modelRequests=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
+                   metrics=dict(modelRequests=0, modelProviderAttempts=0, modelTransportRetries=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0,
@@ -446,6 +446,7 @@ class TaskRunner:
                 self.active_models += 1
                 self.peaks['models'] = max(self.peaks['models'], self.active_models)
                 metrics['modelRequests'] += 1
+                metrics['modelProviderAttempts'] += 1
                 pm = run['phaseMetrics'][phase]
                 pm['requests'] += 1
                 request_id = 'model_' + str(uuid4())
@@ -453,12 +454,24 @@ class TaskRunner:
                     event('model_start', phase, dict(requestId=request_id, model=provider.model, availableTools=[t.name for t in available]))
                     result = await provider.complete(history, available)
                 except BaseException as error:
+                    retries = int(getattr(error, 'transport_retries', 0) or 0)
+                    if retries:
+                        metrics['modelTransportRetries'] += retries
+                        metrics['modelProviderAttempts'] += retries
+                        event('model_retry', phase, dict(requestId=request_id, retries=retries, outcome='failed'))
                     metrics['usageComplete'] = pm['usageComplete'] = False
                     event('model_error', phase, dict(requestId=request_id, error=type(error).__name__))
                     raise
                 finally:
                     self.active_models -= 1
                 usage = result.get('usage')
+                retries = int(result.get('transportRetries', 0) or 0)
+                if retries:
+                    metrics['modelTransportRetries'] += retries
+                    metrics['modelProviderAttempts'] += retries
+                    event('model_retry', phase, dict(requestId=request_id, retries=retries, outcome='recovered'))
+                if result.get('usageComplete') is False:
+                    metrics['usageComplete'] = pm['usageComplete'] = False
                 if usage:
                     for key, source in [('inputTokens', 'input'), ('outputTokens', 'output')]:
                         metrics[key] += usage[source]

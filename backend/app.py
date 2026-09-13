@@ -80,7 +80,8 @@ class WorkpackExperimentRequest(BaseModel):
                   'smoke_v6', 'precheck_v6', 'full_train_v4', 'smoke_v7', 'precheck_v7', 'full_train_v5',
                   'smoke_v8', 'precheck_v8', 'full_train_v6', 'smoke_v9', 'precheck_v9', 'full_train_v7',
                   'smoke_v10', 'precheck_v10', 'full_train_v8', 'smoke_v11', 'precheck_v11', 'full_train_v9',
-                  'smoke_v12', 'precheck_v12', 'full_train_v10'] = 'smoke_v12'
+                  'smoke_v12', 'precheck_v12', 'full_train_v10', 'smoke_v13', 'precheck_v13', 'full_train_v11',
+                  'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13'] = 'smoke_v15'
     confirmCost: bool = False
 
 
@@ -325,7 +326,8 @@ def create_app(service=None):
                                                    'smoke_v6', 'precheck_v6', 'full_train_v4', 'smoke_v7', 'precheck_v7', 'full_train_v5',
                                                    'smoke_v8', 'precheck_v8', 'full_train_v6', 'smoke_v9', 'precheck_v9', 'full_train_v7',
                                                    'smoke_v10', 'precheck_v10', 'full_train_v8', 'smoke_v11', 'precheck_v11', 'full_train_v9',
-                                                   'smoke_v12', 'precheck_v12', 'full_train_v10'] = 'smoke_v12'):
+                                                   'smoke_v12', 'precheck_v12', 'full_train_v10', 'smoke_v13', 'precheck_v13', 'full_train_v11',
+                                                   'smoke_v14', 'precheck_v14', 'full_train_v12', 'smoke_v15', 'precheck_v15', 'full_train_v13'] = 'smoke_v15'):
         return workpack_experiment.protocol(mode)
 
     @app.get('/api/workpack-experiments')
