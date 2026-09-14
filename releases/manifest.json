@@ -1,7 +1,90 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "finance-attribution-v5-repair-probe",
+  "currentReleaseId": "finance-attribution-v5-12-api-candidate",
   "releases": [
+    {
+      "releaseId": "finance-attribution-v5-12-api-candidate",
+      "displayName": "财务复核 · 12任务真实API归因（质量受限）",
+      "status": "candidate",
+      "experimentId": "d02f0ecd-8bb5-4359-94be-e7f7233df6a5",
+      "runtimeRevision": "sha256:11e6f73013a0ad50c4023b637214660087c001cff55a676c354e7aba299d68f4",
+      "assetVersion": "finance-rsi-attribution-v5-12",
+      "artifactDigest": "sha256:be9b513c4c124f0e00fb0ee88b3ae00b0a587d0eb4169b5f326e5584ad8aea98",
+      "createdAt": "2026-09-14T18:04:21.002Z",
+      "claims": [
+        "固定12任务真实API严格串行对照已完成：图执行·不学习11/12通过，图执行·在线RSI 12/12通过，24次运行usage完整。",
+        "在线RSI在11/12项任务实际执行保存图；FX01创建G0/M0，FX09产生G1/M1并由FX10实际使用，FX11产生G2/M2并由FX12实际使用。",
+        "两臂绝对计量为2,119,742→936,718 token、165→58次模型请求、250→216次工具调用、1,081.771→742.943秒；这些仅作诊断差值，不作为正式收益。",
+        "FX11不学习臂在24次模型请求后因缺少报告失败；在线RSI臂通过。该失败、46→8次工具错误及全部恢复开销均保留。"
+      ],
+      "limitations": [
+        "质量门槛为false：两臂最终质量不同，不能把token、请求、工具调用、成本或串行时长差值称为同质量收益，发布状态保持candidate。",
+        "本轮只覆盖12个财务复核任务和qwen/qwen3.5-27b；没有独立Judge或人工全文复核，不能外推为跨业务或长期收益。",
+        "FX09与FX11的修订来自正常成功轨迹并在下一任务实际使用，可证明覆盖扩展链；不等同于错误纠正，也不证明之后持续零错误。",
+        "前置预检实验为092bb7b9-52a1-4c82-92c9-ab25701078ee；旧三任务candidate、六任务formal和其他historical结果继续独立保留，不进入本组指标。"
+      ],
+      "source": "attribution",
+      "protocol": {
+        "id": "finance-graph-rsi-learning-attribution-v5-12",
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "composition": "qwen/qwen3.5-27b",
+        "thinking": false,
+        "computeInterface": "granular-compute-v1",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "taskCountPerArm": 12,
+        "taskOrder": [
+          "FX01",
+          "FX02",
+          "FX03",
+          "FX04",
+          "FX05",
+          "FX06",
+          "FX07",
+          "FX08",
+          "FX09",
+          "FX10",
+          "FX11",
+          "FX12"
+        ],
+        "armOrder": "alternating per pair; same task order in each arm",
+        "noLearning": "graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task",
+        "onlineRsi": "same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment",
+        "shared": [
+          "model",
+          "prompt",
+          "tools",
+          "cold planning",
+          "graph compilation",
+          "parameter binding",
+          "report recovery",
+          "budget",
+          "inputs"
+        ],
+        "judge": "not_run",
+        "actualGraphUseMinimumRate": 0.5,
+        "actualGraphUsePolicy": "count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not",
+        "smokePolicy": "formal frozen twelve-task finance chain",
+        "failurePolicy": "retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure"
+      },
+      "assetManifest": "benchmarks/finance-rsi-attribution-v5-12.json",
+      "precheckExperimentId": "092bb7b9-52a1-4c82-92c9-ab25701078ee",
+      "attribution": {
+        "kind": "cross-task-learning",
+        "armLabels": {
+          "baseline": "图执行 · 不学习",
+          "rsi": "图执行 · 在线RSI"
+        },
+        "control": "每次冷规划和编译，不读写跨任务经验",
+        "learning": "独立空经验，仅学习此前成功train轨迹"
+      }
+    },
     {
       "releaseId": "finance-attribution-v5-repair-probe",
       "displayName": "财务复核 · 三任务RSI修订后使用探针",

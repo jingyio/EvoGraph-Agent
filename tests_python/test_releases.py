@@ -222,3 +222,47 @@ def test_current_release_and_default_analysis_share_one_experiment_context():
     for name in ('experimentId', 'runtimeRevision', 'assetVersion', 'artifactDigest', 'status'):
         assert dataset[name] == release[name]
     assert dataset['protocol']['id'] == release['protocol']['id']
+
+
+def test_repository_current_candidate_exposes_real_api_quality_limit_and_revision_use_chains():
+    store = ReleaseEvidence(ROOT)
+    release = store.manifest()
+    assert release['releaseId'] == 'finance-attribution-v5-12-api-candidate'
+    assert release['status'] == 'candidate'
+    assert release['experimentId'] == 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5'
+    assert release['runtimeRevision'] == 'sha256:11e6f73013a0ad50c4023b637214660087c001cff55a676c354e7aba299d68f4'
+    evidence = store.evidence(release['releaseId'])
+    assert evidence['experimentStatus'] == 'completed'
+    assert evidence['summary']['qualityGate'] is False
+    assert evidence['summary']['costConclusionAllowed'] is False
+    assert evidence['summary']['arms']['no_learning']['passed'] == 11
+    assert evidence['summary']['arms']['online_rsi']['passed'] == 12
+    assert evidence['summary']['arms']['no_learning']['tokens'] == 2119742
+    assert evidence['summary']['arms']['online_rsi']['tokens'] == 936718
+    assert evidence['summary']['actualGraphUse']['hits'] == 11
+    assert evidence['summary']['actualGraphUse']['attempts'] == 12
+    chains = {row['sourcePairId']: {use['pairId'] for use in row['subsequentUses']}
+              for row in evidence['revisions']}
+    assert 'FX10' in chains['FX09']
+    assert chains['FX11'] == {'FX12'}
+    fx11 = next(pair for pair in evidence['pairs'] if pair['pairId'] == 'FX11')
+    assert fx11['runs']['baseline']['evaluation']['status'] == 'failed'
+    assert fx11['runs']['rsi']['evaluation']['status'] == 'passed'
+    assert store.report(release['releaseId'], 'FX12', 'rsi')
+
+
+def test_repository_current_release_api_returns_only_the_pinned_candidate():
+    from fastapi.testclient import TestClient
+    import backend.app as module
+
+    client = TestClient(module.create_app())
+    release = client.get('/api/releases/current')
+    assert release.status_code == 200
+    assert release.json()['releaseId'] == 'finance-attribution-v5-12-api-candidate'
+    evidence = client.get('/api/releases/finance-attribution-v5-12-api-candidate/evidence')
+    assert evidence.status_code == 200
+    payload = evidence.json()
+    assert payload['summary']['qualityGate'] is False
+    assert payload['summary']['costConclusionAllowed'] is False
+    assert len(payload['pairs']) == 12
+    assert client.get('/api/releases/finance-attribution-v5-12-api-candidate/pairs/FX12/runs/rsi/report').status_code == 200

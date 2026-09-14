@@ -134,11 +134,31 @@ export type Evidence = {
     qualityGate: boolean;
     arms: Record<"baseline" | "rsi", Metrics>;
     netTokenSaving: number | null;
+    costConclusionAllowed?: boolean;
+    actualGraphUse?: {
+      hits: number;
+      attempts: number;
+      rate: number | null;
+      minimumRate?: number | null;
+      met?: boolean;
+    };
     curves: CurvePoint[];
   };
 };
+export function normalizeEvidenceArms(evidence: Evidence): Evidence {
+  const raw = evidence.summary.arms as unknown as Partial<
+    Record<"baseline" | "rsi" | "no_learning" | "online_rsi", Metrics>
+  >;
+  const baseline = raw.baseline || raw.no_learning;
+  const rsi = raw.rsi || raw.online_rsi;
+  if (!baseline || !rsi) throw new Error("保存证据缺少完整的实验两臂。");
+  return {
+    ...evidence,
+    summary: { ...evidence.summary, arms: { baseline, rsi } },
+  };
+}
 export const arms = ["baseline", "rsi"] as const;
-export const armLabel = { baseline: "基线 · 模型调度", rsi: "RSI · 经验辅助" };
+export const armLabel = { baseline: "图执行 · 不学习", rsi: "图执行 · 在线 RSI" };
 export const n = (value: number | undefined) =>
   value == null ? "—" : value.toLocaleString("zh-CN");
 export const tokens = (m: Metrics) =>

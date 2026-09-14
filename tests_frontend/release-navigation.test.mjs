@@ -172,3 +172,26 @@ test('analysis explains the four absolute execution decision stages without cand
  assert.doesNotMatch(source,/usage\/质量不完整/);
  assert.doesNotMatch(source,/质量或 usage 未满足可比条件/);
 });
+
+
+test('current attribution evidence normalizes stored arm names and labels quality-limited diagnostics', async()=>{
+ const { normalizeEvidenceArms, armLabel }=await import('../src/releaseEvidence.ts');
+ const normalized=normalizeEvidenceArms({summary:{arms:{
+  no_learning:{attempts:12,passed:11,inputTokens:20,outputTokens:2,modelRequests:3,toolCalls:4,toolErrors:1,durationMs:10,usageComplete:true},
+  online_rsi:{attempts:12,passed:12,inputTokens:10,outputTokens:1,modelRequests:2,toolCalls:3,toolErrors:0,durationMs:8,usageComplete:true},
+ }}});
+ assert.equal(normalized.summary.arms.baseline.passed,11);
+ assert.equal(normalized.summary.arms.rsi.passed,12);
+ assert.equal(armLabel.baseline,'图执行 · 不学习');
+ assert.equal(armLabel.rsi,'图执行 · 在线 RSI');
+ const evidence=await readFile(new URL('../src/CurrentEvidence.tsx',import.meta.url),'utf8');
+ assert.match(evidence,/当前候选证据 · 质量受限/);
+ assert.match(evidence,/真实 API 对照已完成/);
+ assert.match(evidence,/只展示绝对成本和诊断差值/);
+ assert.match(evidence,/诊断差值（不学习 − 在线 RSI）/);
+ assert.match(evidence,/查看修订来源任务 · \{r\.sourcePairId\}/);
+ assert.match(evidence,/查看修订后实际使用 · \{u\.pairId\}/);
+ const analysis=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ assert.match(analysis,/当前候选结果已完成，质量门槛未通过/);
+ assert.match(analysis,/该差值不等于正式收益/);
+});

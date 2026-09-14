@@ -1,8 +1,18 @@
 # 项目状态快照
 
-## 2026-09-15 三任务修订后使用探针（当前候选）
+## 2026-09-14 十二任务修复后扩大实验（最新候选）
 
-- 当前发布与默认数据分析切换为 candidate `finance-attribution-v5-repair-probe`，精确绑定真实 API 实验 `16bbb302-a0eb-49ed-9613-47849aa597be`、资产 `finance-rsi-attribution-v5-12`、协议 `finance-graph-rsi-error-recovery-probe-v1` 和 runtime `sha256:66f943479bc4b693e1b412e7af7d919f1609ebf21210eb1954c9a039a41d0cce`。协议明确 `excluded from formal metrics`，因此不替换六任务 formal 的历史身份。
+- 同 runtime 双任务预检 `092bb7b9-52a1-4c82-92c9-ab25701078ee` 两臂2/2通过、usage完整、实际图执行1/2，满足50%启动门槛；随后运行正式阶段 `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`，资产 `finance-rsi-attribution-v5-12`，runtime `sha256:11e6f73013a0ad50c4023b637214660087c001cff55a676c354e7aba299d68f4`，27B统一规划/执行/组合、thinking关闭、严格串行1/1/1。
+- 在线RSI 12/12通过；不学习图Agent 11/12，FX11达到24请求上限且未提交报告。usage全部完整，非基础设施故障。质量门槛失败，发布保持candidate，旧六任务formal不替换。
+- 全量绝对计量：token 2,119,742→936,718，请求165→58，工具250→216，工具错误46→8，串行时长1081.771→742.943秒。原始token差55.81%、时长差31.32%，因两臂质量不等不得作为formal收益。
+- 实际图执行11/12。FX01创建13节点G0/M0；FX09产生15节点G1/M1，FX10实际使用；FX11通过有界补全产生23节点G2/M2，FX12实际执行全部节点，以2请求、24工具、0错误通过。三个版本均无错误 `*_count` 数值聚合别名；G2仍有重复筛选，是可用但非最小模板。
+- FX11不学习臂反复选择错误计数聚合并发生收据类型不匹配；在线RSI使用历史频次统计路径后通过。这是跨任务经验的真实可靠性差异，不通过提高上限或改评分抹掉。未继续48任务或跨场景扩展。
+- 结果说明见 `docs/finance-attribution-v5-12-results-2026-09-14.md`。前端作为质量受限candidate只展示绝对量、失败、修订链和真实轨迹，不与历史formal拼接。
+- 本轮全量Python 232项、前端18项、TypeScript/Vite构建、Release/API和报告下载验证通过；最终浏览器视觉复核因Mac锁屏无法执行，未伪报通过。
+
+## 2026-09-14 三任务修订后使用探针（上一候选，已保留）
+
+- 当时发布与默认数据分析切换为 candidate `finance-attribution-v5-repair-probe`，精确绑定真实 API 实验 `16bbb302-a0eb-49ed-9613-47849aa597be`、资产 `finance-rsi-attribution-v5-12`、协议 `finance-graph-rsi-error-recovery-probe-v1` 和 runtime `sha256:66f943479bc4b693e1b412e7af7d919f1609ebf21210eb1954c9a039a41d0cce`。协议明确 `excluded from formal metrics`，因此不替换六任务 formal 的历史身份。
 - 固定顺序 `FX01 → FX09 → FX10`，同一图执行 Agent 两臂各3/3通过，六次 usage 完整。绝对总量：不学习臂609,447 token、47请求、67工具调用、12工具错误、369.756秒；在线RSI 324,130 token、23请求、60工具调用、3工具错误、184.904秒。
 - FX01 在线冷启动较贵（103,558→151,265 token）；FX09实际执行G0的13个节点，成功后产生覆盖扩展G1/M1；FX10实际执行G1/M1的18个节点并通过且无工具错误。实际图执行2/3，达到50%探针门槛。运行后语义审计发现G1的 `payment_count` 节点错误地对 `amount_cents` 求和；最终正确计数来自其他当前观察与模型判断，因此它是“已执行的候选修订”，不是完全正确的可直接复用模板。
 - G0→G1新增支付记录计数、订单状态不同值统计和 `purchased_month` 不同值统计，移除重复 `order_id` 不同值统计；节点16→18。它是正常成功后的覆盖扩展，不是错误纠正。
@@ -11,7 +21,7 @@
 - 最终验证：230项Python测试、17项前端测试、TypeScript/Vite构建和 `git diff --check` 通过；浏览器核验 `#home` 上传/输入入口、`#analysis` 单一候选上下文与请求分解、FX09 diff、FX10报告/清单/轨迹、`#archive` 52个历史上下文，以及窄屏无横向溢出。未推广客服/技术工单，未做独立Judge或人工全文复核，不能主张普遍或长期收益。
 
 
-## 2026-09-14 十二任务扩大验证（最新执行）
+## 2026-09-14 上一轮十二任务扩大失败验证（历史）
 
 - 已完成同 runtime 双任务 probe `fd0bbc4c-9297-43fb-ac81-1cec05f4b991`，两臂2/2通过，在线臂实际图执行1/2（50%）；随后按冻结顺序完成 formal `7b3e9244-1a2c-4a85-bad6-18d0cee3bf09`，资产 `finance-rsi-attribution-v5-12`，24次真实Agent usage全部完整。
 - 结果为两臂各8/12通过。FX01创建G0，FX02–FX08连续实际复用并通过；在线臂总体实际图执行11/12，但FX09–FX12支付结构健康任务两臂均失败，主要表现为期间去重计数错误：期望9，提交为0或12，并伴随报告恢复终止。
@@ -24,7 +34,7 @@
 
 ## 2026-09-14 六任务学习归因正式发布
 
-- 当前发布/默认分析同为 `finance-attribution-v4-6`，精确绑定实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`、资产 `finance-rsi-attribution-v4`、协议 `finance-graph-rsi-learning-attribution-v4` 和 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`。状态 formal；不复用旧V17/V4指标。旧V3-r3候选与V1停止实验转历史审计，原工件不改写。
+- 当时发布/默认分析同为 `finance-attribution-v4-6`，精确绑定实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`、资产 `finance-rsi-attribution-v4`、协议 `finance-graph-rsi-learning-attribution-v4` 和 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`。状态 formal；不复用旧V17/V4指标。旧V3-r3候选与V1停止实验转历史审计，原工件不改写。
 - 同一图执行Agent，不学习与在线RSI各6/6结构化事实/证据通过，usage完整。token 944,492→549,900（节省41.7782%），模型请求72→42，串行耗时651.867→548.372秒（节省15.8767%）；工具错误21→12均保留，正文没有独立Judge/全面人工质量评分。
 - 4/6任务实际部分历史子图复用；FA06匹配错误拒绝可变槽并缺依赖闭包，安全回退后通过，13请求/183,752token/170.786秒全部计入。此处不冒充完整Fast命中或满足旧48任务Fast发布门槛。
 - 发布后已在隔离目录保留两次FA06真实API诊断。首个 `d047dea8-8dfe-4fd7-8e3c-ecfd4806a72f` 因 `learning_enabled=False` 无法读取 probation 经验，退化冷启动：14请求、216,002 token、104.149秒；这是诊断配置失败。修复匹配输入与依赖闭包后，`d7dd21a0-570c-4a59-9f15-bf5d51566b2d` 使用正式FA06之前的经验状态，实际命中G2/M2候选并以当前10期阈值重绑定，15个图节点完成；结构化评测通过、3请求、40,158 token、62.880秒、17工具调用/0错误。它验证维护器修复，不进入原formal指标，也不单独证明普遍收益。

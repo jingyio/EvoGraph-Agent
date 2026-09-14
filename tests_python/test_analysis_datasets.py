@@ -146,16 +146,41 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     store = AnalysisDatasets(root)
     listing = store.list()
     dataset_ids = [row['datasetId'] for row in listing['items']]
-    assert listing['defaultDatasetId'] in dataset_ids
+    assert listing['defaultDatasetId'] == 'finance-attribution-v5-12-api-candidate'
     expected_ids = {
+        'finance-attribution-v5-12-api-candidate',
         'finance-attribution-v5-repair-probe', 'finance-attribution-v4-6',
         'finance-attribution-v5-12-expanded', 'finance-attribution-2026-09-14',
         'workpack-v17-48', 'taskbank-v4-36',
     }
     assert expected_ids.issubset(dataset_ids)
     items_by_id = {row['datasetId']: row for row in listing['items']}
+    assert items_by_id['finance-attribution-v5-12-api-candidate']['status'] == 'candidate'
     assert items_by_id['finance-attribution-v5-repair-probe']['status'] == 'candidate'
     assert items_by_id['finance-attribution-v5-12-expanded']['status'] == 'historical'
+    candidate = store.get('finance-attribution-v5-12-api-candidate')
+    assert candidate['experimentStatus'] == 'completed'
+    assert candidate['summary']['taskCount'] == candidate['summary']['pairedCompleted'] == 12
+    assert candidate['summary']['baseline']['passed'] == 11
+    assert candidate['summary']['rsi']['passed'] == 12
+    assert candidate['summary']['baseline']['tokens'] == 2119742
+    assert candidate['summary']['rsi']['tokens'] == 936718
+    assert candidate['summary']['baseline']['modelRequests'] == 165
+    assert candidate['summary']['rsi']['modelRequests'] == 58
+    assert candidate['summary']['costConclusionAllowed'] is False
+    assert candidate['summary']['tokenSaving'] is None
+    assert candidate['summary']['actualGraphUse']['hits'] == 11
+    assert candidate['summary']['actualGraphUse']['attempts'] == 12
+    assert candidate['summary']['learning']['graphRevisions'] == 2
+    assert candidate['summary']['learning']['matchingRevisions'] == 2
+    chains = {row['sourcePairId']: {use['pairId'] for use in row['subsequentUses']}
+              for row in candidate['revisions']}
+    assert 'FX10' in chains['FX09']
+    assert chains['FX11'] == {'FX12'}
+    assert candidate['points'][10]['pairId'] == 'FX11'
+    assert candidate['points'][10]['baseline']['passed'] is False
+    assert candidate['points'][10]['rsi']['passed'] is True
+    assert candidate['points'][11]['rsi']['usedVersionId'] == candidate['revisions'][1]['versionId']
     current = store.get('finance-attribution-v4-6')
     assert current['summary']['actualGraphUse']['hits'] == 4
     assert current['summary']['actualGraphUse']['attempts'] == 6

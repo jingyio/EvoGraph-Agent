@@ -1035,6 +1035,8 @@ export default function DataAnalysis() {
     scopeLast?.rsiCumulativeRequests ??
     sumKnown(visible.map((point) => point.rsi.modelRequests));
   const scopeRequestSaving = scopeLast?.requestSavingRate ?? null;
+  const scopeBaselineTools = sumKnown(visible.map((point) => point.baseline.toolCalls));
+  const scopeRsiTools = sumKnown(visible.map((point) => point.rsi.toolCalls));
   const scopeBaselineAccuracy = scopeLast?.baselineCumulativeAccuracy ?? null;
   const scopeRsiAccuracy = scopeLast?.rsiCumulativeAccuracy ?? null;
   const scopeFast = visible.filter(
@@ -1102,11 +1104,16 @@ export default function DataAnalysis() {
       qualityGate.status != null &&
       qualityGate.status !== "passed");
   const claimRestriction =
-    metadata?.status === "candidate"
+    metadata?.status === "candidate" && qualityGateFailed
       ? {
-          title: "候选状态，仅展示绝对值",
-          detail: "当前测试组尚未晋升 formal，不计算或展示正式收益曲线。",
+          title: "候选状态且质量门槛未通过",
+          detail: "仅展示绝对成本和诊断差值，不计算或展示正式收益曲线。",
         }
+      : metadata?.status === "candidate"
+        ? {
+            title: "候选状态，仅展示绝对值",
+            detail: "当前测试组尚未晋升 formal，不计算或展示正式收益曲线。",
+          }
       : incompleteUsage > 0
         ? {
             title: "usage 不完整，不计算收益",
@@ -1233,9 +1240,15 @@ export default function DataAnalysis() {
               <Clock3 size={17} />
               <div>
                 <small>RELEASE STATUS</small>
-                <strong>当前候选版本尚未完成正式对照</strong>
+                <strong>
+                  {points.length
+                    ? qualityGateFailed
+                      ? "当前候选结果已完成，质量门槛未通过"
+                      : "当前候选结果已完成，尚未晋升正式发布"
+                    : "当前候选版本尚未完成正式对照"}
+                </strong>
                 <span>
-                  可查看已保存的任务和绝对开销；在状态晋升为 formal 前，不展示或主张 token、成本、latency 与调用次数收益。
+                  可查看已保存的任务、绝对开销和诊断差值；在状态晋升为 formal 前，不展示或主张 token、成本、latency 与调用次数收益。
                 </span>
               </div>
             </section>
@@ -1712,6 +1725,27 @@ export default function DataAnalysis() {
                     <ShieldCheck size={20} />
                     <strong>{claimRestriction.title}</strong>
                     <p>{claimRestriction.detail}</p>
+                    {qualityGateFailed && (
+                      <p>
+                        诊断差值（不学习 − 在线 RSI）：{number(
+                          scopeBaselineTokens != null && scopeRsiTokens != null
+                            ? scopeBaselineTokens - scopeRsiTokens
+                            : null,
+                        )} token · {number(
+                          scopeBaselineRequests != null && scopeRsiRequests != null
+                            ? scopeBaselineRequests - scopeRsiRequests
+                            : null,
+                        )} 次请求 · {number(
+                          scopeBaselineTools != null && scopeRsiTools != null
+                            ? scopeBaselineTools - scopeRsiTools
+                            : null,
+                        )} 次工具调用 · {duration(
+                          scopeBaselineLatency != null && scopeRsiLatency != null
+                            ? scopeBaselineLatency - scopeRsiLatency
+                            : null,
+                        )}。该差值不等于正式收益。
+                      </p>
+                    )}
                   </div>
                 )}
               </article>

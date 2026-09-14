@@ -9,6 +9,7 @@ import {
   statusLabel,
   verifyRelease,
   measure,
+  normalizeEvidenceArms,
 } from "./releaseEvidence";
 import type {
   Release,
@@ -114,8 +115,8 @@ function Chart({
         ))}
       </svg>
       <div className="chart-legend">
-        <span className="baseline">● 基线</span>
-        <span className="rsi">● RSI</span>
+        <span className="baseline">● {armLabel.baseline}</span>
+        <span className="rsi">● {armLabel.rsi}</span>
         <small>点击点查看同一任务；仅绘制已完成配对，失败保留。</small>
       </div>
     </div>
@@ -197,7 +198,7 @@ function SavingsChart({
             >
               <circle cx={x(i)} cy={y(value)} r="5" fill="currentColor" />
               <title>
-                {rows[i].task}: {rate(value)}；基线/RSI通过：
+                {rows[i].task}: {rate(value)}；不学习/在线 RSI通过：
                 {rows[i].baselinePassed ? "是" : "否"}/
                 {rows[i].rsiPassed ? "是" : "否"}
               </title>
@@ -260,9 +261,10 @@ export default function CurrentEvidence() {
           `/api/releases/${encodeURIComponent(r.releaseId)}/evidence`,
         );
         verifyRelease(r, d.release);
+        const normalized = normalizeEvidenceArms(d);
         if (live) {
-          setData(d);
-          setPairId(d.pairs[0]?.pairId || "");
+          setData(normalized);
+          setPairId(normalized.pairs[0]?.pairId || "");
         }
       })
       .catch((e) => {
@@ -308,6 +310,23 @@ export default function CurrentEvidence() {
       release?.status === "candidate" && data?.experimentStatus === "not_started",
     candidateStopped =
       release?.status === "candidate" && data?.experimentStatus === "quality_stopped",
+    candidateQualityLimited =
+      release?.status === "candidate" &&
+      hasRuns &&
+      data?.experimentStatus === "completed" &&
+      data.summary.qualityGate === false,
+    baselineSummary = data?.summary.arms.baseline,
+    rsiSummary = data?.summary.arms.rsi,
+    failedBaselinePairs =
+      data?.pairs
+        .filter((pair) => statusLabel(pair.runs.baseline) !== "校验通过")
+        .map((pair) => pair.pairId) || [],
+    revisionChains =
+      data?.revisions.flatMap((revision) =>
+        revision.subsequentUses.map(
+          (use) => `${revision.sourcePairId} → ${use.pairId}`,
+        ),
+      ) || [],
     run = detail?.runs[arm],
     events = run?.events || [],
     event = events[step],
@@ -317,7 +336,9 @@ export default function CurrentEvidence() {
   const title =
     release?.status === "formal"
       ? "当前正式发布证据"
-      : "当前候选版本尚未完成正式对照";
+      : candidateQualityLimited
+        ? "当前候选证据 · 质量受限"
+        : "当前候选版本尚未完成正式对照";
   return (
     <main className="evidence-page">
       <header className="evidence-heading">
@@ -459,6 +480,44 @@ export default function CurrentEvidence() {
               </dl>
             </section>
           )}
+          {candidateQualityLimited && baselineSummary && rsiSummary && (
+            <section className="candidate-readiness candidate-stopped" aria-label="候选版本质量受限结果">
+              <div>
+                <p className="eyebrow">真实 API 对照已完成</p>
+                <h2>12 项任务均已运行，质量门槛未通过</h2>
+                <p>
+                  两臂最终质量不同，因此只展示绝对成本和诊断差值。下列差值用于定位执行开销，
+                  不称为正式节省或同质量收益。
+                </p>
+              </div>
+              <dl>
+                <div>
+                  <dt>质量结果</dt>
+                  <dd>不学习 {baselineSummary.passed}/{baselineSummary.attempts} · 在线 RSI {rsiSummary.passed}/{rsiSummary.attempts}</dd>
+                </div>
+                <div>
+                  <dt>实际图执行</dt>
+                  <dd>{data.summary.actualGraphUse ? `${data.summary.actualGraphUse.hits}/${data.summary.actualGraphUse.attempts}` : "—"}</dd>
+                </div>
+                <div>
+                  <dt>修订后使用</dt>
+                  <dd>{revisionChains.length ? revisionChains.join("；") : "尚未获得证据"}</dd>
+                </div>
+                <div>
+                  <dt>保留失败</dt>
+                  <dd>{failedBaselinePairs.length ? `${failedBaselinePairs.join("、")} 不学习臂未通过` : "无"}</dd>
+                </div>
+                <div>
+                  <dt>token 诊断差值</dt>
+                  <dd>{n(tokens(baselineSummary) - tokens(rsiSummary))}（不学习 − 在线 RSI）</dd>
+                </div>
+                <div>
+                  <dt>请求 / 串行时长诊断差值</dt>
+                  <dd>{n(baselineSummary.modelRequests - rsiSummary.modelRequests)} 次 · {((baselineSummary.durationMs - rsiSummary.durationMs) / 1000).toFixed(1)} 秒</dd>
+                </div>
+              </dl>
+            </section>
+          )}
           <section id="evidence-business" className="evidence-section">
             <header>
               <p className="eyebrow">01 · 任务与业务成果</p>
@@ -539,7 +598,7 @@ export default function CurrentEvidence() {
                       <small>任务 {i + 1}</small>
                       <strong>{p.title}</strong>
                       <span>
-                        基线 {statusLabel(p.runs.baseline)} / RSI{" "}
+                        {armLabel.baseline} {statusLabel(p.runs.baseline)} / {armLabel.rsi}{" "}
                         {statusLabel(p.runs.rsi)}
                       </span>
                     </button>
@@ -715,7 +774,7 @@ export default function CurrentEvidence() {
               {data.revisions.map((r) => (
                 <li key={r.graphId}>
                   <button onClick={() => select(r.sourcePairId)}>
-                    查看修订来源任务
+                    查看修订来源任务 · {r.sourcePairId}
                   </button>
                   <p>
                     {r.graphChanged ? "执行结构发生变化" : "执行结构未变化"}；
@@ -727,7 +786,7 @@ export default function CurrentEvidence() {
                   {r.subsequentUses.length ? (
                     r.subsequentUses.map((u) => (
                       <button key={u.runId} onClick={() => select(u.pairId)}>
-                        查看修订后实际使用
+                        查看修订后实际使用 · {u.pairId}
                       </button>
                     ))
                   ) : (
@@ -772,6 +831,11 @@ export default function CurrentEvidence() {
               <div className="no-evidence no-evidence-primary">
                 <strong>质量门槛未通过，不展示节省率或累计收益曲线</strong>
                 <p>下方保留两臂真实 token、LLM 请求、工具调用和串行延迟，供定位失败与开销；这些数字不构成效率结论。</p>
+                {baselineSummary && rsiSummary && (
+                  <p>
+                    诊断差值（不学习 − 在线 RSI）：{n(tokens(baselineSummary) - tokens(rsiSummary))} token · {n(baselineSummary.modelRequests - rsiSummary.modelRequests)} 次请求 · {((baselineSummary.durationMs - rsiSummary.durationMs) / 1000).toFixed(1)} 秒。
+                  </p>
+                )}
               </div>
             )}
             <details className="absolute-curves">

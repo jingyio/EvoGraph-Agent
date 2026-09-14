@@ -1,6 +1,18 @@
 # 实验状态与可主张的结论
 
-## 2026-09-15 · 财务三任务RSI修订后使用探针
+## 2026-09-14 · 财务十二任务修复后扩大实验
+
+- **预检**：`092bb7b9-52a1-4c82-92c9-ab25701078ee`，两臂2/2，实际图执行1/2，启动门槛通过。
+- **实验**：`d02f0ecd-8bb5-4359-94be-e7f7233df6a5`
+- **资产/协议**：`finance-rsi-attribution-v5-12` / `finance-graph-rsi-learning-attribution-v5-12`
+- **runtime**：`sha256:11e6f73013a0ad50c4023b637214660087c001cff55a676c354e7aba299d68f4`
+- **结果**：不学习11/12、在线RSI 12/12；usage完整；实际图执行11/12。FX11不学习臂达到24请求上限，属于业务执行失败。
+- **绝对计量**：token 2,119,742→936,718，请求165→58，工具250→216，工具错误46→8，串行时长1081.771→742.943秒。两臂质量不等，`qualityGate=false`、`costConclusionAllowed=false`，原始百分比只作诊断。
+- **进化链**：FX01 G0；FX09 G1/M1→FX10实际使用；FX11 G2/M2→FX12实际执行23节点。错误计数别名被拒绝且未进入三个版本；G2仍非最小模板。
+- **决定**：登记为最新candidate，不替换旧formal，不继续48任务或客服/技术工单扩展。详见 [十二任务结果](finance-attribution-v5-12-results-2026-09-14.md)。
+- **验证**：Python 232项、前端18项、生产构建、Release/API和FX12报告下载通过；Mac锁屏阻止本轮实际浏览器视觉复核，因此未声称视觉验收通过。
+
+## 2026-09-14 · 财务三任务RSI修订后使用探针
 
 - **实验**：`16bbb302-a0eb-49ed-9613-47849aa597be`
 - **发布**：`finance-attribution-v5-repair-probe` / candidate
@@ -29,7 +41,7 @@ FX01创建G0/M0；FX09实际执行G0的13个节点，成功后产生实质覆盖
 
 ## 2026-09-14 六任务学习归因正式发布
 
-- 当前发布/默认分析同为 `finance-attribution-v4-6`，精确绑定实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`、资产 `finance-rsi-attribution-v4`、协议 `finance-graph-rsi-learning-attribution-v4` 和 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`。状态 formal；不复用旧V17/V4指标。旧V3-r3候选与V1停止实验转历史审计，原工件不改写。
+- 当时发布/默认分析同为 `finance-attribution-v4-6`，精确绑定实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`、资产 `finance-rsi-attribution-v4`、协议 `finance-graph-rsi-learning-attribution-v4` 和 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`。状态 formal；不复用旧V17/V4指标。旧V3-r3候选与V1停止实验转历史审计，原工件不改写。
 - 同一图执行Agent，不学习与在线RSI各6/6结构化事实/证据通过，usage完整。token 944,492→549,900（节省41.7782%），模型请求72→42，串行耗时651.867→548.372秒（节省15.8767%）；工具错误21→12均保留，正文没有独立Judge/全面人工质量评分。
 - 4/6任务实际部分历史子图复用；FA06匹配错误拒绝可变槽并缺依赖闭包，安全回退后通过，13请求/183,752token/170.786秒全部计入。此处不冒充完整Fast命中或满足旧48任务Fast发布门槛。
 - 发布后维护验证没有改写正式工件：诊断 `d047dea8-8dfe-4fd7-8e3c-ecfd4806a72f` 因错误关闭学习而冷启动（14请求、216,002 token、104.149秒）；修正配置及匹配器后，诊断 `d7dd21a0-570c-4a59-9f15-bf5d51566b2d` 从FA06之前的独立经验状态实际使用版本 `4a9f228d-4917-4afe-80a4-f2fa6f85f31f`，当前10期阈值成功重绑定，15个图节点完成，结构化评测通过，3请求、40,158 token、62.880秒、17工具调用且0错误。该单次跨runtime结果只验证FA06阻塞已消失，不加入formal收益曲线。
