@@ -16,6 +16,7 @@ from .taskbank import TaskBank
 from .task_runner import TaskRunner, TaskRunRequest
 from .paired_evaluation import PairedEvaluation, EvaluationRequest
 from .business_report import render_report
+from .trajectory_experiment import TrajectoryExperiment
 from .llm_judge import LLMJudge, JudgeRequest, JUDGE_PROMPT
 from .autotool import digest
 from .showcase import SHOWCASE_EXPERIMENT, build_pair_detail, build_showcase
@@ -101,6 +102,7 @@ def create_app(service=None):
                                   run_directory=taskbank.root / 'artifacts' / 'workspace-runs',
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
+    trajectory_experiment = TrajectoryExperiment(taskbank.root)
     workpack_experiment = WorkpackExperiment(taskbank, taskbank.root)
     workpack_judge = WorkpackJudge(workpack_experiment, taskbank.root)
     paired = PairedEvaluation(task_runner)
@@ -113,6 +115,7 @@ def create_app(service=None):
         workspace_bank.load()
         task_runner.restore()
         workspace_runner.restore()
+        trajectory_experiment.restore()
         workpack_experiment.restore()
         workpack_judge.restore()
         paired.restore()
@@ -125,6 +128,7 @@ def create_app(service=None):
             await task_runner.shutdown()
             await workspace_runner.shutdown()
             await workpack_judge.shutdown()
+            await trajectory_experiment.shutdown()
             await workpack_experiment.shutdown()
             await live_showcase.shutdown()
             await service.shutdown()
@@ -321,6 +325,38 @@ def create_app(service=None):
     def workpack_list(scenario: Optional[Literal['finance', 'support', 'tickets']] = None):
         rows = list_workpacks(taskbank)
         return [row for row in rows if not scenario or row['scenario'] == scenario]
+
+    @app.get('/api/trajectory-experiments')
+    def trajectory_list():
+        return [{'id':i['id'], 'createdAt':i['createdAt'], 'mode':i['mode'], 'status':i['status'], 'summary':trajectory_experiment.get(i['id'])['summary']} for i in sorted(trajectory_experiment.items.values(), key=lambda item: item['createdAt'])]
+
+    @app.post('/api/trajectory-experiments', status_code=202)
+    async def trajectory_start(request: WorkspaceRunRequest, mode: Literal['precheck', 'full'] = 'precheck'):
+        if not request.confirmCost:
+            raise HTTPException(400, '需要确认真实模型费用')
+        if workspace_runner.tasks or workpack_experiment.tasks:
+            raise HTTPException(409, '已有工作区或工作包任务在途')
+        try:
+            return await trajectory_experiment.start(mode)
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+
+    @app.get('/api/trajectory-experiments/{key}')
+    def trajectory_get(key: str):
+        if key not in trajectory_experiment.items: raise HTTPException(404, '实验不存在')
+        return trajectory_experiment.dashboard(key)
+
+    @app.get('/api/trajectory-experiments/{key}/runs/{arm}/{run_id}')
+    def trajectory_run(key: str, arm: str, run_id: str):
+        try: return trajectory_experiment.run(key, arm, run_id)
+        except (KeyError, FileNotFoundError): raise HTTPException(404, '运行不存在')
+
+    @app.get('/api/trajectory-experiments/{key}/runs/{arm}/{run_id}/report', response_class=HTMLResponse)
+    def trajectory_report(key: str, arm: str, run_id: str):
+        try:
+            run=trajectory_experiment.run(key, arm, run_id)
+            return HTMLResponse(render_report(run, trajectory_experiment.task(key, run)), headers={'Content-Disposition': 'attachment; filename="trajectory-report.html"'})
+        except (KeyError, FileNotFoundError, ValueError): raise HTTPException(404, '报告不存在')
 
     @app.get('/api/workpack-experiments/protocol')
     def workpack_experiment_protocol(mode: Literal['smoke_v4', 'precheck_v4', 'full_train_v2', 'smoke_v5', 'precheck_v5', 'full_train_v3',

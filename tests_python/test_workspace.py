@@ -223,7 +223,7 @@ async def test_workspace_reconcile_keyed_sums_uses_only_current_tables_and_recor
     assert result['missingByAlias'] == {'paid': ['o-3'], 'price': ['o-3'], 'freight': ['o-3']}
     assert result['missingAnyCount'] == 1 and result['missingAnyKeys'] == ['o-3']
     assert result['comparisons'] == [{'name': 'mismatch', 'operator': 'abs_gt', 'threshold': 1,
-                                      'count': 1, 'keys': ['o-1'], 'truncated': False,
+                                      'count': 1, 'keys': ['o-1'], 'incompleteKeys': ['o-3'], 'truncated': False,
                                       'matchingTotals': {'paid': 100, 'price': 90, 'freight': 5, 'line': 95}}]
     # Evidence comes from the current anchor and source rows used by the
     # calculation, never from any external expected-answer source.
@@ -256,7 +256,7 @@ async def test_workspace_reconcile_keyed_sums_supports_explicit_weighted_ratio_c
 
     assert result['comparisons'] == [{
         'name': 'freight_at_least_twenty_percent', 'operator': 'gte', 'threshold': 0,
-        'count': 2, 'keys': ['o-1', 'o-3'], 'truncated': False,
+        'count': 2, 'keys': ['o-1', 'o-3'], 'incompleteKeys': [], 'truncated': False,
         'matchingTotals': {'price': 100, 'freight': 27},
         'rightTerms': [{'alias': 'price', 'multiplier': 0.2}],
     }]
@@ -663,7 +663,7 @@ def test_workspace_schema_steps_are_not_removed_by_lexical_task_pruning():
     assert removed == []
 
 
-async def test_workspace_train_graph_persists_g0_and_fast_reuses_current_table_slots(tmp_path):
+async def test_workspace_train_induces_receipts_and_matches_current_table_slots(tmp_path):
     bank = TaskBank()
     bank.load()
     manager = WorkspaceManager(tmp_path)
@@ -677,6 +677,10 @@ async def test_workspace_train_graph_persists_g0_and_fast_reuses_current_table_s
 
         async def complete(self, messages, tools):
             names = {tool.name for tool in tools}
+            if 'bind_trajectory' in names:
+                data = json.loads(messages[-1]['content'])
+                candidate = data['candidates'][0]
+                return response('bind_trajectory', {'graphId': candidate['id'], 'decision': 'partial', 'nodeIds': [n['nodeId'] for n in candidate['descriptor']['operations']], 'bindings': [], 'reason': 'Injected schema compatibility protocol test', 'uncovered': ['current report']})
             if 'submit_plan' in names:
                 return response('submit_plan', {'steps': [
                     {'id': 'orders', 'intent': '读取 orders 表中的 order_id、status 和日期字段。', 'dependencies': [], 'sourceTable': 'orders'},
@@ -703,8 +707,7 @@ async def test_workspace_train_graph_persists_g0_and_fast_reuses_current_table_s
     assert first['status'] == 'completed'
     assert first['evaluation']['status'] == 'passed'
     assert 'maintenanceError' not in first['evolution']
-    assert first['evolution']['tinyEdgeMaintenance']['workflowStatus'] == 'recorded'
-    assert first['evolution']['graphOptimization']['reasonCode'] == 'workspace_table_slots'
+    assert first['evolution']['trajectoryCompilation']['sourceRunId'] == first['id']
     assert len(runner.evolution.versions) == 1
     g0 = runner.evolution.versions[0]
 
@@ -715,7 +718,7 @@ async def test_workspace_train_graph_persists_g0_and_fast_reuses_current_table_s
 
     assert second['status'] == 'completed'
     assert second['evaluation']['status'] == 'passed'
-    assert second['evolution']['planningPath'] == 'fast'
+    assert second['evolution']['planningPath'] == 'partial'
     assert second['evolution']['usedVersionId'] == g0['id']
     assert second['phaseMetrics']['plan']['requests'] == 0
     assert 'maintenanceError' not in second['evolution']
@@ -725,8 +728,9 @@ async def test_workspace_train_graph_persists_g0_and_fast_reuses_current_table_s
     }
     assert bound_table_ids
     assert not bound_table_ids & set(first_task['tableBindings'].values())
-    assert len(runner.evolution.workflows) == 2
-    assert runner.evolution.tiny_edges
+    assert second['phaseMetrics']['match']['requests'] == 1
+    assert not runner.evolution.tiny_edges
+    assert len(runner.evolution.versions) == 1
     await runner.shutdown()
 
 

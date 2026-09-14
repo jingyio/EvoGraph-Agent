@@ -9,7 +9,7 @@ from jsonschema import ValidationError
 from typing import Literal
 from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
-from . import config
+from . import config, trajectory
 from .domain import now
 from .graph_store import write_private
 from .model_client import ModelClient, ModelOptions
@@ -66,8 +66,8 @@ class TaskRunner:
         """
         if not tool_name.endswith('publish_report') or not isinstance(args, dict):
             return args, None
-        private_validation = task.get('privateValidation') or {}
-        workspace_required = private_validation.get('requiredEvidenceIds')
+        private_validation = {} if 'publicScopeEvidenceIds' in task else task.get('privateValidation') or {}
+        workspace_required = task.get('publicScopeEvidenceIds', private_validation.get('requiredEvidenceIds'))
         if isinstance(workspace_required, list) and all(isinstance(item, str) for item in workspace_required):
             required = set(workspace_required)
         else:
@@ -89,8 +89,8 @@ class TaskRunner:
     @staticmethod
     def missing_task_evidence(task, observed):
         """Return task-scope evidence not actually observed in this run."""
-        private_validation = task.get('privateValidation') or {}
-        workspace_required = private_validation.get('requiredEvidenceIds')
+        private_validation = {} if 'publicScopeEvidenceIds' in task else task.get('privateValidation') or {}
+        workspace_required = task.get('publicScopeEvidenceIds', private_validation.get('requiredEvidenceIds'))
         if isinstance(workspace_required, list) and all(isinstance(item, str) for item in workspace_required):
             required = set(workspace_required)
         else:
@@ -264,7 +264,7 @@ class TaskRunner:
                                 deterministicFactRecoveryComputes=0, deterministicFactRecoveryFailures=0,
                                 deadlineFinalizationGuards=0,
                                 semanticConstraintGuards=0, runtimeOverheadMs=0, localComputeCalls=0, localComputeMs=0),
-                   phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute']},
+                   phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute', 'match', 'compile']},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
@@ -292,7 +292,7 @@ class TaskRunner:
                         self.evolution.observe(run, task, tools)
                     except Exception as error:
                         run.setdefault('evolution', {})['maintenanceError'] = str(error)[:500]
-                    overhead = run.get('evolution', {}).get('maintenanceMs', 0)
+                    overhead = run.get('evolution', {}).get('maintenanceMs', 0) + run.get('evolution', {}).get('persistMs', 0)
                     run['metrics']['durationMs'] += overhead
                 run['runtimeOverhead'] = self.runtime_overhead(run)
                 run['metrics']['runtimeOverheadMs'] = run['runtimeOverhead']['totalMs']
@@ -387,8 +387,8 @@ class TaskRunner:
             Ordinary user workspaces have no private validation scope and do
             not take this path.
             """
-            expected = task.get('privateValidation') or {}
-            required = expected.get('requiredEvidenceIds')
+            expected = {} if 'publicScopeEvidenceIds' in task else task.get('privateValidation') or {}
+            required = task.get('publicScopeEvidenceIds', expected.get('requiredEvidenceIds'))
             return bool(isinstance(required, list) and required and not self.missing_task_evidence(task, context.evidence))
 
         def remove_evidence_references(value):
@@ -457,7 +457,7 @@ class TaskRunner:
             event('evidence_scope', '本次公开资料范围已完整观察', detail)
             messages.append(dict(
                 role='user',
-                content='当前公开交付口径要求的资料范围已通过本次实际工具观察完整覆盖。发布报告时，完整 evidenceIds 会仅由这些当前观察确定性写入；不要为了抄写证据引用再次读取资料。仍须依据当前观察完成 metrics 与 selectedIds，不能编造事实。',
+                content='当前公开交付口径要求的资料范围已通过本次实际工具观察完整覆盖。发布报告时，完整 evidenceIds 会仅由这些当前观察确定性写入；不要为了抄写证据引用再次读取资料。分组 groups.evidenceIds 可引用本次行的 rowId，运行时仅在它唯一对应已观察证据时补齐前缀；不能为未观察行生成证据。仍须依据当前观察完成 metrics 与 selectedIds，不能编造事实。',
             ))
 
         async def complete(provider, phase, history, available):
@@ -569,6 +569,20 @@ class TaskRunner:
                             executor=owner,
                         ))
                         raise ValueError('任务含比例/百分比条件；发布前必须成功调用 workspace_reconcile_keyed_sums，并提供 comparisons[].rightTerms。请基于当前观察绑定表、键、数值字段和权重，不要手工比较或重提未改变报告')
+                if name in report_tool_names and args.get('groups'):
+                    args = deepcopy(args)
+                    resolved_refs = []
+                    for group in args['groups']:
+                        refs = []
+                        for reference in group.get('evidenceIds') or []:
+                            matches = [e for e in context.evidence if e == reference or e.endswith(':' + reference)]
+                            normalized = matches[0] if len(matches) == 1 else reference
+                            if normalized != reference:
+                                resolved_refs.append(dict(supplied=reference, resolved=normalized))
+                            refs.append(normalized)
+                        group['evidenceIds'] = refs
+                    if resolved_refs:
+                        event('group_evidence_binding', '分组证据按本次唯一观察引用绑定', resolved_refs)
                 args, canonicalization = self.canonical_report_evidence(task, name, args, context.evidence)
                 if canonicalization:
                     metrics['reportEvidenceCanonicalizations'] += 1
@@ -639,6 +653,9 @@ class TaskRunner:
                 metrics['localComputeMs'] += round((time.perf_counter() - compute_started) * 1000, 3)
             entry['observation'] = deepcopy(observation)
             trace['ok'] = observation['ok']
+            trace['result'] = deepcopy(observation.get('result'))
+            if not observation['ok']:
+                trace['error'] = observation.get('error')
             event('observation', name, dict(observation, callId=call['id'], nodeId=node_id, executor=owner))
             if isinstance(observation.get('result'), dict) and 'evaluation' in observation['result']:
                 event('evaluation', '结果校验', observation['result']['evaluation'])
@@ -780,9 +797,73 @@ class TaskRunner:
                   '已执行公开事实恢复计算' if successes else '公开事实恢复计算不可用', detail)
             return bool(successes) and not deterministic_fact_recovery['failures']
 
+        async def replay_trajectory():
+            rows, lookup_ms = trajectory.candidates(self.evolution.versions, task, tools, readonly=not self.learning_enabled)
+            run['evolution'] = dict(lookupMs=lookup_ms, planningPath='fallback', protocol=trajectory.PROTOCOL)
+            if not rows:
+                return False
+            try:
+                # One bounded semantic call, charged to the same global budget.
+                tool = trajectory.selection_tool()
+                response = await complete(planner, 'match', trajectory.selection_prompt(task, rows), [tool])
+                calls = response['message'].get('tool_calls') or []
+                if len(calls) != 1 or calls[0]['function']['name'] != tool.name:
+                    raise ValueError('匹配必须返回一次 bind_trajectory')
+                choice = json.loads(calls[0]['function']['arguments'])
+                tool.validator.validate(choice)
+                run['trajectoryMatch'] = dict(choice, candidates=[{'id': r['id'], 'G': r['generation'], 'M': r['matchVersion']} for r in rows])
+                selected = trajectory.bind_selection(choice, rows, task, tools)
+                event('trajectory_match', '当前请求与实际轨迹兼容性', run['trajectoryMatch'])
+                if not selected:
+                    return False
+                info = run['evolution']
+                info.update(usedVersionId=selected['id'], generation=selected['generation'], matchVersion=selected['matchVersion'],
+                            planningPath='partial', execution='trajectory', currentBindings=choice['bindings'])
+                run['plan'] = deepcopy(selected['plan'])
+                nodes = selected['nodes']
+                run['graph'] = dict(status='running', nodes=nodes, nodeStates={n['id']: 'pending' for n in nodes})
+                event('graph_created', '已验证轨迹片段与当前绑定', dict(nodes=nodes, evolution=info))
+                start = len(ledger)
+                try:
+                    for node in nodes:
+                        args = deepcopy(node['arguments'])
+                        run['graph']['nodeStates'][node['id']] = 'running'
+                        while True:
+                            binding_start = time.perf_counter()
+                            call = dict(id='trajectory_' + str(uuid4()), type='function', function=dict(name=node['tool'], arguments=json.dumps(args, ensure_ascii=False)))
+                            binding_ms = (time.perf_counter() - binding_start) * 1000
+                            metrics['bindingMs'] += binding_ms
+                            metrics['deterministicBindings'] += 1
+                            event('binding', '当前轨迹参数', dict(nodeId=node['id'], arguments=args, bindingMs=binding_ms))
+                            obs = await invoke(call, 'graph', node_id=node['id'])
+                            if not obs['ok']:
+                                run['graph']['nodeStates'][node['id']] = 'failed'
+                                raise ValueError(obs['error'])
+                            if not node['paginate'] or not obs['result'].get('mayHaveMore'):
+                                break
+                            args['page'] += 1
+                        run['graph']['nodeStates'][node['id']] = 'done'
+                        event('graph', node['id'] + ' done', dict(nodeId=node['id'], state='done'))
+                    run['graph']['status'] = 'done'
+                finally:
+                    append_observations(ledger[start:], True)
+                messages.append(dict(role='user', content='以上是本次实际执行的历史轨迹兼容片段。当前未覆盖义务：' + json.dumps(choice['uncovered'], ensure_ascii=False) + '。请完成剩余计算/清单及当前报告，不能把片段完成当作整个任务完成。'))
+                return True
+            except BudgetExceeded:
+                raise
+            except Exception as error:
+                run['trajectoryMatchError'] = str(error)[:1000]
+                event('trajectory_match_failure', '匹配/绑定/执行未完成，保留观察恢复', run['trajectoryMatchError'])
+                if run.get('graph'):
+                    run['graph']['status'] = 'fallback'
+                return False
+
         async def workflow():
             nonlocal current_intent
-            if run['strategy'] not in ['react', 'strong_react']:
+            replayed = False
+            if task.get('workspaceId') and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
+                replayed = await replay_trajectory()
+            if not replayed and run['strategy'] not in ['react', 'strong_react']:
                 run['phase'] = 'Plan'
                 try:
                     selected, composed = None, None
@@ -793,7 +874,7 @@ class TaskRunner:
                                      lookupMs=round((time.perf_counter() - lookup_start) * 1000, 3), execution='saved-plan' if selected else 'cold-plan',
                                      planningPath='fast' if selected else 'fallback')
                         if run['strategy'] in graph_strategies:
-                            run['evolution'] = dict(reuse, execution='saved-graph' if selected else 'cold-plan')
+                            run['evolution'] = dict(run.get('evolution') or {}, **dict(reuse, execution='saved-graph' if selected else 'cold-plan'))
                             if 'evaluationContext' in run:
                                 run['evolution'].update(note='冻结成对评测：不学习、不更新图证据', maintenanceMs=0, extraModelRequests=0, extraToolCalls=0, shadowRollouts=0)
                         else:

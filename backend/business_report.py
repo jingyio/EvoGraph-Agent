@@ -31,11 +31,16 @@ def render_report(run, task):
     selected = set(submission.get('selectedIds') or [])
     passed = run.get('evaluation', {}).get('status') == 'passed'
     role, deliverable = ROLE_META.get(task.get('scenario'), ('企业运营分析数字员工', '业务分析简报'))
-    cards = ''.join(f'<article><small>{text(key)}</small><strong>{text(value) if not isinstance(value, dict) else text(sum(value.values()))}</strong>'
+    def metric_value(key, value):
+        if key.endswith('_cents') and isinstance(value, (int, float)):
+            return text('BRL {:,.2f}'.format(value / 100))
+        return text(sum(value.values()) if isinstance(value, dict) else value)
+    cards = ''.join(f'<article><small>{text(key)}</small><strong>{metric_value(key, value)}</strong>'
                     + (f'<pre>{pretty(value)}</pre>' if isinstance(value, dict) else '') + '</article>' for key, value in metrics.items())
     records = ''.join('<tr><td>' + text(ref) + '</td><td>' + ('入选' if row.get('id') in selected else '证据记录') + '</td><td>'
                       + '<details><summary>' + text(row.get('title') or row.get('product') or row.get('status') or '查看读取字段') + '</summary><pre>'
                       + pretty(row) + '</pre></details></td></tr>' for ref, row in sorted(evidence.items()))
+    groups = ''.join('<article><h3>' + text(g['name']) + ' · ' + text(g['count']) + ' 项</h3><p>' + text(g['reason']) + '</p><p>条件：' + text(g['condition']) + '</p><pre>' + pretty(g['selectedIds']) + '</pre><details><summary>本组证据</summary><pre>' + pretty(g['evidenceIds']) + '</pre></details></article>' for g in submission.get('groups', []))
     review_required = run.get('evaluation', {}).get('status') == 'user_review_required'
     followup = task.get('followupContext') or {}
     followup_note = ''
@@ -55,6 +60,7 @@ body{{font:14px/1.8 system-ui,sans-serif;color:#26394a;background:#f4f7f9;margin
 {followup_note}
 <h2>提交的业务指标</h2><div class="cards">{cards or '<p>尚未提交指标</p>'}</div><p class="meta">金额字段以任务约定单位为准；财务 *_cents 单位为 BRL 分。分组指标的大号数字是组内数值之和。</p>
 <h2>模型工作结论</h2><p class="meta">以下文字来自模型，结构化评分不等于文字事实与表述已审核。</p><div class="summary">{text(submission.get('summary') or '尚未生成报告')}</div>
+<h2>独立复核原因</h2><div class="cards">{groups or "<p>本次未提交分组</p>"}</div>
 <h2>筛选清单</h2><pre>{pretty(submission.get('selectedIds') or [])}</pre>
 <h2>逐条工具证据 · {len(evidence)} 条</h2><table><thead><tr><th>证据引用</th><th>筛选状态</th><th>本次实际读取内容</th></tr></thead><tbody>{records}</tbody></table>
 <h2>质量复核</h2><p>结构化校验问题：{text(', '.join(issues) or '无')}</p><pre>{pretty(run.get('manualReview') or {'status': 'pending', 'note': '文字事实一致性、需求覆盖与可读性待人工复核'})}</pre>

@@ -6,6 +6,7 @@ import time
 from uuid import uuid4
 import networkx as nx
 from .autotool import digest
+from . import trajectory
 from .domain import now
 from .graph import ordered_nodes, contract_hash
 from .graph_store import write_private
@@ -52,6 +53,8 @@ class OnlineEvolution:
         return next((v for v in reversed(self.versions) if v['contextKey'] == key), None)
 
     def select(self, task, tools):
+        if task.get('workspaceId'):
+            return None  # Workspace selection uses witnessed trajectory descriptors.
         version = self.latest(task, tools)
         if not version or version['status'] == 'needs-repair':
             return None
@@ -71,6 +74,8 @@ class OnlineEvolution:
         return deepcopy(version)
 
     def composition_candidates(self, task, tools):
+        if task.get('workspaceId'):
+            return []
         rows = []
         for edge in self.tiny_edges:
             if edge.get('scenario') == task['scenario'] and edge.get('contractHash') == contract_hash(tools):
@@ -185,7 +190,13 @@ class OnlineEvolution:
         started = time.perf_counter()
         info = run.setdefault('evolution', {})
         info.update(extraModelRequests=0, extraToolCalls=0, shadowRollouts=0, generatedVersionIds=[])
+        if task.get('workspaceId') and task['split'] != 'train':
+            info['note'] = '非train工作区：不写经验文件或匹配描述'
+            return
         try:
+            if task.get('workspaceId'):
+                trajectory.maintain(self, run, task, tools)
+                return
             if task['split'] == 'test':
                 info['note'] = '冻结测试：不学习、不反思、不更新版本证据'
                 return
