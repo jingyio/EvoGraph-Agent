@@ -1,6 +1,4 @@
-请根据本次软件问题列表及活动资料，生成一份研发负责人查看的跟进简报。
-按 issue_id 关联 issues 和 activity。只将 state 为 open 且 comments 达到3条的事项列入重点跟进清单；已关闭事项不进入清单。
-按评论数从高到低排序，同评论数按 issue_id 的数值升序。每项给出标题、原始链接、评论数、里程碑及指派人数，并引用附件中的证据。
-同时统计全部问题数、open与closed数量、open问题评论总数、重点事项数、重点事项中未指派的数量。
-缺少活动记录或评论数时单独标记待核查，不能默认0。区分“评论多”和“已确认严重故障”，不要仅凭评论数推断故障级别。
-只生成内部简报与跟进建议，不修改工单，不通知负责人。没有重点事项时明确写0。
+请根据本次公开软件问题与活动资料生成研发负责人内部跟进简报，按 issue_id 关联，范围只限附件。
+将 state 为 open 且 comments 达到3条的问题列入重点跟进；再单列其中尚未指派的问题，以及缺活动关联或评论数缺失的待核查项。已关闭问题不进入重点清单，评论多不等于已确认严重故障。
+给出全部问题数、open和closed数量、open问题评论总数、各组数量、业务ID、标题、链接、里程碑和证据。只生成简报，不修改工单。
+输出 metrics 精确包含以下键：issue_count、open_count、closed_count、open_comment_total、focus_count、unassigned_focus_count、missing_activity_count。groups 使用以下 name，逐组给 reason、condition、count、selectedIds、evidenceIds：focus、unassigned_focus、missing_activity。selectedIds 是各组业务ID的去重并集，所有ID使用字符串；空组也必须提交。

@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from backend.workspace import WorkspaceManager, _parse_source
+from backend.trajectory_assets import request_for
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / 'test'
@@ -21,6 +22,11 @@ with TemporaryDirectory() as temporary:
         workspace = manager.create(role, label='input-verification')
         manager.add_source(workspace['id'], path.name, path.read_bytes())
         question = path.parent / ('问题-小幅变化.txt' if '扩展版' in path.name else '问题.txt')
+        groups = {'finance': ('reconciliation', 'payment_structure'),
+                  'support': ('transfer_timing', 'response_coverage'),
+                  'tickets': ('activity_triage', 'release_readiness')}
+        expected_question = request_for(role, groups[role]['扩展版' in path.name], 1) + '\n'
+        assert question.read_text() == expected_question, f'Manual question drifted from shared contract: {question}'
         task, clarifications = manager.create_task(workspace['id'], question.read_text())
         assert task is not None and not clarifications, (spec['path'], clarifications)
         results.append(dict(file=spec['path'], sha256=hashlib.sha256(path.read_bytes()).hexdigest(),

@@ -87,18 +87,54 @@ export type Revision = {
   graphDiff: unknown;
   matchingDiff: unknown;
 };
+export type CurvePoint = {
+  task: string;
+  group: string;
+  position: number;
+  baselineTokens: number | null;
+  rsiTokens: number | null;
+  baselineLatencyMs: number;
+  rsiLatencyMs: number;
+  baselinePassed: boolean;
+  rsiPassed: boolean;
+  tokenSaving: number | null;
+  latencySaving: number | null;
+  cumulativeTokenSaving: number | null;
+  cumulativeLatencySaving: number | null;
+  G?: number;
+  M?: number;
+  generatedG: string[];
+  generatedM: number[];
+};
+export type SavingMeasure =
+  | "tokenSaving"
+  | "latencySaving"
+  | "cumulativeTokenSaving"
+  | "cumulativeLatencySaving";
+export type TaskReview = {
+  scenario: string;
+  scenarioLabel: string;
+  group: string;
+  title: string;
+  counts: { train: number; validation: number; test: number };
+  precheckPositions: number[];
+  inputTables: Record<string, string[]>;
+  variants: { position: number; request: string; requestHash: string }[];
+  source: { provider?: string; note?: string };
+};
 export type Evidence = {
   release: Release;
   experimentStatus: string;
   plannedPairs: number;
   pairs: Pair[];
+  taskReview?: TaskReview[];
   revisions: Revision[];
   evolutionEvidence: { graph: boolean; matching: boolean };
   summary: {
     qualityGate: boolean;
     arms: Record<"baseline" | "rsi", Metrics>;
-    netTokenSaving: number;
-    curves: unknown[];
+    netTokenSaving: number | null;
+    curves: CurvePoint[];
   };
 };
 export const arms = ["baseline", "rsi"] as const;
@@ -140,4 +176,7 @@ export function measure(run: Run | undefined, key: Measure): number | null {
       ? 1
       : 0;
   return run.metrics[key];
+}
+export function savingMeasure(row: CurvePoint, key: SavingMeasure) {
+  return row[key];
 }

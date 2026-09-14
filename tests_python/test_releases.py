@@ -1,11 +1,13 @@
 """Release isolation uses small injected saved receipts, never a model call."""
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import pytest
 from backend.releases import ReleaseEvidence, selection_csv
 from backend.graph_store import write_private
 from backend.workspace import WorkspaceManager
+from backend.trajectory_assets import request_for, task_plan
 
 
 def fixture(root):
@@ -108,3 +110,26 @@ def test_tampered_run_membership_cannot_show_another_tasks_report(tmp_path):
     path=directory/'rsi/runs/run-b.json';run=json.loads(path.read_text());run['taskId']='other-experiment-task';write_private(path,run)
     with pytest.raises(ValueError,match='身份'):store.evidence(key)
     with pytest.raises(ValueError,match='身份'):store.report(key,'pair-1','rsi')
+
+
+def test_pending_candidate_exposes_zero_evidence_and_validates_asset_counts(tmp_path):
+    root=tmp_path;asset=root/'artifacts/trajectory-review-v2/manifest.json'
+    tasks=[]
+    for task in task_plan():
+        request=request_for(task['scenario'],task['group'],task['position'])
+        tasks.append(dict(task,requestHash=hashlib.sha256(request.encode()).hexdigest()))
+    write_private(asset,{'version':'trajectory-review-v2','tasks':tasks,'sources':{}})
+    release={'releaseId':'pending','displayName':'Pending','status':'candidate','source':'trajectory-plan',
+             'experimentId':'not-started','runtimeRevision':'pending','assetVersion':'trajectory-review-v2',
+             'assetManifest':'artifacts/trajectory-review-v2/manifest.json','createdAt':'2026','claims':[],'limitations':[],
+             'protocol':{'assetCounts':{'train':48,'validation':6,'test':6}}}
+    write_private(root/'releases/manifest.json',{'currentReleaseId':'pending','releases':[release]})
+    result=ReleaseEvidence(root).evidence('pending')
+    assert result['experimentStatus']=='not_started' and result['plannedPairs']==48 and result['pairs']==[]
+    assert result['summary']['netTokenSaving'] is None and not result['summary']['qualityGate']
+    assert len(result['taskReview'])==6 and len(result['taskReview'][0]['variants'])==8
+    changed=deepcopy(tasks);changed[0]['requestHash']='tampered'
+    write_private(asset,{'version':'trajectory-review-v2','tasks':changed,'sources':{}})
+    with pytest.raises(ValueError,match='题面'):ReleaseEvidence(root).evidence('pending')
+    tasks.pop();write_private(asset,{'version':'trajectory-review-v2','tasks':tasks,'sources':{}})
+    with pytest.raises(ValueError,match='不一致'):ReleaseEvidence(root).evidence('pending')

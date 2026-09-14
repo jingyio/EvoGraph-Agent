@@ -1,6 +1,4 @@
-请根据本次投诉资料和企业响应记录，整理一份客服主管使用的跟进简报。
-通过 complaint_id 关联 complaints 和 responses，范围只限附件内的投诉。
-汇总投诉总数、不同公司数、各产品的投诉数量，并列出 timely 为 No 的投诉。
-再单独列出从 date_received 到 date_sent_to_company 超过2天的转交记录；恰好2天不入选。时间缺失或转交早于接收的记录单列为待核查，不能当成0天。
-两类跟进事项允许重叠，合并清单时按投诉ID去重并保留各项入选原因。请列出ID、公司、产品、已有企业响应状态以及当前资料的证据。
-输出内部简报和下一步核查建议，不对外发送消息，不把缺少信息写成已解决；若某类为空，明确写0。
+请根据本次投诉和企业响应资料整理客服主管内部简报，按 complaint_id 关联，范围只限附件。
+分别列出 timely 为 No 的投诉、从 date_received 到 date_sent_to_company 严格超过48小时的投诉，以及日期缺失、日期倒置或缺响应关联的待核查投诉。原因允许重叠，恰好48小时不入选。
+给出投诉总数、不同公司数、各组数量、业务ID、公司、产品、响应状态和证据。缺失信息不能写成已解决，不发送客户消息。
+输出 metrics 精确包含以下键：complaint_count、company_count、late_count、delayed_transfer_count、date_review_count。groups 使用以下 name，逐组给 reason、condition、count、selectedIds、evidenceIds：late、delayed_transfer、date_review。selectedIds 是各组业务ID的去重并集，所有ID使用字符串；空组也必须提交。

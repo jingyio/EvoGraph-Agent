@@ -1146,14 +1146,26 @@ class WorkspaceManager:
 
         table_optional = object_schema({'tableId': table_id_schema()}, required=[])
         paging = {'page': {'type': 'integer', 'minimum': 1}, 'pageSize': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RETURNED_ROWS}}
-        group_schema = object_schema({'name': {'type': 'string', 'minLength': 1}, 'reason': {'type': 'string', 'minLength': 1}, 'condition': {'type': 'string', 'minLength': 1}, 'count': {'type': 'integer', 'minimum': 0}, 'selectedIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}, 'evidenceIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}})
-        report_schema = {'type': 'object', 'properties': {'metrics': {'type': 'object', 'additionalProperties': True},
+        delivery = task.get('deliveryContract') or {}
+        required_metric_keys = delivery.get('requiredMetricKeys') or []
+        required_group_names = delivery.get('requiredGroupNames') or []
+        metric_schema = (
+            object_schema({name: {'type': 'integer'} for name in required_metric_keys})
+            if required_metric_keys else {'type': 'object', 'additionalProperties': True}
+        )
+        group_name_schema = ({'type': 'string', 'enum': required_group_names}
+                             if required_group_names else {'type': 'string', 'minLength': 1})
+        group_schema = object_schema({'name': group_name_schema, 'reason': {'type': 'string', 'minLength': 1}, 'condition': {'type': 'string', 'minLength': 1}, 'count': {'type': 'integer', 'minimum': 0}, 'selectedIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}, 'evidenceIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}})
+        report_required = ['metrics', 'selectedIds', 'evidenceIds', 'summary']
+        if required_group_names:
+            report_required.append('groups')
+        report_schema = {'type': 'object', 'properties': {'metrics': metric_schema,
                                                           'groups': {'type': 'array', 'maxItems': 40, 'items': group_schema},
                                                           'selectedIds': {'type': 'array', 'maxItems': 1000, 'uniqueItems': True, 'items': {'type': 'string'}},
                                                           'evidenceIds': {'type': 'array', 'minItems': 1, 'maxItems': 2000, 'uniqueItems': True, 'items': {'type': 'string'}},
                                                           'summary': {'type': 'string', 'minLength': 1, 'maxLength': 6000},
                                                           'assumptions': {'type': 'array', 'maxItems': 100, 'items': {'type': 'string'}}},
-                         'required': ['metrics', 'selectedIds', 'evidenceIds', 'summary'], 'additionalProperties': False}
+                         'required': report_required, 'additionalProperties': False}
         tools = [
             Tool('workspace_list_sources', '列出当前工作区资料和已解析数据表。', 'read', object_schema(), list_sources, outputs=['sources', 'tables']),
             Tool('workspace_get_schema', '读取当前数据表的字段、类型、缺失值和行数。', 'read', table_optional, get_schema, outputs=['tables']),

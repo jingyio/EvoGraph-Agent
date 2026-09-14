@@ -1,0 +1,2360 @@
+{
+  "version": "trajectory-review-v2",
+  "taskDesignVersion": "shared-six-contracts-v1",
+  "taskDesign": "six project-authored business contracts over public historical records; no injected failures",
+  "splitPolicy": "train only learning; validation/test frozen and unrun",
+  "protocol": {
+    "trainPairs": 48,
+    "validationPairs": 6,
+    "testPairs": 6,
+    "precheckPairs": 9,
+    "organization": "three scenarios x two business contracts x eight train arrivals"
+  },
+  "tasks": [
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 1,
+      "precheck": true,
+      "id": "finance-reconciliation-train-01",
+      "title": "财务订单金额与分期复核 1",
+      "recordIds": [
+        "e4f9b25439f4bf809c79bb4d2ce089ed",
+        "de2bff9e29299dc921f2e276c8408400",
+        "4518ab57ad7e9009e40b69c17bc005b4",
+        "149f7e7d7dd01505a6b7f2f5ea5226df",
+        "8384cc8291fa3f9512995c77446cf25b",
+        "2c9bbc00b2b47515826f048e26f1439a",
+        "872b0a6374bd5ab3b5ade0ebb28ff731",
+        "df79dc38cd1e0f49f9ef6385b30caab8",
+        "4ee4abefdd469c7756e296aca7f29361",
+        "f78331069dda1305cb2f9c835e08b12c",
+        "46484009102069e531f34a424a500982",
+        "5466d76b73c2c9ea826b3fc661288d0c"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4833,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b3903d703f2d6a03120810dec9e6be2839cf532633a817c8186fb8e29ca0e14a",
+      "inputHash": "3744ceb022e3e15d955289f5305ef9237176e8141566ed535607c2f4fda36f35"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 2,
+      "precheck": true,
+      "id": "finance-reconciliation-train-02",
+      "title": "财务订单金额与分期复核 2",
+      "recordIds": [
+        "36e2a95392e7e15e80e0937066007a56",
+        "d6d5256fd785237c4ace6b84392b2e28",
+        "b6e50b69ddbd5210737d0c881056771d",
+        "429621553c84a98a8760c1aa822dbbfe",
+        "c85fe66e2c1cb66a9461604acc956de9",
+        "2f7c0d4ae58c91fc32165eed84560e35",
+        "518e28f28e634069d2f5d642dd7997b7",
+        "ed514599a6591d1a2df80bef99bbbf59",
+        "f59f19205098bc544feb263fcdc667d9",
+        "754af8a169601b3ad5dc333db745b158",
+        "3805a46a72cba13fc8a3920d6da681c7",
+        "1c03ba88bad43efaf8139c1e966ef211"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4848,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "559c839768430c77981839dbb0b9d4805ecff95f098b56de2eff0889a7052ca5",
+      "inputHash": "2589f62f4283781ff6a8f3d25f523a27ecf563a31cafb0422abde455b2f3a9fd"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 3,
+      "precheck": true,
+      "id": "finance-reconciliation-train-03",
+      "title": "财务订单金额与分期复核 3",
+      "recordIds": [
+        "93f09cc1052604f96116493cbf93606b",
+        "acdbc7396e191931c263db11af241d62",
+        "7088b5b4d20474ffa19951ece4248621",
+        "fad008c0d1b347241252af6ecfa81b98",
+        "9125faac1b379b7b9ab4665189739e31",
+        "9f6f347729af61a4a18eda64c6609dda",
+        "5518dd9f50e817052664dcc935728b65",
+        "e11ea6be9b7b180e46f0b9186f39354a",
+        "fb362fb533a2d245c5822558de85ce16",
+        "7ee4b13db874fc0c53e4febcb4275fb5",
+        "3f75656d4a9d4b3e18204bae2bd96925",
+        "9f8ccad2702a1ddd203c159ba49e3018"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4604,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b3903d703f2d6a03120810dec9e6be2839cf532633a817c8186fb8e29ca0e14a",
+      "inputHash": "38393c5a1eb60b3cc61a0e63450e6b56513e074b7df5a7c026c92da0348b1802"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "finance-reconciliation-train-04",
+      "title": "财务订单金额与分期复核 4",
+      "recordIds": [
+        "d5a0359c9a84924aa4c85244ff60c1ef",
+        "1147614ede9ce51acd3fc449b86114e3",
+        "2bae3d45d0a7c7c7e04856a698f495d7",
+        "229177e71a4625bfd5c2d62ff385253b",
+        "2122719f6fc72fba16b0b3001d539a7e",
+        "bbf8658c763a5e7e4d2be2e05b39fd42",
+        "f22698a00370679c0784aae7c060f87d",
+        "6508f1528c3648c8a9f751e811520269",
+        "c19151387b76297886c53149367cac4d",
+        "7b3950b933fe73d96ce4359a1caf38ea",
+        "f84f158d834dafae73fa8da8b11bea6d",
+        "50ba48feadedab8aed970b1ed1d6e058"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 19,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5716,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "986defffc66720230c0e655a1ad6c3c7ace94cb43968fe60275ddaed52da30ff",
+      "inputHash": "d0012fe9a6c7f3be5ad29d82d0f8ba4cbfac923c1cd6853aaaa55f4f9009f655"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "finance-reconciliation-train-05",
+      "title": "财务订单金额与分期复核 5",
+      "recordIds": [
+        "2a3bad5fc6e2759b3024cfb491d7f455",
+        "2a3a15442d770b77f30d1c2c02be3697",
+        "5eff879c2f04b5e1f7e9c72ae229f074",
+        "f9d2e3d2cc060d2d5fbbaef4fba580b1",
+        "de5b7ea79803e2993efb698c480ba599",
+        "0fcc817e41a60bbb439c5ce638f62f31",
+        "1ec8dd02cd90d4ce9458ede38ab15bff",
+        "1570fe1d14badec761d75ca93916bd6a",
+        "2eeb6d2e0f687208e04adfa5afb15700",
+        "da1b656d5535a2420f9010ab910d1fa5",
+        "f5ce5c20560cb88a5e940f660077ba1e",
+        "c4ff30289b48ee374152a8c534ee686e"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4960,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "56b326673bc886dbbc1aa65475193c30a1c7f1f54dbe6f77af22f94ee0445010",
+      "inputHash": "89f2bde22434ee84c71cb804d51e897c6728b29144a6b77ca99a6a652c3491f4"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "finance-reconciliation-train-06",
+      "title": "财务订单金额与分期复核 6",
+      "recordIds": [
+        "918e5db39b90c133257cfa0944fd9d4e",
+        "594013e81f2c775b3fb2591f7e4bd4a9",
+        "3c79ec251c0c9e0831dcc2cf541c5dda",
+        "b6a71e3e9b924e0f363dbe847949141c",
+        "807af8ed74954311649aa47a52ff3061",
+        "4f6e7f64edf1a47b80bf8d8645fc6d3e",
+        "e283c10328ca0fb0f25e39ba74921bb4",
+        "649bcc2d5a5b841c495f9d1f4cb31542",
+        "e11780f33e850a77d1b3c2fa13ed5d4b",
+        "09d557bf440b6c3b40cacfbb24fd5e28",
+        "d88bc916d7a63d1ba7acb546f73221a6",
+        "b434987762763bf0d2d94d288374e90d"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4756,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "4766ab98bd887ed8c0901e6494dbd734c984694bfe88070199a194808ea3aea5",
+      "inputHash": "cb5fdf402b34a102e80fa378f5641dc7705c351471afc79128b44bbd0d6b07d5"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "finance-reconciliation-train-07",
+      "title": "财务订单金额与分期复核 7",
+      "recordIds": [
+        "a00a8c938ecc721a55b033b93e8deeee",
+        "0607a1c003c16725855f65d6b738028a",
+        "91ebb37f25ceaa8a3fbac92d2e1711ac",
+        "e928ff37a53d06de70f40f1cc47ad7a1",
+        "31f8ec47a5ed8e8e24f730ccbb66baa4",
+        "9ec3685b1f21c7dfff4f656392b186dd",
+        "3614e1d9603e0068d80dcf12c407795f",
+        "fe0105a4696c7d31837cb3130fe9c4b1",
+        "78d7cdfcab0a42ea5428365d6ad0ff34",
+        "5aa65b67d199200514ab0d0a701199d2",
+        "d48c5016ab8af7b122d630cd75a63627",
+        "1bc003426b11b20491aa5b7810c9cbf2"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4741,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "986defffc66720230c0e655a1ad6c3c7ace94cb43968fe60275ddaed52da30ff",
+      "inputHash": "45b0fb13ccee6ceb056bec1471a17e42895a1991c2805beee3c706de2a683081"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "finance-reconciliation-train-08",
+      "title": "财务订单金额与分期复核 8",
+      "recordIds": [
+        "f63f9a7699e3674c80a4ba92e56dfbb8",
+        "a9a6fd3ca2e803548ec0685c9261a4e2",
+        "129c58b77c85a73933e98de57c705559",
+        "309d93b13e288fdf8b2f10db048f0f69",
+        "c17fde14eedbd5559d73d27af557fa50",
+        "c5138f289232734a71dc949e763c3dc1",
+        "735dce2d574afe8eb87e80a3d6229c48",
+        "7f13340e916ed8270e11c9e840317f98",
+        "7144e3464cff785210679dc9bf9b30ef",
+        "aa0fdfac2fac6ad23cfa368f687433cc",
+        "c235bf02873c715d34d2036031d3b9c7",
+        "84e79b84144443a29fcd4da110a8896f"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4839,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b3903d703f2d6a03120810dec9e6be2839cf532633a817c8186fb8e29ca0e14a",
+      "inputHash": "bbce957b96c4bd6d054af65e6f4a98e222e9c72f6eeb40904f247f92be98814a"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "finance-reconciliation-validation-01",
+      "title": "财务订单金额与分期复核 1",
+      "recordIds": [
+        "2fdd2e028b2bcf3930e37c1088ecfe2e",
+        "2a717d97f9d41948b82901d96fb388ff",
+        "11a684a126660a21fecde8c48a1cfebd",
+        "7edec473f1cd19fe9a5fcc2b2290a7f7",
+        "b9d8d7815861b6e51ca61f3f81d5b9f1",
+        "c3cf7465747be7d711f6fd7f08a7ec65",
+        "178a25841b0490cf789963c9a98cac1e",
+        "beecb33087d159cc2dc627ff4a1fb9e1",
+        "e2bacfc6a86c742ba0f3a6e1f9df13dd",
+        "d34d57040fbd8cc561fddf442352f8eb",
+        "8c9cc9d7e2dfc4cb091854203914cade",
+        "d0bd537e7e77a73e81af9b780f6a4c17"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4614,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b3903d703f2d6a03120810dec9e6be2839cf532633a817c8186fb8e29ca0e14a",
+      "inputHash": "f931a74ff0dbd2f493667a44326d27fa04845b406a52f1861f08c23e18eb9ddc"
+    },
+    {
+      "scenario": "finance",
+      "group": "reconciliation",
+      "groupLabel": "订单金额与分期复核",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "finance-reconciliation-test-01",
+      "title": "财务订单金额与分期复核 1",
+      "recordIds": [
+        "c7484ff7d357d78f749b7ffdf44d5315",
+        "938ceb503f66e3598a6e79a24745ac16",
+        "bbec914f0b66a98578b9d47f241ba92d",
+        "a4569e83b396f45f5bad001bce729da0",
+        "9566b36fbba7756a79b5d2cba4e058d9",
+        "141f7d3071b3a6ebbc34ea1454624e3f",
+        "74322a01b770c2ea38b56ed4c96071df",
+        "0193517cd10a54473b6fd8392b58313f",
+        "bf9b9000c617c6eb39e6666c98f7493d",
+        "1cd27ea64a7708735cd38f4eae93a8d9",
+        "3bad8fb6fe7c6a350d5a616611d7500e",
+        "82eac7c627107b7699fb95a7c5961127"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 11
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4631,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b3903d703f2d6a03120810dec9e6be2839cf532633a817c8186fb8e29ca0e14a",
+      "inputHash": "4fdd40a2b9228468a836169f9e856f6793dcdd3ffa88f5244f6c0e7c8243835a"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 1,
+      "precheck": false,
+      "id": "finance-payment_structure-train-01",
+      "title": "财务支付结构与期间复核 1",
+      "recordIds": [
+        "20c01dd7a0783578fb672819519685ca",
+        "7a72c1fd5627aa02ca282679bad2ebd1",
+        "6acc8234fbe95cdf6e5e160bc5a23ad0",
+        "b7500c718b66aa61283dcc1565a39bf0",
+        "0c6e84e1109b6c5630774291a85fef1c",
+        "dbee9ddfb8d2d10e047b6cb5ac6c2318",
+        "95fa26b6ea476ed040e592e0a825d6f0",
+        "6e6527028de694ccade37f5a15a6d84a",
+        "567694848ecdb6633bef4b3b48bbc4d2",
+        "eca3f5e429027f406b64f21754673030",
+        "80da866a2f8257c4878f249ffa36390f",
+        "c9e24a111a89474ce28ed0bd70b94eb7"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4617,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39acceb43bf439788e48f3025f0aebbca7d39568c162fef8f72ea4b0ad4ce0e3",
+      "inputHash": "347734519aa9a0c073f1a6fb8c3218fa8cd235b2b23a192e6ad58c02cb656f9c"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 2,
+      "precheck": false,
+      "id": "finance-payment_structure-train-02",
+      "title": "财务支付结构与期间复核 2",
+      "recordIds": [
+        "2fe95e63972d1a35491a2cf058c422ea",
+        "51bf8106a8d1c81d402b04fe983b9b0c",
+        "c34fe20a21a65490fa6b815f0435059a",
+        "27ee3c5633d367f617c3dd7c5037edd7",
+        "a231611f82f7625fba490466e2606aa5",
+        "93aa3771306828f17309cce989a90e5f",
+        "5d8e9c0a711b826b72298f9abeb269cd",
+        "810d240376bb779d47af63e9b781f4f4",
+        "5a0a4c1f366a0fcae698f3de1f03c0fd",
+        "c72f5bd034e8242048f9572c4f3c7fbf",
+        "51bda649419be0084a39cb53e9c6f262",
+        "56966791d3e19333e9cdf99782963127"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4618,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "8e6626f303b054fddaa40d3f95ee5f52c56adecd3aae5641e5886743522bf99b",
+      "inputHash": "878fa5c38049ee135ea579092c49c34b6d54d657fd336392ddb2bcd6773d690b"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 3,
+      "precheck": false,
+      "id": "finance-payment_structure-train-03",
+      "title": "财务支付结构与期间复核 3",
+      "recordIds": [
+        "c3897336d5d3d5a54fd2203ee9483312",
+        "50ef70ab0e17f1d235cada82f7189bbb",
+        "49e6f4ed0034a19d7c8051244c8d64ba",
+        "ae22ff58af6a02d30bd820bfc1f2cb3f",
+        "e35528176e3374bcb21842931b5a3e8a",
+        "59d51b78853d8f69413cee505d705ba1",
+        "443aabd96751d0f91e92d34dae9f473a",
+        "c9850ddef84ecbf5cbe2c3f4aef7ab6b",
+        "055cf2a6f9343f99acdb5e8f70e49bd8",
+        "517a1bc05da7b712cb2580d142b0cc4d",
+        "d44fc0af1ec0ebbab612f2936147f717",
+        "55be669b624a706853ba200519c57acd"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 18
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 5276,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "db8bd0590ebeab31b1c274b274ae67242c1a2d0bb97c4e0ae376ca5282fe82e3",
+      "inputHash": "b4c1ff91b2f119a6c3e5b8523ddd314a6755346255ee0c363e913ff46abfc39f"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "finance-payment_structure-train-04",
+      "title": "财务支付结构与期间复核 4",
+      "recordIds": [
+        "696428244100d1ab711bc608f832e5ef",
+        "453324816882143205ab00b92ea16f47",
+        "0cea1002b907a645918a03922e9fadbd",
+        "cb064e8f8f0371573859e393d973c337",
+        "9c4dfa7a4f01d5042e9363edd0c7c7b9",
+        "7775f1a362c378b553296a6ac824ad0e",
+        "bf210c81ef1a94cbfb1bd7b2767a0cdb",
+        "9126e0aefae0b65e52c837440e8010a5",
+        "86309254ed4a0698cf9b97e5d28637df",
+        "d447462f58938dfc50467353f88655cb",
+        "5ddb18c0837af203e55bb5273ad3fa60",
+        "07b9098123333f897ad332b7c9c3820d"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4627,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39acceb43bf439788e48f3025f0aebbca7d39568c162fef8f72ea4b0ad4ce0e3",
+      "inputHash": "090726f14d211da85fca51f2c2f6cd9cf0f35978fee61fc0639e2bc879aa9475"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "finance-payment_structure-train-05",
+      "title": "财务支付结构与期间复核 5",
+      "recordIds": [
+        "40a24d4585c66a3d7ba902a7dcd233a9",
+        "81db77f7fab05cb60fa338aee13d08c7",
+        "a39b459bad02888e07ddf9d3321673c7",
+        "31cee66926e60ce4e5af0e4b9e2886d7",
+        "f26d4637c4f560f72ba7feac1675c100",
+        "d4acee3ee57cea5cac8b23fadcabbeda",
+        "7ede7940d99eca2cca79e5120a63f3f3",
+        "e6773c853a5c599fd82b2289c538a1a5",
+        "638cad2c050551138562aaae90afbb6c",
+        "945977d780700b75a6eb2ccd81566d4a",
+        "3347d1c2249e2e53f4ebb12db1ebdf91",
+        "bca2c019b40c204248a56707eabb2a2c"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4744,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "8e6626f303b054fddaa40d3f95ee5f52c56adecd3aae5641e5886743522bf99b",
+      "inputHash": "5b039a2fefada7c344ddb1766521399d67f79745241cdf4fd9e57d3fc0107de9"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "finance-payment_structure-train-06",
+      "title": "财务支付结构与期间复核 6",
+      "recordIds": [
+        "bab61aa88a055fe040e8868a7507921b",
+        "6f4c29759e17be1153ee866b44393853",
+        "e73c844f36e48f6d0cc8ae6b97a6176a",
+        "20085191cbcabee83a2016eb4a9fbf21",
+        "e5733d3b62d5801dc002212d48f5cd89",
+        "e7df3fcd195fafd25a46f580fc96c9f3",
+        "abf60bca751436919479c6ad94cf5c0b",
+        "92108d9a563df7232a318d0736680ea5",
+        "9100ea91afedf9030ae77fe3871d7df6",
+        "ba9e135697c2fbf721ea10bb6d7c0d17",
+        "08f27a5ffb706cb79c10365101fe6791",
+        "7fbcbe13cc35fceecf99aa3e64d9dea1"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 11
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4521,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "db8bd0590ebeab31b1c274b274ae67242c1a2d0bb97c4e0ae376ca5282fe82e3",
+      "inputHash": "fb5633bd1166f93416a80fda4f8ebbb0456c88d0b2e05e43f1dd8e35c97664e0"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "finance-payment_structure-train-07",
+      "title": "财务支付结构与期间复核 7",
+      "recordIds": [
+        "40de47dfa620d667117e4a6067b6e1ec",
+        "4db34232e511af6c285aad652d4e5367",
+        "75ceee59b8189aba5543675b806600ae",
+        "f4fdb235ce7c1f7d3eb1b2fdd3a4f610",
+        "78f792994f6c292b8038b7c4b5c3d9df",
+        "1b3d029e5f088cea5910cccc6f480c33",
+        "cdd4fd6abe91d418574b7001b682cf87",
+        "20f4a0b8b5726a8e9a32a246e345b9d1",
+        "77749ba00bdd3c6d19363c493a38bea5",
+        "4b7597bd96f89b605623a55db1471b1d",
+        "4c6f9679175cfb7119be763dd898c8a1",
+        "56a5173d04a558bb3ad9f8b2c5901c60"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 16
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 5055,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39acceb43bf439788e48f3025f0aebbca7d39568c162fef8f72ea4b0ad4ce0e3",
+      "inputHash": "cdb89d296714aa576a02a780f98377cfd90534e4a4a09ca7e51400b793a6b7df"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "finance-payment_structure-train-08",
+      "title": "财务支付结构与期间复核 8",
+      "recordIds": [
+        "30772e8067a521b283ee42a65370a040",
+        "cc484d1c7265e544f0ec4d9c7a8b04dd",
+        "00335b686d693c7d72deeb12f8e89227",
+        "0b82d0616f1ad8da15cf967b984b4004",
+        "b8834035b657b559585c6c1243e82f9b",
+        "56de333dae82ab3c1d1d123e55d882fc",
+        "bb3463b1de5e29d8d574a1e422777763",
+        "6541aed6de52f3a9f2cb99afe498dde4",
+        "f32227b3b1feb07ef88fec29e87d81cf",
+        "a02dc27653c8ef244fd7d8c4d5bc81f5",
+        "fbd3f15f34958b4aa4d193afa4a7278b",
+        "054418a6880b7e815bf64730ef040574"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4614,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "8e6626f303b054fddaa40d3f95ee5f52c56adecd3aae5641e5886743522bf99b",
+      "inputHash": "bb09131c6604bd3efd1ebed6877bfdeb7a82996a9f172897719e604f4ec0cfef"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "finance-payment_structure-validation-01",
+      "title": "财务支付结构与期间复核 1",
+      "recordIds": [
+        "183c12927ff8c2fbbd1786541de98dca",
+        "a78d3e0dd36caaa19d8b61e8de27ad1a",
+        "fe550a071fd93fdf2ad73e26e878ea3d",
+        "f163011d712f39566f8631259e471129",
+        "5c8016724722d7906a7e8cfa22d7727d",
+        "067ce97888318cd8d89a45bcb4adc94b",
+        "13022256b6b5b8535e57b1877c0812ee",
+        "9dece38ba34c2b0050efef28e85d7bde",
+        "e79e9586e0286172870edc4c3f428966",
+        "097255cccb9ac174d481479fae72556d",
+        "d105b386fa5b4aab107c43ba2760f64b",
+        "f776c57636792f1caf6b4611aa890464"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4724,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39acceb43bf439788e48f3025f0aebbca7d39568c162fef8f72ea4b0ad4ce0e3",
+      "inputHash": "d7943cbde24f77e804de62e61c7a98ba4b10ae8b7acde568104db6e58fd728d3"
+    },
+    {
+      "scenario": "finance",
+      "group": "payment_structure",
+      "groupLabel": "支付结构与期间复核",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "finance-payment_structure-test-01",
+      "title": "财务支付结构与期间复核 1",
+      "recordIds": [
+        "5e32d63948bae10a5a878d024e3e4e37",
+        "6852a9d0c08f5a070ce88d62b4a59321",
+        "02ae2a6d1d1f1432dc743ca4f67033df",
+        "78f60565caf7dc3b87f6e1e9b03b691d",
+        "9c8b7e134959999ac945ed2b29537c8b",
+        "48a310c40917683b0b399849b50cb76f",
+        "484e56ded428e884844b504d37d0fbca",
+        "4f4830984a832508339321d903174164",
+        "59f87094523d9fdf75be312f4dc19303",
+        "1ad7baba8774d5fb92d731478a68f3bb",
+        "e19721a12bc1caeb2095db14d8d6fc4e",
+        "4aa3affa1cabce4defa1f592b369baba"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4827,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39acceb43bf439788e48f3025f0aebbca7d39568c162fef8f72ea4b0ad4ce0e3",
+      "inputHash": "0cb3b7b670832eff44bb69e5847115c7461a25691796afc24b99f315a4ad1fe8"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 1,
+      "precheck": true,
+      "id": "support-transfer_timing-train-01",
+      "title": "客服投诉时效与转交复核 1",
+      "recordIds": [
+        "9999637",
+        "9998226",
+        "9999986",
+        "9998576",
+        "9999156",
+        "9999698",
+        "9705711",
+        "9999063",
+        "9996931",
+        "9785547"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9583,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "407057f6fc0fafba465a4a43262590b231662caebfac8cc8b4ff24c82cfdf56d"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 2,
+      "precheck": true,
+      "id": "support-transfer_timing-train-02",
+      "title": "客服投诉时效与转交复核 2",
+      "recordIds": [
+        "9999305",
+        "9942229",
+        "9996361",
+        "9999478",
+        "9999304",
+        "9999665",
+        "9999331",
+        "9999091",
+        "9999788",
+        "9999951"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8938,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12
+      },
+      "requestHash": "7acf5f629c464af5d13247c0dd4610b3b8c48c4124ee917f3b0513cbc370fa94",
+      "inputHash": "9800b02dd312cb81a375bd94fdf1f83645337e05d2ec24bb13c2db39018dac51"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 3,
+      "precheck": true,
+      "id": "support-transfer_timing-train-03",
+      "title": "客服投诉时效与转交复核 3",
+      "recordIds": [
+        "9870684",
+        "9999475",
+        "9996634",
+        "9816282",
+        "9996761",
+        "9999208",
+        "9998826",
+        "9997898",
+        "9998953",
+        "9998712"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 10369,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "6408a6633545f6aa44eb73d2446aa227e3c2e578044a19c63793e27b4f0abf4a"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "support-transfer_timing-train-04",
+      "title": "客服投诉时效与转交复核 4",
+      "recordIds": [
+        "9998289",
+        "9999474",
+        "9998586",
+        "9997264",
+        "9999625",
+        "9999326",
+        "9829726",
+        "9996296",
+        "9999216",
+        "9999473"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9598,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12
+      },
+      "requestHash": "7acf5f629c464af5d13247c0dd4610b3b8c48c4124ee917f3b0513cbc370fa94",
+      "inputHash": "48d5ff69d9babd07b4549cc26109ee1d0cfed966ce5a5a98cf5d8520629644f7"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "support-transfer_timing-train-05",
+      "title": "客服投诉时效与转交复核 5",
+      "recordIds": [
+        "9999088",
+        "9997914",
+        "9999683",
+        "9999589",
+        "9999809",
+        "9999984",
+        "9999333",
+        "9973358",
+        "9997602",
+        "9999130"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 7888,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "e0d1b3d79f892561dcf813861ec1fc3a839f54ebef40523f1de59653a9a5cf4d"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "support-transfer_timing-train-06",
+      "title": "客服投诉时效与转交复核 6",
+      "recordIds": [
+        "9997748",
+        "9998913",
+        "9996794",
+        "9999124",
+        "9975241",
+        "9999677",
+        "9998509",
+        "9999775",
+        "9999189",
+        "9999421"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8492,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8
+      },
+      "requestHash": "3288edf4bd3d33312dc7f5c29ed30f454cf53be6806e3d9310f99c9cad96a9c7",
+      "inputHash": "88cd2e39bf4336ab67b0ef326e2da71183591d2da12d785ab6293980621a4cd5"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "support-transfer_timing-train-07",
+      "title": "客服投诉时效与转交复核 7",
+      "recordIds": [
+        "9996336",
+        "9997743",
+        "9999871",
+        "9999033",
+        "9998631",
+        "9996950",
+        "9996325",
+        "9705919",
+        "9999588",
+        "9999813"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9136,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 10
+      },
+      "requestHash": "7acf5f629c464af5d13247c0dd4610b3b8c48c4124ee917f3b0513cbc370fa94",
+      "inputHash": "c799b2484fc6c2439c66a69789fc49a33d8eb659dbccaf4e592a19ca62ddc341"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "support-transfer_timing-train-08",
+      "title": "客服投诉时效与转交复核 8",
+      "recordIds": [
+        "9996249",
+        "9998331",
+        "9998439",
+        "9999484",
+        "9997879",
+        "9999449",
+        "9865123",
+        "9998851",
+        "9996337",
+        "9996739"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9540,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "064a63b7c4c79762930e1157c30debd5ccf4de1a07d0f5ff696cb82901338b58"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "support-transfer_timing-validation-01",
+      "title": "客服投诉时效与转交复核 1",
+      "recordIds": [
+        "9997423",
+        "9998745",
+        "9920269",
+        "9999811",
+        "9996257",
+        "9999733",
+        "9997991",
+        "9999436",
+        "9861551",
+        "9999287"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 11483,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "b566d1e11873585f71470a0c3ae1e6ee7315c7c1fbb11a76890a683ead27cfec"
+    },
+    {
+      "scenario": "support",
+      "group": "transfer_timing",
+      "groupLabel": "投诉时效与转交复核",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "support-transfer_timing-test-01",
+      "title": "客服投诉时效与转交复核 1",
+      "recordIds": [
+        "9998780",
+        "9999330",
+        "9999059",
+        "9999161",
+        "9998095",
+        "99996",
+        "9999031",
+        "9997883",
+        "9999747",
+        "9999133"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9595,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "34ad142e2a303b66f10af32f083b404828494cc8935f73e2ba94cc2a5b924ea5",
+      "inputHash": "a63f8dbbdffe049165b3d23b278e732f402edf9e99dcfd57f5b400a6a82cbc24"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 1,
+      "precheck": false,
+      "id": "support-response_coverage-train-01",
+      "title": "客服投诉响应完整性复核 1",
+      "recordIds": [
+        "9997260",
+        "9999370",
+        "9999104",
+        "9999989",
+        "9998898",
+        "9999284",
+        "9999848",
+        "9999933",
+        "9999310",
+        "9999213"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 7326,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 14
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "9d605dc7337f0f7b7747e3f7db1011b1cc8f402fff5a7eae3ffa0e0241773013"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 2,
+      "precheck": false,
+      "id": "support-response_coverage-train-02",
+      "title": "客服投诉响应完整性复核 2",
+      "recordIds": [
+        "9998461",
+        "9998724",
+        "9999519",
+        "9997712",
+        "9998403",
+        "9999970",
+        "9959869",
+        "9998773",
+        "9997023",
+        "9775619"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10013,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "ea2959e261e419a1cb6d44430e87b33639ebd2e42d040f704fd07400e39ecacf"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 3,
+      "precheck": false,
+      "id": "support-response_coverage-train-03",
+      "title": "客服投诉响应完整性复核 3",
+      "recordIds": [
+        "9939148",
+        "9999250",
+        "9999882",
+        "9864100",
+        "9999173",
+        "9974816",
+        "9781029",
+        "9999739",
+        "9999880",
+        "9997498"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 8820,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "201e271f911fdab1b78a922088f5f3ce501d9a87eac9a223fc79be1192aa4d27"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "support-response_coverage-train-04",
+      "title": "客服投诉响应完整性复核 4",
+      "recordIds": [
+        "9999641",
+        "9998623",
+        "9999752",
+        "9998747",
+        "9999510",
+        "9999548",
+        "9998272",
+        "9999232",
+        "9802297",
+        "9999299"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10285,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "3812c9277c61dc848dbcbf9339e233f439ef26a3d1d8792373d2d803b646d3c7"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "support-response_coverage-train-05",
+      "title": "客服投诉响应完整性复核 5",
+      "recordIds": [
+        "9997464",
+        "9999152",
+        "9996951",
+        "9999446",
+        "9998928",
+        "9999182",
+        "9999289",
+        "9999602",
+        "9999503",
+        "9999428"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 8895,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "de7516f271d371db6dc4dbf0e31dc4d14dcb80e2e4ab8ecfe64e6bd79eba1206"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "support-response_coverage-train-06",
+      "title": "客服投诉响应完整性复核 6",
+      "recordIds": [
+        "9998976",
+        "9997420",
+        "9999203",
+        "9996478",
+        "9999612",
+        "9709536",
+        "9996752",
+        "9777702",
+        "9998416",
+        "9999212"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10105,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "efa1b42dea7ddce8aaae04e0d455daa6b47ea501f91898a20ce450896a843df9"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "support-response_coverage-train-07",
+      "title": "客服投诉响应完整性复核 7",
+      "recordIds": [
+        "9999559",
+        "9998727",
+        "9998960",
+        "9999925",
+        "9999528",
+        "9997470",
+        "9999012",
+        "9997177",
+        "9999184",
+        "9996678"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10185,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 10
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "23fd39ee508cd9df515089fc637733a17cb4292e3367b71fada0ede7c32891cb"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "support-response_coverage-train-08",
+      "title": "客服投诉响应完整性复核 8",
+      "recordIds": [
+        "9999607",
+        "9951128",
+        "9999634",
+        "9999713",
+        "9996701",
+        "9999114",
+        "9998114",
+        "9937928",
+        "9998305",
+        "9804059"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10179,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "126023817cb4185c9c63b71155d4157eefd88331e0b454bdac234e18480b5ece"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "support-response_coverage-validation-01",
+      "title": "客服投诉响应完整性复核 1",
+      "recordIds": [
+        "9800150",
+        "9998064",
+        "9999094",
+        "9999056",
+        "9872144",
+        "9997418",
+        "9999863",
+        "9996882",
+        "9999902",
+        "9998377"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 12254,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "1ef879298b2542262b206b7c8dae92c54093fc2d0f82ac5b71f287528a2fd438"
+    },
+    {
+      "scenario": "support",
+      "group": "response_coverage",
+      "groupLabel": "投诉响应完整性复核",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "support-response_coverage-test-01",
+      "title": "客服投诉响应完整性复核 1",
+      "recordIds": [
+        "9996891",
+        "9998768",
+        "9878941",
+        "9996393",
+        "9999815",
+        "9998998",
+        "9997257",
+        "9998111",
+        "9999793",
+        "9999702"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 9809,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9
+      },
+      "requestHash": "f5fba307177f8f9606705f8bff705e70c42d29d88ec1a714cb405dc7a9a05c9f",
+      "inputHash": "f97ee58ed2e2fb80873f4b53452f113a4c862fdcafc98933deb9d4c520913fab"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 1,
+      "precheck": true,
+      "id": "tickets-activity_triage-train-01",
+      "title": "技术工单问题活动分诊 1",
+      "recordIds": [
+        "5946",
+        "6093",
+        "4501",
+        "4138",
+        "5256",
+        "3205",
+        "5896",
+        "6254",
+        "6164",
+        "5756"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3484,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "10259d9347a974e44c887139edb64de44f04bb107c52b0ce26677d64b66aa3a8",
+      "inputHash": "56386c9fee3e3d4554b603966b3d49615387a86be7c82c640fc2fc65084c4b68"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 2,
+      "precheck": true,
+      "id": "tickets-activity_triage-train-02",
+      "title": "技术工单问题活动分诊 2",
+      "recordIds": [
+        "5911",
+        "6337",
+        "3097",
+        "5735",
+        "6134",
+        "6122",
+        "5659",
+        "6028",
+        "5794",
+        "5707"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3241,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "47e986b452ae028266128fb2c1b1325b484fcbcbf0765a303551d7f69636b39b",
+      "inputHash": "90c6814dc9c1964ccc3e67dc3eb35d1e2e237a315ba7d2c13c6fca0cc2a965c9"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 3,
+      "precheck": true,
+      "id": "tickets-activity_triage-train-03",
+      "title": "技术工单问题活动分诊 3",
+      "recordIds": [
+        "6162",
+        "4527",
+        "5922",
+        "5667",
+        "3343",
+        "2835",
+        "5919",
+        "6183",
+        "5797",
+        "3904"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3331,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "10259d9347a974e44c887139edb64de44f04bb107c52b0ce26677d64b66aa3a8",
+      "inputHash": "0446c5e8a97887b295f4940f2dc42d5d197f4cd70afa325327c8dbedc6974d5d"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "tickets-activity_triage-train-04",
+      "title": "技术工单问题活动分诊 4",
+      "recordIds": [
+        "5858",
+        "3216",
+        "6301",
+        "2844",
+        "6237",
+        "6212",
+        "5113",
+        "6056",
+        "5670",
+        "4923"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3386,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8
+      },
+      "requestHash": "47e986b452ae028266128fb2c1b1325b484fcbcbf0765a303551d7f69636b39b",
+      "inputHash": "821e660e17838d8dfb936082606c43f5c14ae36063c06eb55ce19e5bb7acfa61"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "tickets-activity_triage-train-05",
+      "title": "技术工单问题活动分诊 5",
+      "recordIds": [
+        "4398",
+        "5915",
+        "5691",
+        "6282",
+        "5916",
+        "4303",
+        "2849",
+        "5651",
+        "5157",
+        "6115"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3423,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "54a16dc4d0cfd46376239a7da1470734d3092507d9a3e26bc817174d5954cd2b",
+      "inputHash": "64f85346c9b6f5708b62055be85ac2c82ec17001934c9602c9920c050020385f"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "tickets-activity_triage-train-06",
+      "title": "技术工单问题活动分诊 6",
+      "recordIds": [
+        "4903",
+        "4619",
+        "4777",
+        "5793",
+        "5887",
+        "5820",
+        "3118",
+        "5833",
+        "5697",
+        "5717"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3322,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "47e986b452ae028266128fb2c1b1325b484fcbcbf0765a303551d7f69636b39b",
+      "inputHash": "ccd34fc209fd7b1f318e18515ca26cd2eff5d5c64f3b13e72eba57ade5a3d075"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "tickets-activity_triage-train-07",
+      "title": "技术工单问题活动分诊 7",
+      "recordIds": [
+        "5871",
+        "5904",
+        "5805",
+        "5750",
+        "3339",
+        "5680",
+        "6136",
+        "5349",
+        "6049",
+        "6157"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3274,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 3
+      },
+      "requestHash": "10259d9347a974e44c887139edb64de44f04bb107c52b0ce26677d64b66aa3a8",
+      "inputHash": "5e0ecd1f4fc4d9d0b8e91811e26def3bf0ca60b7f2d7cee01532ec72fb1bd4b4"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "tickets-activity_triage-train-08",
+      "title": "技术工单问题活动分诊 8",
+      "recordIds": [
+        "6079",
+        "6229",
+        "6142",
+        "5710",
+        "5827",
+        "5902",
+        "6281",
+        "6278",
+        "5791",
+        "6084"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3361,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "54a16dc4d0cfd46376239a7da1470734d3092507d9a3e26bc817174d5954cd2b",
+      "inputHash": "19a609047b947455d712122873fb2cc9eb47b2ff5cccb973c168ed4f32e25a80"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "tickets-activity_triage-validation-01",
+      "title": "技术工单问题活动分诊 1",
+      "recordIds": [
+        "2724",
+        "6260",
+        "6158",
+        "6088",
+        "5774",
+        "4737",
+        "5761",
+        "5690",
+        "2655",
+        "2805"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3410,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "10259d9347a974e44c887139edb64de44f04bb107c52b0ce26677d64b66aa3a8",
+      "inputHash": "3a35c7b86e6c390beff402955db650bdb448ba5bed88873877185db703227a20"
+    },
+    {
+      "scenario": "tickets",
+      "group": "activity_triage",
+      "groupLabel": "问题活动分诊",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "tickets-activity_triage-test-01",
+      "title": "技术工单问题活动分诊 1",
+      "recordIds": [
+        "6190",
+        "5879",
+        "5669",
+        "5719",
+        "6244",
+        "5921",
+        "6155",
+        "4955",
+        "5726",
+        "5595"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3141,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "10259d9347a974e44c887139edb64de44f04bb107c52b0ce26677d64b66aa3a8",
+      "inputHash": "e188b21c92204b23c2aa6ed0e01dfb734aa3cea9aeb1863a71535751fb17d850"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 1,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-01",
+      "title": "技术工单问题排期与指派复核 1",
+      "recordIds": [
+        "6340",
+        "5907",
+        "4908",
+        "2774",
+        "3683",
+        "5752",
+        "4312",
+        "6017",
+        "6091",
+        "6304"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3378,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "9393efa0f4fd073b89b140c263d32f930e072eb27324fc9ff27030fc2dd97d25"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 2,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-02",
+      "title": "技术工单问题排期与指派复核 2",
+      "recordIds": [
+        "5866",
+        "6317",
+        "5876",
+        "2635",
+        "5920",
+        "3951",
+        "6076",
+        "6042",
+        "6230",
+        "3884"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3316,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "9bb8e7425ddb5cf5cbe5049484a8d48577c138c7d207c2ae450eae495b32c94b"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 3,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-03",
+      "title": "技术工单问题排期与指派复核 3",
+      "recordIds": [
+        "5677",
+        "5979",
+        "5768",
+        "6184",
+        "6323",
+        "5884",
+        "5778",
+        "6219",
+        "5716",
+        "5798"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3164,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "0e1b385af83a9fbe5b061317b57e8d0d7e9cdfcb4c0a949ac0c21375c3f56ba5"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 4,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-04",
+      "title": "技术工单问题排期与指派复核 4",
+      "recordIds": [
+        "6061",
+        "5702",
+        "6161",
+        "3864",
+        "6225",
+        "4287",
+        "5744",
+        "4788",
+        "6105",
+        "6262"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3505,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "76d057202ee5b36ea710211920a8b5df2124f52efc9d5da498c4c1aa71a6723e"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 5,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-05",
+      "title": "技术工单问题排期与指派复核 5",
+      "recordIds": [
+        "5804",
+        "6203",
+        "4916",
+        "5486",
+        "5699",
+        "5776",
+        "2533",
+        "5847",
+        "5733",
+        "5914"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3163,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "5251c66f4ad85b6c410ce16b9d508cad8ebe53a16f8a4cc8f5340c2b61e9463c"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 6,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-06",
+      "title": "技术工单问题排期与指派复核 6",
+      "recordIds": [
+        "5679",
+        "6144",
+        "5950",
+        "5974",
+        "5933",
+        "5998",
+        "3715",
+        "6186",
+        "6176",
+        "4866"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3263,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "bf8a3b828a183240fa67d137eacdc072c93f17b1cb46660e8fcce9c2850f63fb"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 7,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-07",
+      "title": "技术工单问题排期与指派复核 7",
+      "recordIds": [
+        "5008",
+        "5882",
+        "5652",
+        "4705",
+        "5860",
+        "6221",
+        "5823",
+        "4006",
+        "6131",
+        "6096"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3313,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "fc6c9f5a1875f5dd93aec440a11d9306a858edafef87335da621dace1244af08"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "train",
+      "position": 8,
+      "precheck": false,
+      "id": "tickets-release_readiness-train-08",
+      "title": "技术工单问题排期与指派复核 8",
+      "recordIds": [
+        "5808",
+        "3219",
+        "5857",
+        "4615",
+        "5765",
+        "5728",
+        "6148",
+        "6146",
+        "5634",
+        "5850"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3295,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "2f88ea977e339be2779a2764f736632b58c4ce5feb47645cb47ae976ddb796b0"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "validation",
+      "position": 1,
+      "precheck": false,
+      "id": "tickets-release_readiness-validation-01",
+      "title": "技术工单问题排期与指派复核 1",
+      "recordIds": [
+        "4495",
+        "4832",
+        "6249",
+        "2839",
+        "5762",
+        "5874",
+        "3440",
+        "6140",
+        "5867",
+        "5864"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3394,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "c2c30dcb8a866c989a18020e4629971c2c1dadfeee3d5573ec20e8bf496806e2"
+    },
+    {
+      "scenario": "tickets",
+      "group": "release_readiness",
+      "groupLabel": "问题排期与指派复核",
+      "split": "test",
+      "position": 1,
+      "precheck": false,
+      "id": "tickets-release_readiness-test-01",
+      "title": "技术工单问题排期与指派复核 1",
+      "recordIds": [
+        "4914",
+        "5809",
+        "6060",
+        "5640",
+        "5865",
+        "5873",
+        "6284",
+        "5636",
+        "5932",
+        "5643"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3368,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "0b0db0406ad5769653a6de63e45a1129eb2845d181c8225b5c18fde089727fe0",
+      "inputHash": "b9ca54f173928639fd6a3153e5c9a179bf3dd3c53ce4f1f667aaad9b6266fcbb"
+    }
+  ],
+  "sources": {
+    "finance": {
+      "provider": "Olist",
+      "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+      "license": "CC BY-NC-SA 4.0",
+      "rawSha256": {
+        "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+      },
+      "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
+    },
+    "support": {
+      "provider": "CFPB",
+      "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+      "license": "CC0 (API metadata)",
+      "requests": [
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+      ],
+      "rawSha256": {
+        "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+        "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+        "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+      },
+      "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
+    },
+    "tickets": {
+      "provider": "Zammad GitHub Issues",
+      "url": "https://github.com/zammad/zammad/issues",
+      "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+      "rawSha256": {
+        "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+        "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+        "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+        "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+        "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+        "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+        "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+        "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+        "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+        "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+      },
+      "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
+    }
+  }
+}

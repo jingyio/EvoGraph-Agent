@@ -1,10 +1,30 @@
 # 项目状态快照
 
+- 2026-09-14 正式运行前审阅已就绪：`/#evidence` 现在展示6个业务契约、输入字段、48个
+  train题面及冻结hash；题面hash漂移会由Release API失败关闭。当前仍为`not-started`，等待
+  用户审核，不启动付费模型。自然cohort审计发现48个train中8个为空清单，且若干缺失类分组
+  在当前投影中恒为空；完整限制与审批后9对预检顺序见
+  `docs/trajectory-v3-run-approval-review-2026-09-14.md`。
+- 正式工具审阅：两臂共享20个当前工作区工具（14 read、3 compute、3本地artifact），无
+  网络搜索或外部业务写入。轨迹可保存实际成功的read/compute节点，报告保持本次模型边界。
+  六类实验任务的`workspace_publish_report`现前置强制精确metrics键、groups必填及合法组名，
+  避免把可预防的格式缺失留到后置恢复。69项相关Python测试、7项前端测试及构建通过。详见
+  `docs/trajectory-v3-task-and-tool-review-2026-09-14.md`。
+- 2026-09-14 最新状态：当前Release Manifest已切到尚未运行的
+  `trajectory-p05-v3-candidate` / `trajectory-review-v2`。新资产为48 train、6 validation、
+  6 test，三场景各两个公开业务问题、每组8个不同实例；固定预检为每场景主问题前三次，
+  共9对。当前证据因此显示计划48、运行0、无曲线/质量/G/M结论。旧V2失败预检改为
+  historical，原4对运行、失败和开销不改写。
+- 根目录 `test/` 六个问题与V3资产共用同一公开定义；六份XLSX仍来自Olist/CFPB/Zammad
+  公开缓存，只补充原始字段投影与明确派生列，已通过真实上传解析器逐值校验和临时任务
+  创建，0模型调用。公开冻结清单为 `benchmarks/trajectory-review-v2.json`。
+- 当前证据恢复单任务/累计token与串行latency节省率曲线，并保留绝对用量/成功率曲线。
+  失败且usage完整保留在累计分母；usage不完整显示缺口。新候选未运行，因此当前没有点，
+  不从V17/V4/V2补数。实现边界见 `docs/trajectory-v3-asset-and-curves-2026-09-14.md`。
+
 - 2026-09-14 最新前端交付：主导航仅 `#home` 数字员工 / `#evidence` 当前证据，一套App壳。
   `#archive` 由页尾默认折叠入口访问；旧所有实验/调试hash保留query并重定向历史上下文。
-  单一发布清单 `releases/manifest.json` 明确currentReleaseId=trajectory-p05-v2-candidate，
-  experiment=96c69be0-fc62-494a-b05d-2267d0925c03，asset=trajectory-review-v1，protocol=trajectory-v2，
-  runtime=sha256:545d744e92b7654dcf8826f4928a1f939e1f9ac34bc409d8fb7bb43a6c740656。
+  该阶段的发布清单曾指向V2；当前已由本页首条记录所述的V3待运行候选取代。
   当前没有新的formal；页面显示“当前候选版本尚未完成正式对照”，不拼V17/V4。
 - 发布证据API仅从同发布成员run派生效果、修订/来源/后续使用、成本、失败、报告和回放。
   artifact/runtime/asset/protocol不一致失败关闭。历史V4页面移除showcase硬编码，经Archive

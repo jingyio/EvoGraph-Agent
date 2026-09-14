@@ -382,6 +382,29 @@
 .rsi {
   color: #287355;
 }
+.savings-chart {
+  color: #287355;
+}
+.negative-saving {
+  color: #a15d4a;
+}
+.evidence-chart svg .revision-marker {
+  fill: #6d4b1f;
+  font-weight: 700;
+}
+.absolute-curves {
+  margin-top: 20px;
+}
+.absolute-curves > summary {
+  cursor: pointer;
+  color: #315f49;
+}
+.no-evidence {
+  padding: 18px;
+  border: 1px dashed #b9c8be;
+  background: #f7faf7;
+  color: #52685a;
+}
 .chart-legend {
   display: flex;
   gap: 18px;
@@ -601,5 +624,80 @@
   .archive-context > dl {
     grid-template-columns: 1fr;
     gap: 3px;
+  }
+}
+.task-review {
+  margin: 22px 0;
+}
+.task-review-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: #fff4e3;
+  color: #5f4a2d;
+}
+.task-review-intro span {
+  font-size: 12px;
+}
+.task-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.task-review-grid > article {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #d9e3da;
+  border-radius: 11px;
+  background: #fff;
+}
+.task-review-grid h3 {
+  margin: 5px 0 8px;
+  font-size: 17px;
+}
+.task-review-grid p,
+.task-review-grid dt,
+.task-review-grid dd {
+  font-size: 11px;
+  color: #63766a;
+}
+.task-review-grid dl > div {
+  margin: 8px 0;
+}
+.task-review-grid dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.task-review-grid details {
+  margin-top: 12px;
+}
+.task-review-grid ol {
+  padding-left: 20px;
+}
+.task-review-grid li {
+  margin: 7px 0;
+}
+.task-review-grid pre {
+  max-height: 330px;
+  white-space: pre-wrap;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.task-review-grid .task-source {
+  border-top: 1px solid #e4e9e4;
+  padding-top: 12px;
+}
+@media (max-width: 720px) {
+  .task-review-grid {
+    grid-template-columns: 1fr;
+  }
+  .task-review-intro {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

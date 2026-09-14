@@ -3,7 +3,7 @@
   "checks": [
     {
       "file": "财务/输入附件.xlsx",
-      "sha256": "403b7c06a5741991b63ebaf2e1e5d7e02c00bb15be942fcb253234d2a180a8cd",
+      "sha256": "accd996f1966fe51082aa829b6d23d8957ba8bc44d92fcc76583c0f6f7493a34",
       "tables": {
         "orders": 12,
         "payments": 13,
@@ -14,7 +14,7 @@
     },
     {
       "file": "财务/输入附件-扩展版.xlsx",
-      "sha256": "b1c5e3cc4c379d22582efa247cd040e1af97a89ad047cd4ee905babe413547c2",
+      "sha256": "cf85893738b058771bfd0161e1c80d743ecde45892c4c6131b90bcc976c8efaa",
       "tables": {
         "orders": 16,
         "payments": 17,
@@ -25,27 +25,29 @@
     },
     {
       "file": "客服/输入附件.xlsx",
-      "sha256": "6e64b72531aaa6d5d8ec5a41fae41470d8956f7d888ff0e782b6fae40d7ef706",
+      "sha256": "cac7510abf004ddfe5209060e73dc523c33a2e2641be9b51bba0d1d162ff2952",
       "tables": {
         "complaints": 12,
-        "responses": 12
+        "responses": 12,
+        "narratives": 12
       },
       "exactSourceValues": true,
       "uploadAndTaskCreation": true
     },
     {
       "file": "客服/输入附件-扩展版.xlsx",
-      "sha256": "ee23739d832bf57a00ba5df4764d516917b6e65858c477e40a2c35d62db79e1a",
+      "sha256": "0dde886a0f154e454fe0c57048a4d9f0768956a7f4a87f31504f911f17dd1fa6",
       "tables": {
         "complaints": 16,
-        "responses": 16
+        "responses": 16,
+        "narratives": 16
       },
       "exactSourceValues": true,
       "uploadAndTaskCreation": true
     },
     {
       "file": "技术工单/输入附件.xlsx",
-      "sha256": "b37e583d31376a0490d591fbbe3df18db41e260091c9c97d030548df44e51568",
+      "sha256": "6aa873e7589601a16cd45be5d3eb816c3b088f94a8f261a7baed5e108da75e2d",
       "tables": {
         "issues": 12,
         "activity": 12
@@ -55,7 +57,7 @@
     },
     {
       "file": "技术工单/输入附件-扩展版.xlsx",
-      "sha256": "ea0f9d89d637b4ca2315dd523a68e26ac2788ebde61852aad5bdc1205f7e632c",
+      "sha256": "da4c354145de1a270f3f2da0c16e27d558a320dfb0ef5ebcc256da25f5262f37",
       "tables": {
         "issues": 16,
         "activity": 16

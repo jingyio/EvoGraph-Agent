@@ -10,17 +10,20 @@
 图参数、完整事件、错误和字段契约在技术审计折叠区。可从“继续之前的工作”恢复用户
 自己的保存工作区/run。这里不展示实验选择器或benchmark总览。
 
-`releases/manifest.json` 是唯一当前选择源，显式绑定 `trajectory-p05-v2-candidate` →
-`96c69be0-fc62-494a-b05d-2267d0925c03`，状态candidate，任务资产trajectory-review-v1，
-协议trajectory-v2，runtime是保存的SHA-256源码快照，而非当前Git HEAD。候选未正式
-完成对照，页面明确提示；不自动补入V17或V4结果。
+`releases/manifest.json` 是唯一当前选择源。当前指向尚未运行的
+`trajectory-p05-v3-candidate`，任务资产为 `trajectory-review-v2`：48 train、6 validation、
+6 test，严格预检只取每场景主问题前三次，共9对。页面显示计划48、已运行0和“尚未获得
+证据”，不再把使用旧问题资产的V2失败预检作为当前系统。V2仍保留历史审计；不自动补入
+V17、V4或其效率数字。
 
 `backend/releases.py:ReleaseEvidence` 提供 `/api/releases/current`、发布专属evidence、
 pair、run、input、report和selection。每次核对experiment/runtime/asset/protocol以及
 run-task归属，缺失/不匹配报错且不回退其他实验。指标、可靠性、图与匹配修订/来源/
-后续使用、报告和曲线均从这一成员集合派生。读取不学习、不执行工具、不写原工件。
-`CurrentEvidence.tsx` 按业务成果→可信度→进化→成本/可靠性→回放展示，所有下钻
-保留release边界。当前无G/M修订后的实际使用，显示“尚未获得证据”。
+后续使用、报告和曲线均从这一成员集合派生。未运行候选只校验受版本控制的公开资产清单
+并返回空证据。读取不学习、不执行工具、不写原工件。`CurrentEvidence.tsx` 按业务成果→
+可信度→进化→成本/可靠性→回放展示，所有下钻保留release边界。成本区同时展示保存工件
+的单任务token/串行latency节省率、累计净节省率和两臂绝对曲线；失败且usage完整的pair
+保留，usage不完整形成缺口而非补0。
 
 `#archive` 从页尾默认折叠的“开发与历史”进入。历史目录显示各自版本、状态、runtime、
 任务资产与协议，无跨版本总计。旧experiments/trajectory/compare/insights/replay/
@@ -50,10 +53,12 @@ validation/test不写工作区经验。真实G1已有，但后续使用未观察
 name/reason/condition/count/selectedIds/evidenceIds；组内缩写只从本次唯一观察引用绑定。
 所有能力两臂共享，私有真值仅评分；P0.5公开证据范围单独生成，不读取gold补报告。
 
-`trajectory_assets.py` 生成版本化公开任务资料，`trajectory_experiment.py` 冻结并串行执行，
-首次失败pair后停止扩大。`/#trajectory` 只消费同run保存结果、匹配/G/M差异和成本曲线。
-独立新材料见 `test/轨迹复核-v1`，不混入首页固定题库。详细结论与限制见
-[轨迹V2结果](trajectory-v2-results-2026-09-14.md)。以下旧任务库图路径继续保留。
+`trajectory_assets.py` 现生成 `trajectory-review-v2` 的六个公开业务问题契约，三场景各两组、
+每组8个train到达。组标签只在实验控制器统计，不进入任务匹配。根目录 `test/` 的六份手工
+问题由同一函数生成；Excel仅投影真实公开记录已有字段，并明确记录确定性派生列。
+`trajectory_experiment.py` 冻结并串行执行，首次失败pair后停止扩大。旧V2结果见
+[轨迹V2结果](trajectory-v2-results-2026-09-14.md)，新资产与曲线改动见
+[V3资产记录](trajectory-v3-asset-and-curves-2026-09-14.md)。
 
 ## 目标与边界
 
@@ -136,3 +141,13 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 完成的严格串行工件 `online-rsi-serial-final-v4` 额外从原始 run 聚合 P95/最大延迟、最大 token、报告恢复、维护、分页和 phase token。它只生成派生摘要，不会重放 Agent/Judge；Agent 成本与 Judge 的已记录 token 下限分开显示。最终证据边界见 [online-rsi-serial-final-results-2026-09-11.md](online-rsi-serial-final-results-2026-09-11.md)。
 
 展示层的严格报告审计不会改变上述原始结构化 evaluation：它再次核查报告 schema、metric/selection/evidence 精确性、证据在当前 trace 中确已观察，并以有限规则检查摘要中的已知 ID、数字和 `cents` 金额表述。gold 仅在后端进程内用于得到布尔结果；不返回预期答案或未通过的具体业务真值。
+
+## 正式运行前任务审阅
+
+`ReleaseEvidence` 对 `trajectory-plan` 发布返回 `taskReview`：六个业务契约、输入表字段、
+8个train题面变体、预检位置和公开来源。题面由 `request_for()` 生成后与冻结资产中的
+`requestHash` 逐项核对；数量、版本或题面不一致均失败关闭。`CurrentEvidence` 在候选未运行时
+展示该审阅清单，并把质量、成本与回放明确显示为“尚未运行”，不显示0/0 usage卡或空方法回放。
+该读取路径不创建实验、不加载私有答案、不调用模型。内容审计见
+[正式运行前任务审阅](trajectory-v3-run-approval-review-2026-09-14.md)，两臂实际工具面与报告
+Schema见[任务与工具契约审阅](trajectory-v3-task-and-tool-review-2026-09-14.md)。

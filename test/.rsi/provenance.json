@@ -9,8 +9,20 @@
       },
       "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
     },
-    "excludedRecordCount": 1001,
-    "eligibleCount": 58856,
+    "projection": {
+      "sourceFields": [
+        "id",
+        "status",
+        "purchased_at",
+        "payments",
+        "items"
+      ],
+      "derivedFields": {
+        "purchased_month": "first seven characters of source purchased_at"
+      }
+    },
+    "excludedRecordCount": 1012,
+    "eligibleCount": 58845,
     "recordIds": [
       "24778d0f71e47bff8721b93b3aa5b898",
       "fb4717856a1a4e0a10b9230a1f4b7e51",
@@ -50,8 +62,27 @@
       },
       "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
     },
-    "excludedRecordCount": 500,
-    "eligibleCount": 949,
+    "projection": {
+      "sourceFields": [
+        "id",
+        "company",
+        "product",
+        "issue",
+        "submitted_via",
+        "timely",
+        "date_received",
+        "date_sent_to_company",
+        "company_response",
+        "company_public_response",
+        "narrative"
+      ],
+      "derivedFields": {
+        "narrative_excerpt": "first 1200 source characters",
+        "excerpt_truncated": "source narrative length greater than 1200"
+      }
+    },
+    "excludedRecordCount": 509,
+    "eligibleCount": 940,
     "recordIds": [
       "9999454",
       "9998304",
@@ -93,8 +124,22 @@
       },
       "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
     },
-    "excludedRecordCount": 300,
-    "eligibleCount": 307,
+    "projection": {
+      "sourceFields": [
+        "id",
+        "title",
+        "state",
+        "milestone",
+        "url",
+        "comments",
+        "updated_at",
+        "assignee_count",
+        "labels"
+      ],
+      "derivedFields": {}
+    },
+    "excludedRecordCount": 306,
+    "eligibleCount": 301,
     "recordIds": [
       "5667",
       "5821",

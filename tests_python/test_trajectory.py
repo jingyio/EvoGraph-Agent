@@ -135,6 +135,21 @@ def test_unfinished_pairs_never_enter_savings_curves():
     assert s['curves']==[] and s['arms']['rsi']['tokens']==15 and not s['qualityGate']
 
 
+def test_unknown_usage_breaks_token_curve_without_hiding_latency_or_failure():
+    from backend.trajectory_experiment import summary
+    def run(tokens,usage,status='passed',duration=100):
+        return {'status':'completed','evaluation':{'status':status},
+                'metrics':{'inputTokens':tokens,'outputTokens':0,'usageComplete':usage,'durationMs':duration}}
+    pairs=[{'status':'completed','spec':{'id':'one','group':'g','position':1},'baseline':run(100,True),'rsi':run(50,True)},
+           {'status':'completed','spec':{'id':'two','group':'g','position':2},'baseline':run(100,False,'failed'),'rsi':run(40,True,duration=80)},
+           {'status':'completed','spec':{'id':'three','group':'g','position':3},'baseline':run(100,True),'rsi':run(30,True)}]
+    curves=summary({'status':'quality_stopped','manifest':[{}, {}, {}],'pairs':pairs})['curves']
+    assert curves[0]['tokenSaving']==.5 and curves[0]['cumulativeTokenSaving']==.5
+    assert curves[1]['tokenSaving'] is None and curves[1]['cumulativeTokenSaving'] is None
+    assert curves[2]['tokenSaving']==.7 and curves[2]['cumulativeTokenSaving'] is None
+    assert curves[1]['latencySaving']==pytest.approx(.2) and not curves[1]['baselinePassed']
+
+
 async def test_group_row_ids_bound_only_to_current_observations(tmp_path):
     from backend.task_runner import TaskRunner,TaskRunRequest
     from test_workspace import response

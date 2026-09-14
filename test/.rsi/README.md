@@ -3,7 +3,9 @@
 None of these internal files is an Agent input. See `../使用说明.txt`.
 `provenance.json` preserves raw cache hashes, selected IDs and exclusion counts.
 `data.json` is the source-value export; `verification.json` holds final workbook hashes and checks.
-The directory name `test` describes a manual trial kit, not the frozen benchmark test split.
+The directory name `test` describes a manual trial kit, not the frozen benchmark test split. Its six
+questions are generated from the same public contracts as `trajectory-review-v2`; private expected
+results and experiment group labels are never written here or passed to matching.
 
 Preparation reads cached public records only, excludes the frozen database and existing workspace IDs,
 then selects remaining train-partition records by fixed hash order. No model results or gold are consulted.

@@ -1,5 +1,4 @@
-请对本次扩展投诉附件重新整理内部跟进队列。
-按 complaint_id 关联投诉表和响应表，统计投诉总数、不同公司数，并按渠道汇总投诉数量。
-将 timely 为 No 的投诉，以及从接收到转交企业严格超过3天的投诉列为跟进对象。相同投诉只出现一次，但须保留全部入选原因；恰好3天不入选。
-日期缺失、日期顺序异常或关联记录缺失单列为待核查，不推断已经及时处理。
-清单按公司名称、投诉ID升序展示，包含产品、企业响应状态和实际资料证据；附主管摘要。只使用本次附件，不发送客户消息，也不作资料之外的业务承诺。
+请根据本次公开投诉、企业响应和消费者叙述摘录，整理内部响应完整性复核简报，按 complaint_id 关联，范围只限附件。
+分别列出缺少 company_public_response 的投诉、缺少 company_response 的投诉，以及有消费者叙述摘录但缺少公开响应、需要人工跟进的投诉。缺关联记录单列待核查。消费者叙述只能标为消费者陈述，不能当成已核实企业事实。
+给出投诉总数、渠道数、各组数量、业务ID、公司、产品、渠道和证据。可给内部跟进建议，不发送消息或承诺处理结果。
+输出 metrics 精确包含以下键：complaint_count、channel_count、missing_public_response_count、missing_company_response_count、narrative_followup_count、missing_link_count。groups 使用以下 name，逐组给 reason、condition、count、selectedIds、evidenceIds：missing_public_response、missing_company_response、narrative_followup、missing_link。selectedIds 是各组业务ID的去重并集，所有ID使用字符串；空组也必须提交。

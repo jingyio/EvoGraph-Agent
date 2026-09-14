@@ -16,6 +16,9 @@ import type {
   PairDetail,
   Measure,
   Pair,
+  CurvePoint,
+  SavingMeasure,
+  Revision,
 } from "./releaseEvidence";
 
 const measureLabels: Record<Measure, string> = {
@@ -23,6 +26,12 @@ const measureLabels: Record<Measure, string> = {
   modelRequests: "LLM 请求",
   durationMs: "串行延迟（秒）",
   success: "累计成功率",
+};
+const savingLabels: Record<SavingMeasure, string> = {
+  tokenSaving: "单任务 token 节省率",
+  latencySaving: "单任务串行延迟节省率",
+  cumulativeTokenSaving: "累计净 token 节省率",
+  cumulativeLatencySaving: "累计净串行延迟节省率",
 };
 function Chart({
   pairs,
@@ -36,6 +45,8 @@ function Chart({
   const rows = pairs.filter(
     (p) => p.status === "completed" && p.runs.baseline && p.runs.rsi,
   );
+  if (!rows.length)
+    return <p className="no-evidence">尚未运行严格对照，因此没有可绘制的绝对用量曲线。</p>;
   const series = arms.map((arm) => {
     let passed = 0;
     return rows.map((p, i) => {
@@ -110,6 +121,110 @@ function Chart({
     </div>
   );
 }
+function SavingsChart({
+  rows,
+  kind,
+  revisions,
+  onSelect,
+}: {
+  rows: CurvePoint[];
+  kind: SavingMeasure;
+  revisions: Revision[];
+  onSelect: (id: string) => void;
+}) {
+  if (!rows.length)
+    return <p className="no-evidence">尚未运行严格对照，因此没有可绘制的节省率曲线。</p>;
+  const values = rows.map((row) => row[kind]);
+  const numeric = values.filter((value): value is number => value != null);
+  const low = Math.min(0, ...numeric),
+    high = Math.max(0, ...numeric),
+    span = Math.max(0.1, high - low);
+  const x = (i: number) => 54 + (i * 580) / Math.max(1, rows.length - 1),
+    y = (value: number) => 164 - ((value - low) * 130) / span;
+  const changed = new Map(
+    revisions.map((revision) => [
+      revision.sourcePairId,
+      [revision.graphChanged ? "G" : "", revision.matchingChanged ? "M" : ""]
+        .filter(Boolean)
+        .join("+"),
+    ]),
+  );
+  return (
+    <div className="evidence-chart savings-chart">
+      <svg viewBox="0 0 690 210" role="img" aria-label={savingLabels[kind]}>
+        <line x1="50" x2="645" y1={y(0)} y2={y(0)} stroke="#9eaaa2" />
+        <text x="8" y="38">{rate(high)}</text>
+        <text x="8" y="169">{rate(low)}</text>
+        <polyline
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          points={values
+            .flatMap((value, i) =>
+              value == null ? [] : [`${x(i)},${y(value)}`],
+            )
+            .join(" ")}
+        />
+        {values.map((value, i) =>
+          value == null ? (
+            <g key={rows[i].task}>
+              <line
+                x1={x(i) - 4}
+                x2={x(i) + 4}
+                y1="100"
+                y2="108"
+                stroke="#a15d4a"
+              />
+              <line
+                x1={x(i) + 4}
+                x2={x(i) - 4}
+                y1="100"
+                y2="108"
+                stroke="#a15d4a"
+              />
+              <title>{rows[i].task}: usage 不完整，未计算</title>
+            </g>
+          ) : (
+            <g
+              key={rows[i].task}
+              role="button"
+              tabIndex={0}
+              aria-label={`${rows[i].task} ${savingLabels[kind]} ${rate(value)}`}
+              onClick={() => onSelect(rows[i].task)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onSelect(rows[i].task);
+              }}
+            >
+              <circle cx={x(i)} cy={y(value)} r="5" fill="currentColor" />
+              <title>
+                {rows[i].task}: {rate(value)}；基线/RSI通过：
+                {rows[i].baselinePassed ? "是" : "否"}/
+                {rows[i].rsiPassed ? "是" : "否"}
+              </title>
+            </g>
+          ),
+        )}
+        {rows.map((row, i) => (
+          <g key={row.task + "-label"}>
+            {changed.get(row.task) && (
+              <text x={x(i)} y="22" textAnchor="middle" className="revision-marker">
+                {changed.get(row.task)}修订
+              </text>
+            )}
+            <text x={x(i)} y="194" textAnchor="middle">
+              任务{i + 1}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div className="chart-legend">
+        <span className="rsi">● 正值表示 RSI 节省</span>
+        <span className="negative-saving">● 负值表示 RSI 开销更高</span>
+        <small>× 表示 usage 不完整；G/M 只标真实修订来源任务。</small>
+      </div>
+    </div>
+  );
+}
 function Copy({ text }: { text: string }) {
   return (
     <div className="business-copy">
@@ -132,6 +247,7 @@ export default function CurrentEvidence() {
     [detail, setDetail] = useState<PairDetail | null>(null),
     [arm, setArm] = useState<"baseline" | "rsi">("rsi"),
     [kind, setKind] = useState<Measure>("tokens"),
+    [savingKind, setSavingKind] = useState<SavingMeasure>("tokenSaving"),
     [error, setError] = useState(""),
     [step, setStep] = useState(0);
   useEffect(() => {
@@ -187,7 +303,8 @@ export default function CurrentEvidence() {
       .getElementById("evidence-business")
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
-  const run = detail?.runs[arm],
+  const hasRuns = Boolean(data?.pairs.length),
+    run = detail?.runs[arm],
     events = run?.events || [],
     event = events[step],
     base = release
@@ -290,6 +407,52 @@ export default function CurrentEvidence() {
                 对。未启动的业务场景没有结果。
               </p>
             </header>
+            {data.taskReview?.length ? (
+              <div className="task-review">
+                <div className="task-review-intro">
+                  <strong>正式运行前审阅 · 6 个业务契约</strong>
+                  <span>48 train · 6 validation · 6 test；本轮正式对照只运行 train，validation/test 保持冻结。</span>
+                </div>
+                <div className="task-review-grid">
+                  {data.taskReview.map((contract) => (
+                    <article key={`${contract.scenario}-${contract.group}`}>
+                      <small>{contract.scenarioLabel}运营</small>
+                      <h3>{contract.title}</h3>
+                      <p>
+                        train {contract.counts.train} · validation {contract.counts.validation} · test {contract.counts.test}
+                        {contract.precheckPositions.length
+                          ? ` · 预检位置 ${contract.precheckPositions.join("、")}`
+                          : " · 不进入首轮预检"}
+                      </p>
+                      <dl>
+                        {Object.entries(contract.inputTables).map(([table, fields]) => (
+                          <div key={table}>
+                            <dt>{table}</dt>
+                            <dd>{fields.join("、")}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <details>
+                        <summary>审阅 8 个 train 题面与输出契约</summary>
+                        <ol>
+                          {contract.variants.map((variant) => (
+                            <li key={variant.position}>
+                              <details>
+                                <summary>实例 {variant.position} · hash {variant.requestHash.slice(0, 12)}</summary>
+                                <pre>{variant.request}</pre>
+                              </details>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                      <p className="task-source">
+                        来源：{contract.source.provider || "冻结公开资料"}。{contract.source.note}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="evidence-business-layout">
               <aside aria-label="同发布任务">
                 <div className="evidence-task-list">
@@ -310,7 +473,9 @@ export default function CurrentEvidence() {
                 </div>
               </aside>
               <article className="evidence-result">
-                {detail ? (
+                {!data.pairs.length ? (
+                  <p className="no-evidence">任务问题与附件已经冻结，尚未产生任何 Baseline/RSI 保存运行。当前页面不会载入旧实验补数。</p>
+                ) : detail ? (
                   <>
                     <h3>{detail.task.title}</h3>
                     <details className="business-request" open>
@@ -400,44 +565,52 @@ export default function CurrentEvidence() {
           <section className="evidence-section">
             <p className="eyebrow">02 · 为什么结果可信</p>
             <h2>
-              {data.summary.qualityGate
-                ? "结构化质量门槛通过"
-                : "质量门槛尚未通过，保留每一次失败"}
+              {!hasRuns
+                ? "严格串行对照尚未运行"
+                : data.summary.qualityGate
+                  ? "结构化质量门槛通过"
+                  : "质量门槛尚未通过，保留每一次失败"}
             </h2>
             <p>
               相同任务、附件和通用工具，逐对交替串行执行。结果核对指标、业务
               ID、原因分组和实际观察证据；结构化通过不等于报告全文已独立审核。
             </p>
-            <div className="evidence-facts">
-              {arms.map((a) => {
-                const m = data.summary.arms[a];
-                return (
-                  <a
-                    key={a}
-                    href="#evidence?view=replay"
-                    onClick={() =>
-                      document
-                        .getElementById("evidence-replay")
-                        ?.scrollIntoView()
-                    }
-                  >
-                    <small>{armLabel[a]}</small>
-                    <strong>
-                      {m.passed}/{m.attempts}
-                    </strong>
-                    <span>
-                      已启动任务通过 · {m.failedReportAttempts || 0} 次失败报告
-                      · {m.toolErrors} 次工具错误/拒绝
-                    </span>
-                    <span>
-                      恢复工具 {m.recoveryToolCalls || 0} 次 · 传输重试{" "}
-                      {m.modelTransportRetries || 0} 次
-                    </span>
-                    <span>usage {m.usageComplete ? "完整" : "不完整"}</span>
-                  </a>
-                );
-              })}
-            </div>
+            {hasRuns ? (
+              <div className="evidence-facts">
+                {arms.map((a) => {
+                  const m = data.summary.arms[a];
+                  return (
+                    <a
+                      key={a}
+                      href="#evidence?view=replay"
+                      onClick={() =>
+                        document
+                          .getElementById("evidence-replay")
+                          ?.scrollIntoView()
+                      }
+                    >
+                      <small>{armLabel[a]}</small>
+                      <strong>
+                        {m.passed}/{m.attempts}
+                      </strong>
+                      <span>
+                        已启动任务通过 · {m.failedReportAttempts || 0} 次失败报告
+                        · {m.toolErrors} 次工具错误/拒绝
+                      </span>
+                      <span>
+                        恢复工具 {m.recoveryToolCalls || 0} 次 · 传输重试{" "}
+                        {m.modelTransportRetries || 0} 次
+                      </span>
+                      <span>usage {m.usageComplete ? "完整" : "不完整"}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="no-evidence">
+                当前只有冻结后的问题、附件和协议；没有运行可用于质量、失败或恢复统计。
+              </p>
+            )}
           </section>
           <section className="evidence-section">
             <p className="eyebrow">03 · 图与匹配逻辑如何进化</p>
@@ -497,13 +670,47 @@ export default function CurrentEvidence() {
           <section className="evidence-section">
             <p className="eyebrow">04 · 成本与可靠性</p>
             <h2>
-              {data.summary.qualityGate
-                ? "同一任务流的全量成本"
-                : "当前成本记录，暂不作同质量收益结论"}
+              {!hasRuns
+                ? "严格对照尚未运行，暂无成本曲线"
+                : data.summary.qualityGate
+                  ? "同一任务流的全量成本"
+                  : "当前成本记录，暂不作同质量收益结论"}
             </h2>
             <p>
               包括冷启动、匹配、学习、失败和恢复。每条曲线使用上述同一组任务；串行延迟为保存观察值。
             </p>
+            <h3>离线保存工件的相对与累计变化</h3>
+            <p>
+              这是对已保存成对运行的离线复核，不会调用模型，也不是实时评测。失败只要 usage
+              完整就进入累计分母；usage 不完整时保留曲线缺口。
+            </p>
+            <div className="measure-tabs" role="group" aria-label="选择离线节省率曲线">
+              {(Object.keys(savingLabels) as SavingMeasure[]).map((key) => (
+                <button
+                  key={key}
+                  className={savingKind === key ? "selected" : ""}
+                  onClick={() => setSavingKind(key)}
+                >
+                  {savingLabels[key]}
+                </button>
+              ))}
+            </div>
+            <SavingsChart
+              rows={data.summary.curves}
+              kind={savingKind}
+              revisions={data.revisions}
+              onSelect={select}
+            />
+            <p>
+              当前累计净 token 节省率：{rate(data.summary.netTokenSaving)}。
+              {hasRuns && !data.summary.qualityGate
+                ? "质量门槛失败，此数仅为诊断。"
+                : !hasRuns
+                  ? "严格对照运行后才会计算。"
+                  : ""}
+            </p>
+            <details className="absolute-curves">
+              <summary>查看两臂绝对用量与成功率</summary>
             <div
               className="measure-tabs"
               role="group"
@@ -550,11 +757,7 @@ export default function CurrentEvidence() {
               })}
             </div>
             <Chart pairs={data.pairs} kind={kind} onSelect={select} />
-            <p>
-              累计净 token 差：{rate(data.summary.netTokenSaving)}。
-              {!data.summary.qualityGate && "质量门槛失败，此数仅为诊断。"}
-              全部已启动尝试计入上方总量。
-            </p>
+            </details>
           </section>
           <section id="evidence-replay" className="evidence-section">
             <p className="eyebrow">05 · 逐任务真实轨迹与报告回放</p>
@@ -614,10 +817,16 @@ export default function CurrentEvidence() {
               </table>
             </div>
             <h3>
-              {detail?.task.title} · {armLabel[arm]}
+              {detail ? `${detail.task.title} · ${armLabel[arm]}` : "尚无可回放的保存运行"}
             </h3>
             <p>
-              保存轨迹回放，不是实时执行。运行 ID：<code>{run?.id || "—"}</code>
+              {run ? (
+                <>
+                  保存轨迹回放，不是实时执行。运行 ID：<code>{run.id}</code>
+                </>
+              ) : (
+                "严格对照尚未运行，因此没有轨迹、报告或运行 ID。"
+              )}
             </p>
             {events.length > 0 && (
               <>

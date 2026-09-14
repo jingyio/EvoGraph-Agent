@@ -5,11 +5,13 @@ Every drilldown rechecks membership in the pinned release and pair.
 """
 from copy import deepcopy
 import csv
+import hashlib
 from io import StringIO
 import json
 from pathlib import Path
 from urllib.parse import quote
 from .trajectory_experiment import summary
+from .trajectory_assets import GROUPS, ROLE_LABELS, request_for
 from .workspace import WorkspaceManager
 
 
@@ -109,6 +111,64 @@ class ReleaseEvidence:
         return render_report(run, task)
 
     def evidence(self, key):
+        release = self.manifest(key)
+        if release['source'] == 'trajectory-plan':
+            assets = json.loads((self.root / release['assetManifest']).read_text())
+            counts = {split: sum(task['split'] == split for task in assets['tasks'])
+                      for split in ('train', 'validation', 'test')}
+            expected = release['protocol']['assetCounts']
+            if assets['version'] != release['assetVersion'] or counts != expected:
+                raise ValueError('候选任务资产与发布清单不一致；拒绝显示旧证据')
+            table_fields = {
+                'finance': {
+                    'orders': ['order_id', 'status', 'purchased_at', 'purchased_month'],
+                    'payments': ['order_id', 'sequence', 'method', 'installments', 'amount_cents'],
+                    'items': ['order_id', 'sequence', 'price_cents', 'freight_cents'],
+                },
+                'support': {
+                    'complaints': ['complaint_id', 'company', 'product', 'issue', 'timely', 'submitted_via'],
+                    'responses': ['complaint_id', 'company_public_response', 'company_response', 'date_received', 'date_sent_to_company'],
+                    'narratives': ['complaint_id', 'narrative_excerpt', 'excerpt_truncated'],
+                },
+                'tickets': {
+                    'issues': ['issue_id', 'title', 'state', 'milestone', 'url'],
+                    'activity': ['issue_id', 'comments', 'assignee_count', 'updated_at', 'labels'],
+                },
+            }
+            reviews = []
+            for role, groups in GROUPS.items():
+                for group, label in groups:
+                    members = [task for task in assets['tasks']
+                               if task.get('scenario') == role and task.get('group') == group]
+                    if len(members) != 10:
+                        raise ValueError('候选任务契约数量不一致；拒绝显示不完整审阅清单')
+                    variants = []
+                    for position in range(1, 9):
+                        request = request_for(role, group, position)
+                        digest = hashlib.sha256(request.encode()).hexdigest()
+                        matching = [task for task in members if task.get('position') == position]
+                        if not matching or any(task.get('requestHash') != digest for task in matching):
+                            raise ValueError('候选任务题面与冻结哈希不一致；拒绝显示或运行')
+                        variants.append({'position': position, 'request': request, 'requestHash': digest})
+                    reviews.append({
+                        'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': group,
+                        'title': label, 'counts': {split: sum(task['split'] == split for task in members)
+                                                for split in ('train', 'validation', 'test')},
+                        'precheckPositions': [task['position'] for task in members if task.get('precheck')],
+                        'inputTables': table_fields[role], 'variants': variants,
+                        'source': assets.get('sources', {}).get(role, {}),
+                    })
+            empty = {'attempts': 0, 'passed': 0, 'modelRequests': 0, 'modelProviderAttempts': 0,
+                     'modelTransportRetries': 0, 'toolCalls': 0, 'toolErrors': 0, 'inputTokens': 0,
+                     'outputTokens': 0, 'durationMs': 0, 'runtimeOverheadMs': 0,
+                     'failedReportAttempts': 0, 'recoveryToolCalls': 0, 'tokens': 0,
+                     'usageComplete': True}
+            return {'release': release, 'experimentStatus': 'not_started',
+                    'summary': {'arms': {'baseline': deepcopy(empty), 'rsi': deepcopy(empty)},
+                                'curves': [], 'qualityGate': False, 'costConclusionAllowed': False,
+                                'netTokenSaving': None},
+                    'pairs': [], 'plannedPairs': expected['train'], 'taskReview': reviews, 'revisions': [],
+                    'evolutionEvidence': {'graph': False, 'matching': False}}
         release, item, directory = self.experiment(key)
         # Use membership-checked saved runs for every metric, report and curve.
         item = deepcopy(item)

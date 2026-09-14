@@ -1,5 +1,4 @@
-请使用本次扩展附件重新整理研发问题跟进简报。
-用 issue_id 关联问题和活动资料，只筛选 state 为 open 且 comments 达到5条的事项。评论数相同按 issue_id 数值升序，其余按评论数降序。
-清单包含标题、链接、评论数、指派人数、里程碑和证据，并在清单中标注尚未指定里程碑的事项。
-统计当前附件的问题总数、open与closed数量、open评论总数、重点事项数，以及重点事项中缺少里程碑的数量。
-关联缺失或评论数不明时单列待核查，不能算成0或直接视为已关闭。不凭评论数声称严重程度，不使用历史结果；只出内部简报，不更新工单。
+请根据本次公开软件问题与活动资料制作排期和指派复核简报，按 issue_id 关联，范围只限附件。
+对 open 问题分别列出未指定 milestone、未指派负责人、标签包含 bug 的事项；缺活动关联或关键字段缺失的单列待核查。三类原因独立并允许重叠，不根据标签或评论数推断故障严重程度。
+给出问题总数、open数量、各组数量、业务ID、标题、链接、标签、更新时间和证据。只提供内部交接建议，不修改指派、里程碑或状态。
+输出 metrics 精确包含以下键：issue_count、open_count、no_milestone_count、unassigned_count、bug_label_count、missing_activity_count。groups 使用以下 name，逐组给 reason、condition、count、selectedIds、evidenceIds：no_milestone、unassigned、bug_label、missing_activity。selectedIds 是各组业务ID的去重并集，所有ID使用字符串；空组也必须提交。

@@ -28,16 +28,25 @@ def totals(runs):
 
 def summary(item):
     arms={arm:totals([p[arm] for p in item['pairs'] if p.get(arm)]) for arm in ('baseline','rsi')}
-    curves=[];acc={'baseline':0,'rsi':0};lat={'baseline':0,'rsi':0}
+    curves=[];acc={'baseline':0,'rsi':0};lat={'baseline':0,'rsi':0};token_chain_complete=True
     for pair in item['pairs']:
         if pair.get('status') != 'completed' or not pair.get('baseline') or not pair.get('rsi'):continue
         costs={a:pair[a]['metrics']['inputTokens']+pair[a]['metrics']['outputTokens'] for a in acc}
-        for a in acc:acc[a]+=costs[a];lat[a]+=pair[a]['metrics']['durationMs']
+        usage_complete=all(pair[a]['metrics'].get('usageComplete') for a in acc)
+        if usage_complete and token_chain_complete:
+            for a in acc:acc[a]+=costs[a]
+        else:token_chain_complete=False
+        for a in lat:lat[a]+=pair[a]['metrics']['durationMs']
         info=pair['rsi'].get('evolution',{})
         curves.append({'task':pair['spec']['id'],'group':pair['spec']['group'],'position':pair['spec']['position'],
-                       'tokenSaving':1-costs['rsi']/costs['baseline'] if costs['baseline'] else None,
+                       'baselineTokens':costs['baseline'] if pair['baseline']['metrics'].get('usageComplete') else None,
+                       'rsiTokens':costs['rsi'] if pair['rsi']['metrics'].get('usageComplete') else None,
+                       'baselineLatencyMs':pair['baseline']['metrics']['durationMs'],'rsiLatencyMs':pair['rsi']['metrics']['durationMs'],
+                       'baselinePassed':pair['baseline'].get('status')=='completed' and pair['baseline'].get('evaluation',{}).get('status')=='passed',
+                       'rsiPassed':pair['rsi'].get('status')=='completed' and pair['rsi'].get('evaluation',{}).get('status')=='passed',
+                       'tokenSaving':1-costs['rsi']/costs['baseline'] if usage_complete and costs['baseline'] else None,
                        'latencySaving':1-pair['rsi']['metrics']['durationMs']/pair['baseline']['metrics']['durationMs'] if pair['baseline']['metrics']['durationMs'] else None,
-                       'cumulativeTokenSaving':1-acc['rsi']/acc['baseline'] if acc['baseline'] else None,
+                       'cumulativeTokenSaving':1-acc['rsi']/acc['baseline'] if token_chain_complete and acc['baseline'] else None,
                        'cumulativeLatencySaving':1-lat['rsi']/lat['baseline'] if lat['baseline'] else None,
                        'G':info.get('generation'),'M':info.get('matchVersion'),'generatedG':info.get('generatedVersionIds',[]),'generatedM':info.get('generatedMatchVersions',[])})
     gate=item['status']=='completed' and len(item['pairs'])==len(item['manifest']) and all(a['passed']==len(item['manifest']) and a['usageComplete'] for a in arms.values())
@@ -81,15 +90,17 @@ class TrajectoryExperiment:
         if mode=='full':
             predecessor=next((i for i in reversed(list(self.items.values())) if i['mode']=='precheck' and summary(i)['qualityGate'] and i['fingerprint']==fp),None)
             if not predecessor:raise ValueError('当前runtime预检未通过，禁止扩大')
-        manifest=[s for s in assets['tasks'] if s['split']=='train' and (mode=='full' or s['position']<=3)]
+        manifest=[s for s in assets['tasks'] if s['split']=='train' and (mode=='full' or s.get('precheck'))]
         key=str(uuid4());directory=self.directory/key
         item={'id':key,'mode':mode,'status':'running','createdAt':now(),'assetVersion':VERSION,'fingerprint':fp,'manifest':manifest,'pairs':[],
               'predecessorId':predecessor['id'] if predecessor else None,
-              'protocol':{'limits':{'run':1,'model':1,'read':1},'model':config.MODEL,'planner':config.PLANNER_MODEL,'runtimeProtocol':'trajectory-v2',
+              'protocol':{'limits':{'run':1,'model':1,'read':1},'model':config.MODEL,'planner':config.PLANNER_MODEL,'runtimeProtocol':'trajectory-v3',
                           'maxModelRequestsPerRun':config.MAX_STEPS,'runTimeoutSeconds':config.RUN_TIMEOUT,
                           'maxToolCallsPerRun':80,'judge':'not_run','qualityPolicy':'stop expansion on first failing pair; retain all attempts',
                           'learning':'RSI empty library; prior successful normal train only; labels excluded from matching',
-                          'windowSize':4,'targetTokenSaving':0.30,'size':'24 train = three workflow groups × eight arrivals; six validation/test reserved'}}
+                          'windowSize':4,'targetTokenSaving':0.30,
+                          'size':'48 train = three scenarios × two business contracts × eight arrivals; 6 validation + 6 test reserved',
+                          'precheckSize':'9 train = each scenario primary contract × three arrivals'}}
         self.items[key]=item;self.save(item)
         for relative in fp['files']:write_private(directory/'sources'/relative,(self.root/relative).read_text())
         write_private(directory/'frozen-assets-manifest.json',assets)

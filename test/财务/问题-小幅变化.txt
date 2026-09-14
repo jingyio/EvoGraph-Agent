@@ -1,5 +1,4 @@
-请用本次扩展附件重新做订单对账及分期风险复核。
-订单按 order_id 关联支付和商品表，保留一对多关系。支付总额与商品金额加运费总额相差严格大于10分的订单列入差异清单；最大分期数达到10期的订单单独列入分期清单。
-缺少支付或商品明细时单列待核查，不把缺失解释为零。列出全部订单数、支付金额合计、商品加运费合计以及两类清单的数量和证据。
-差异清单按绝对差额从大到小排列，同差额按订单ID升序；金额使用BRL，原始金额字段为分。
-只根据本次附件输出内部报告，不沿用以前的数字，不执行退款或改账。没有入选记录的类别明确写0。
+请根据本次订单和支付明细制作支付结构与期间复核简报，范围只限附件。
+按 order_id 关联订单与支付，按 purchased_month 汇总订单数。分别列出存在多笔支付的订单、最大分期数达到8期的订单、状态为 canceled 且确有支付记录的订单，以及缺支付或缺商品明细的订单。各原因独立并允许重叠。
+给出订单数、支付记录数、可见支付总额、期间数、各组数量、业务ID和证据。说明公开历史资料的范围和金额单位，不执行退款或改账。
+输出 metrics 精确包含以下键：order_count、payment_record_count、paid_cents、period_count、multiple_payment_count、high_installment_count、canceled_paid_count、missing_payment_count、missing_items_count。groups 使用以下 name，逐组给 reason、condition、count、selectedIds、evidenceIds：multiple_payment、high_installment、canceled_paid、missing_payment、missing_items。selectedIds 是各组业务ID的去重并集，所有ID使用字符串；空组也必须提交。
