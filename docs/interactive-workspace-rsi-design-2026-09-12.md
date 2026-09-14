@@ -47,7 +47,8 @@ Baseline 和 RSI 都从同一个用户工作请求、Planner、工具检索、�
 
 ## 3. 文件与安全协议
 
-每个工作区保存于 `artifacts/workspaces/<workspaceId>/`，不入 Git。用户可见的
+每个工作区保存于 `artifacts/workspaces/<role>-<label>-<shortId>/`，不入 Git；完整
+`workspaceId` 仅用于 API、证据与运行关联。用户可见的
 `inputs/` 保存原始附件，`requests/` 保存每次已提交的问题文本，`exports/` 保存可下载结果；
 内部的 `workspace.json`、`tables.json` 和草稿进入 `.rsi/`。上传限制为最多 10 个文件、
 单文件 20 MiB、10,000 数据行/表、100 列/表；超限会返回错误。旧根目录 JSON 与 `sources/`

@@ -74,7 +74,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173` 默认 `#home`，并提供 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>`。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区的用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#experiments` 才读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，并提供 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>`。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#experiments` 才读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 

@@ -48,6 +48,21 @@ def _safe_filename(value: str) -> str:
     return cleaned[:160]
 
 
+def _workspace_directory_label(value: str) -> str:
+    """Keep a user-facing workspace label readable without accepting paths."""
+    cleaned = re.sub(r'[^\w.-]+', '-', str(value).strip(), flags=re.UNICODE).strip('.-_')
+    return cleaned[:48] or 'workspace'
+
+
+def _workspace_storage_key(role: str, label: str, workspace_id: str) -> str:
+    return f'{role}-{_workspace_directory_label(label)}-{workspace_id[:8]}'
+
+
+def _valid_workspace_storage_key(value: Any) -> bool:
+    return (isinstance(value, str) and 3 <= len(value) <= 120 and value not in {'.', '..'}
+            and Path(value).name == value and '\x00' not in value)
+
+
 def _json_value(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -286,7 +301,11 @@ class WorkspaceManager:
     def _workspace_path(self, workspace_id: str) -> Path:
         if not re.fullmatch(r'[0-9a-f-]{36}', workspace_id):
             raise ValueError('工作区 ID 无效')
-        return self.directory / workspace_id
+        workspace = self.workspaces.get(workspace_id)
+        storage_key = workspace.get('storageKey') if workspace else None
+        if storage_key is not None and not _valid_workspace_storage_key(storage_key):
+            raise ValueError('工作区存储目录无效')
+        return self.directory / (storage_key or workspace_id)
 
     def _runtime_path(self, workspace_id: str) -> Path:
         return self._workspace_path(workspace_id) / '.rsi'
@@ -345,7 +364,13 @@ class WorkspaceManager:
                 tables_path = path.parent / 'tables.json'
                 workspace['tables'] = json.loads(tables_path.read_text()) if tables_path.exists() else {}
                 workspace_directory = path.parent.parent if path.parent.name == '.rsi' else path.parent
-                if workspace.get('id') != workspace_directory.name or workspace.get('role') not in WORKSPACE_ROLES:
+                storage_key = workspace.get('storageKey')
+                expected_directory = storage_key or workspace.get('id')
+                if (workspace.get('role') not in WORKSPACE_ROLES
+                        or not isinstance(workspace.get('id'), str)
+                        or not re.fullmatch(r'[0-9a-f-]{36}', workspace['id'])
+                        or (storage_key is not None and not _valid_workspace_storage_key(storage_key))
+                        or workspace_directory.name != expected_directory):
                     continue
                 if workspace['id'] in restored:
                     continue
@@ -359,7 +384,10 @@ class WorkspaceManager:
     def create(self, role: str, *, label: str | None = None, provenance: str = 'user_upload') -> dict[str, Any]:
         if role not in WORKSPACE_ROLES:
             raise ValueError('岗位必须是 finance、support 或 tickets')
-        workspace = {'id': str(uuid4()), 'role': role, 'label': (label or '未命名工作区')[:120], 'provenance': provenance,
+        workspace_id = str(uuid4())
+        workspace_label = (label or '未命名工作区')[:120]
+        workspace = {'id': workspace_id, 'storageKey': _workspace_storage_key(role, workspace_label, workspace_id),
+                     'role': role, 'label': workspace_label, 'provenance': provenance,
                      'createdAt': now(), 'updatedAt': now(), 'sources': [], 'tables': {}, 'tasks': [], 'reports': [], 'exports': []}
         self.workspaces[workspace['id']] = workspace
         self._persist(workspace)

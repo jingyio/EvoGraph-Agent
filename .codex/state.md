@@ -15,7 +15,7 @@
   pair2 transport retry usage未知的取消诊断，绝不覆盖或拼接。
 - 2026-09-14 工作台题库/同题回放曾作为临时展示交付实现，现已被后续产品决定替代：`#home`
   仅接受用户拖拽/选择上传的资料与手写业务请求，不展示 Workpack、预置题目或历史 A/B pair。
-  新工作区在 `artifacts/workspaces/<workspace-id>/inputs/` 保存原始附件，在 `requests/`
+  新工作区在 `artifacts/workspaces/<role>-<label>-<short-id>/inputs/` 保存原始附件，在 `requests/`
   保存已提交的问题文本；`.rsi/` 保存解析表、任务状态和内部草稿。普通用户工作区始终
   `learning_enabled=False`。冻结 Workpack、严格 pair、历史轨迹和结果只在
   `#experiments` 及其按需详情接口可查看，不会因首页查看或上传启动 Agent。

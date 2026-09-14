@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 import json
+import shutil
 from zipfile import ZipFile
 
 import httpx
@@ -104,13 +105,15 @@ async def test_workspace_parses_supported_files_scopes_evidence_and_never_learns
 
 def test_workspace_keeps_user_inputs_outside_hidden_runtime_directory_and_restores_them(tmp_path):
     manager = WorkspaceManager(tmp_path)
-    workspace = manager.create('finance')
+    workspace = manager.create('finance', label='取消订单复核')
     first = manager.add_source(workspace['id'], 'orders.csv', b'order_id,status\na-1,canceled\n')
     task, questions = manager.create_task(workspace['id'], '核对当前订单并形成有证据的内部复核简报。')
     assert task and not questions
     second = manager.add_source(workspace['id'], 'orders.csv', b'order_id,status\na-2,paid\n')
 
-    root = tmp_path / 'artifacts' / 'workspaces' / workspace['id']
+    root = manager._workspace_path(workspace['id'])
+    assert root.name.startswith('finance-取消订单复核-')
+    assert root.name != workspace['id']
     assert (root / 'inputs' / 'orders.csv').read_bytes().startswith(b'order_id')
     assert (root / 'inputs' / 'orders-2.csv').read_bytes().endswith(b'paid\n')
     requests = sorted((root / 'requests').glob('request-*.txt'))
@@ -121,6 +124,7 @@ def test_workspace_keeps_user_inputs_outside_hidden_runtime_directory_and_restor
     assert not (root / 'workspace.json').exists()
     assert not (root / 'tables.json').exists()
     assert 'storageName' not in manager.public_workspace(workspace['id'])['sources'][0]
+    assert 'storageKey' not in manager.public_workspace(workspace['id'])
     assert manager.source_path(workspace['id'], first['source']['id']).name == 'orders.csv'
     assert manager.source_path(workspace['id'], second['source']['id']).name == 'orders-2.csv'
 
@@ -136,14 +140,18 @@ def test_workspace_restores_legacy_metadata_and_source_paths_without_migrating_t
     manager = WorkspaceManager(tmp_path)
     workspace = manager.create('finance')
     source = manager.add_source(workspace['id'], 'orders.csv', b'order_id\na-1\n')['source']
+    readable_root = manager._workspace_path(workspace['id'])
     root = tmp_path / 'artifacts' / 'workspaces' / workspace['id']
+    root.mkdir(parents=True)
+    metadata = manager.workspace(workspace['id']).copy()
+    metadata.pop('storageKey')
     runtime = root / '.rsi'
     legacy_sources = root / 'sources'
     legacy_sources.mkdir()
     manager.source_path(workspace['id'], source['id']).replace(legacy_sources / f'{source["id"]}-orders.csv')
-    (runtime / 'workspace.json').replace(root / 'workspace.json')
-    (runtime / 'tables.json').replace(root / 'tables.json')
-    runtime.rmdir()
+    (root / 'workspace.json').write_text(json.dumps(metadata), encoding='utf-8')
+    (root / 'tables.json').write_text(json.dumps(manager.workspace(workspace['id'])['tables']), encoding='utf-8')
+    shutil.rmtree(readable_root)
 
     restored = WorkspaceManager(tmp_path)
     restored.restore()
