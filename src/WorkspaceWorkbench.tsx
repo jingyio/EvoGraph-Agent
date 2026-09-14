@@ -138,14 +138,19 @@ export default function WorkspaceWorkbench() {
   const selectedEvent = replayEvents.find(event => event.seq === selectedEventSeq) || replayEvents.at(-1);
   const selectedEventIndex = Math.max(0, replayEvents.findIndex(event => event.seq === selectedEvent?.seq));
   const exports = useMemo(() => (run?.events || []).flatMap(event => event.detail?.result?.downloadPath ? [{ path: event.detail.result.downloadPath, rowCount: event.detail.result.rowCount }] : []), [run]);
-  async function createWorkspace(nextRole: Role) {
-    setBusy('workspace'); setError(''); setRun(null); setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
-    setStrategy('graph_rsi');
+  async function createWorkspace(nextRole: Role, resetDraft = true): Promise<Workspace | null> {
+    setBusy('workspace'); setError('');
+    if (resetDraft) {
+      setRun(null); setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
+      setStrategy('graph_rsi');
+    }
     try {
       const item = await api<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ role: nextRole, label: `${ROLES.find(roleItem => roleItem.key === nextRole)?.label || nextRole}工作区` }) });
       setWorkspace(item); setTableId(item.tables[0]?.id || ''); setPreview(null); setRuns([]);
+      return item;
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(''); }
+    return null;
   }
 
   async function refreshWorkspace(id = workspace?.id) {
@@ -157,7 +162,6 @@ export default function WorkspaceWorkbench() {
     setRuns(history.runs);
   }
 
-  useEffect(() => { void createWorkspace('finance'); }, []);
   useEffect(() => { setSelectedEventSeq(null); }, [run?.id]);
   useEffect(() => {
     if (!workspace || !tableId) { setPreview(null); return; }
@@ -171,13 +175,19 @@ export default function WorkspaceWorkbench() {
     return () => window.clearInterval(timer);
   }, [run?.id, active]);
 
-  async function chooseRole(nextRole: Role) { setRole(nextRole); await createWorkspace(nextRole); }
+  function chooseRole(nextRole: Role) {
+    if (nextRole === role) return;
+    setRole(nextRole); setWorkspace(null); setTableId(''); setPreview(null); setRun(null); setRuns([]);
+    setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setFollowup(''); setRequest('');
+  }
   async function addFiles(files: FileList | File[]) {
-    if (!workspace || !files.length || busy) return;
+    if (!files.length || busy) return;
+    const target = workspace || await createWorkspace(role, false);
+    if (!target) return;
     setBusy('upload'); setError('');
     try {
-      for (const file of Array.from(files)) await upload(`/api/workspaces/${workspace.id}/files`, file);
-      await refreshWorkspace();
+      for (const file of Array.from(files)) await upload(`/api/workspaces/${target.id}/files`, file);
+      await refreshWorkspace(target.id);
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(''); }
   }
@@ -188,18 +198,19 @@ export default function WorkspaceWorkbench() {
     catch (reason) { setError((reason as Error).message); }
   }
   async function prepareTask(followupRunId?: string) {
-    if (!workspace) return;
+    const target = workspace || await createWorkspace(role, false);
+    if (!target) return;
     setBusy('prepare'); setError(''); setClarifications([]);
     try {
       const body = { request: followupRunId ? followup : request, answers, followupRunId };
-      const response = await api<{ status: string; task?: WorkspaceTask; clarifications?: { id: string; question: string }[] }>(`/api/workspaces/${workspace.id}/tasks`, { method: 'POST', body: JSON.stringify(body) });
+      const response = await api<{ status: string; task?: WorkspaceTask; clarifications?: { id: string; question: string }[] }>(`/api/workspaces/${target.id}/tasks`, { method: 'POST', body: JSON.stringify(body) });
       if (response.status === 'needs_clarification') { setClarifications(response.clarifications || []); return; }
       const nextTask = response.task || null;
       setReadyTask(nextTask);
       // A follow-up is a distinct task. Keep the visible request synchronized
       // with the task that will actually be sent to the runtime.
       if (followupRunId && nextTask?.task) setRequest(nextTask.task);
-      setCostConfirmed(false); setFollowup(''); await refreshWorkspace();
+      setCostConfirmed(false); setFollowup(''); await refreshWorkspace(target.id);
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(''); }
   }
@@ -220,22 +231,26 @@ export default function WorkspaceWorkbench() {
   function filesChanged(event: ChangeEvent<HTMLInputElement>) { if (event.target.files) void addFiles(event.target.files); event.target.value = ''; }
   function dropped(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }
 
-  if (!workspace) return <main className="workspace-shell"><div className="workspace-loading"><LoaderCircle size={20} />准备工作区</div></main>;
+  const visibleWorkspace: Workspace = workspace || {
+    id: '', role, label: `${selectedRole.label}工作区`,
+    folderName: '首次输入后创建', folderPath: '上传首份资料或提交工作要求后创建本地目录',
+    sources: [], tables: [], tasks: [], reports: [], exports: [],
+  };
   const report = run?.submission;
   const columns = preview?.table.fields || [];
   return <main className="workspace-shell">
-    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>OPERATIONS EMPLOYEE</span><small>WORKSPACE</small></div><div className="workspace-topbar-status"><span><i />当前资料隔离</span><span title={workspace.folderPath}><FolderOpen size={12} />{workspace.folderName}</span><span>模型思考关闭</span><a href="#experiments">实验中心</a></div></header>
+    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>OPERATIONS EMPLOYEE</span><small>WORKSPACE</small></div><div className="workspace-topbar-status"><span><i />当前资料隔离</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span><span>模型思考关闭</span><a href="#experiments">实验中心</a></div></header>
     <section className="workspace-header"><div><p>三岗位数字员工</p><h1>{selectedRole.label}</h1><span>{selectedRole.caption}</span></div><div className="workspace-role-picker">{ROLES.map(item => <button key={item.key} className={item.key === role ? 'selected' : ''} onClick={() => void chooseRole(item.key)} disabled={Boolean(active) || busy === 'workspace'}><small>{item.key === 'finance' ? 'FINANCE' : item.key === 'support' ? 'SUPPORT' : 'ENGINEERING'}</small>{item.label}</button>)}</div></section>
 
     {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
     <section className="workspace-layout">
-      <aside className="workspace-sources"><header><div><small>资料</small><strong>{workspace.sources.length} 个文件</strong></div><button onClick={() => input.current?.click()} title="添加资料" disabled={Boolean(active) || busy === 'upload'}><Plus size={16} /></button></header>
+      <aside className="workspace-sources"><header><div><small>资料</small><strong>{visibleWorkspace.sources.length} 个文件</strong></div><button onClick={() => input.current?.click()} title="添加资料" disabled={Boolean(active) || busy === 'upload'}><Plus size={16} /></button></header>
         <div className={`workspace-drop ${dragging ? 'dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true); }} onDragOver={event => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={dropped} onClick={() => input.current?.click()}>
           <UploadCloud size={21} /><strong>{busy === 'upload' ? '正在解析资料' : '拖入资料'}</strong><span>CSV · XLSX · JSON · TXT</span><input ref={input} type="file" accept=".csv,.xlsx,.json,.txt" multiple onChange={filesChanged} />
         </div>
-        <div className="workspace-source-list">{workspace.sources.map(source => <div key={source.id}><FileText size={15} /><span><strong>{source.name}</strong><small>{source.format.toUpperCase()} · {(source.sizeBytes / 1024).toFixed(1)} KB</small>{source.provenance?.source && <small className="workspace-provenance">{source.provenance.source}</small>}</span><span className="workspace-source-actions">{source.downloadPath && <a href={source.downloadPath} title="下载资料"><ArrowDownToLine size={13} /></a>}<button onClick={() => void removeSource(source)} title="移除资料" disabled={Boolean(active)}><Trash2 size={14} /></button></span></div>)}</div>
-        <header className="workspace-table-header"><div><small>数据表</small><strong>{workspace.tables.length} 张</strong></div></header>
-        <div className="workspace-table-list">{workspace.tables.map(table => <button key={table.id} className={table.id === tableId ? 'selected' : ''} onClick={() => setTableId(table.id)}><Table2 size={14} /><span>{table.sheet}<small>{formatCount(table.rowCount)} 行 · {table.fields.length} 列</small></span></button>)}</div>
+        <div className="workspace-source-list">{visibleWorkspace.sources.map(source => <div key={source.id}><FileText size={15} /><span><strong>{source.name}</strong><small>{source.format.toUpperCase()} · {(source.sizeBytes / 1024).toFixed(1)} KB</small>{source.provenance?.source && <small className="workspace-provenance">{source.provenance.source}</small>}</span><span className="workspace-source-actions">{source.downloadPath && <a href={source.downloadPath} title="下载资料"><ArrowDownToLine size={13} /></a>}<button onClick={() => void removeSource(source)} title="移除资料" disabled={Boolean(active)}><Trash2 size={14} /></button></span></div>)}</div>
+        <header className="workspace-table-header"><div><small>数据表</small><strong>{visibleWorkspace.tables.length} 张</strong></div></header>
+        <div className="workspace-table-list">{visibleWorkspace.tables.map(table => <button key={table.id} className={table.id === tableId ? 'selected' : ''} onClick={() => setTableId(table.id)}><Table2 size={14} /><span>{table.sheet}<small>{formatCount(table.rowCount)} 行 · {table.fields.length} 列</small></span></button>)}</div>
       </aside>
       <section className="workspace-center">
         <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask?.followupRunId ? '已准备追问任务' : readyTask ? '已准备当前任务' : '输入业务需求'}</strong></div><span>{active ? run?.phase || '执行中' : readyTask?.followupRunId ? '追问等待启动' : readyTask ? '等待启动' : '未运行'}</span></header>
@@ -248,7 +263,7 @@ export default function WorkspaceWorkbench() {
           {replayEvents.length > 0 && <><div className="workspace-replay-controls"><button title="上一步" aria-label="上一步" disabled={selectedEventIndex <= 0} onClick={() => setSelectedEventSeq(replayEvents[selectedEventIndex - 1]?.seq ?? null)}><ChevronLeft size={15} /></button><span>步骤 {selectedEventIndex + 1} / {replayEvents.length}</span><button title="下一步" aria-label="下一步" disabled={selectedEventIndex >= replayEvents.length - 1} onClick={() => setSelectedEventSeq(replayEvents[selectedEventIndex + 1]?.seq ?? null)}><ChevronRight size={15} /></button></div><div className="workspace-events">{replayEvents.map(event => <button key={event.seq} className={`${eventChannel(event)} ${selectedEvent?.seq === event.seq ? 'selected' : ''}`} onClick={() => setSelectedEventSeq(event.seq)}><i>{eventChannel(event) === 'model' ? 'M' : eventChannel(event) === 'rsi' ? 'R' : eventChannel(event) === 'tool' ? 'T' : 'C'}</i><span><strong>{eventTitle(event)}</strong><small>{event.elapsedMs == null ? '—' : formatMs(event.elapsedMs)}</small></span>{event.type === 'observation' && event.detail?.ok === false && <em>错误</em>}</button>)}</div>{selectedEvent && <div className={`workspace-event-detail ${eventChannel(selectedEvent)}`}><header><span>{eventChannel(selectedEvent) === 'model' ? 'LLM' : eventChannel(selectedEvent) === 'rsi' ? 'RSI RUNTIME' : eventChannel(selectedEvent) === 'tool' ? 'TOOL' : 'CONTROL'}</span><strong>{eventTitle(selectedEvent)}</strong></header>{eventDetailLines(selectedEvent).length > 0 ? <ul>{eventDetailLines(selectedEvent).map((line, index) => <li key={`${selectedEvent.seq}-${index}`}>{line}</li>)}</ul> : <p>该步骤没有额外可展示字段。</p>}</div>}</>}{run.error && <p className="workspace-run-error">{run.error}</p>}</section>}
         {report && <section className="workspace-result"><header><div><FileBarChart2 size={18} /><div><small>交付成果</small><strong>{run?.evaluation.status === 'passed' ? '结构化校验通过' : '待用户复核'}</strong></div></div><div className="workspace-result-actions"><a href={`/api/workspaces/runs/${run?.id}/report`} target="_blank" rel="noreferrer">打开报告 <ArrowRight size={14} /></a><a href={`/api/workspaces/runs/${run?.id}/report/download`} download>下载报告 <ArrowDownToLine size={14} /></a></div></header><div className="workspace-result-grid"><div className="workspace-result-metrics">{Object.entries(report.metrics || {}).slice(0, 6).map(([key, value]) => <Metric key={key} label={key} value={typeof value === 'object' ? `${Object.keys(value as object).length} 项` : String(value)} />)}</div><div className="workspace-result-copy"><p>{report.summary || '报告尚未返回。'}</p><span>{report.evidenceIds?.length || 0} 条实际观察证据 · {report.selectedIds?.length || 0} 项清单</span>{report.assumptions?.length ? <small>假设：{report.assumptions.join('；')}</small> : null}</div></div>{exports.length > 0 && <div className="workspace-downloads">{exports.map(item => <a key={item.path} href={item.path}><ArrowDownToLine size={14} />下载清单 · {item.rowCount} 行</a>)}</div>}</section>}
       </section>
-      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次</strong></div><PanelRightOpen size={16} /></header><div className="workspace-history-list">{runs.map(item => { const task = workspace.tasks.find(row => row.id === item.taskId); return <button key={item.id} className={item.id === run?.id ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{task?.followupRunId ? '追问 · ' : ''}{formatCount(totalTokens(item.metrics))} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始一次工作后，完整轨迹会保存在这里。</span></div>}</div>{run && !active && <section className="workspace-followup"><small>继续追问</small><textarea value={followup} onChange={event => setFollowup(event.target.value)} placeholder="基于当前报告继续分析…" /><button onClick={() => void prepareTask(run.id)} disabled={!followup.trim() || busy === 'prepare'}><ArrowRight size={14} />准备追问</button></section>}</aside>
+      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次</strong></div><PanelRightOpen size={16} /></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); return <button key={item.id} className={item.id === run?.id ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{task?.followupRunId ? '追问 · ' : ''}{formatCount(totalTokens(item.metrics))} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始一次工作后，完整轨迹会保存在这里。</span></div>}</div>{run && !active && <section className="workspace-followup"><small>继续追问</small><textarea value={followup} onChange={event => setFollowup(event.target.value)} placeholder="基于当前报告继续分析…" /><button onClick={() => void prepareTask(run.id)} disabled={!followup.trim() || busy === 'prepare'}><ArrowRight size={14} />准备追问</button></section>}</aside>
     </section>
   </main>;
 }
