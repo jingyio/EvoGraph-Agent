@@ -1,5 +1,11 @@
 # 项目状态快照
 
+## 2026-09-14 数据分析加入历史 V4 36-task（已完成）
+
+- `releases/analysis-manifest.json` 新增 `taskbank-v4-36`，精确绑定 `online-rsi-serial-final-v4`、runtime `1c32ff2...`、任务 hash 和工件 SHA-256；默认仍是 V17 48-task。
+- `AnalysisDatasets` 统一读取 workpack 与 online-e2e 两类固定来源并失败关闭。V4 显示 36/36 对通过、539,468→347,368 token（-35.6092%）、1,386,926→806,186.644ms（-41.8724%）、203→114 次 LLM、24/36 Fast。
+- V4 标为 historical；切换测试组会整体替换任务、曲线、轨迹和报告。V4 只有6个G0且没有G1/G2或M修订，不主张递归结构进化。本次不运行模型，不改写历史工件。
+
 ## 2026-09-14 当前前端：可切换数据分析（已完成）
 
 - 主导航第二入口改为 `#analysis` 数据分析；旧 `#evidence` 兼容跳转。V3-r3 任务与工具审阅保留在 `#archive?page=candidate`。

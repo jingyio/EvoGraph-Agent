@@ -32,19 +32,23 @@ V3-r2 的 F01 真实 API 预检 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 已转为
 自己的保存工作区/run。这里不展示实验选择器或 benchmark 总览。旧 `#evidence` 保留兼容，
 由 `navigation.ts` 跳转到 `#analysis`。
 
-`releases/analysis-manifest.json` 是数据分析测试组的唯一选择源。首个测试组
-`workpack-v17-48` 精确绑定 Workpack V17 实验 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe`、
-`workpacks-v1`、V17 runtime execution digest 与 `workspace-workpack-online-full-train-v15`。
-`backend/analysis_datasets.py:AnalysisDatasets` 还校验保存工件 SHA-256、completed 状态、48 个 pair、
-质量门槛和协议；不按创建时间猜实验。`/api/analysis/datasets` 返回可选测试组，
-`/api/analysis/datasets/{datasetId}` 只读返回同一测试组的逐任务 token、串行 latency、成功状态、
-模型/工具请求、G0/Fast 路径和 run/report 深链。任一身份不匹配都拒绝显示。
+`releases/analysis-manifest.json` 是数据分析测试组的唯一选择源。默认测试组
+`workpack-v17-48` 精确绑定 Workpack V17 实验 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe`；第二项
+`taskbank-v4-36` 精确绑定历史 online-e2e V4 实验 `online-rsi-serial-final-v4`。清单为每项声明
+`source.kind`，后端只允许固定的 `workpack` 和 `online-e2e` 目录布局，不接受任意工件路径。
+`backend/analysis_datasets.py:AnalysisDatasets` 分别校验保存工件 SHA-256、实验 ID、runtime revision、
+任务 hash/资产、协议、completed 状态、pair 数和质量门槛；不按创建时间猜实验。
+`/api/analysis/datasets` 返回可选测试组，`/api/analysis/datasets/{datasetId}` 将两类历史工件投影为
+统一的逐任务 token、串行 latency、成功状态、模型/工具请求、G0/Fast 路径和 run/report 深链。
+V4 原始 pair 序号 0–35 作为 `sourceIndex` 保留，界面序号规范为 1–36。任一身份不匹配都拒绝显示。
 
 `DataAnalysis.tsx` 可以按测试组、业务场景和工作流整体切换数据上下文。筛选后的曲线按真实到达
 顺序重新累计 Baseline/RSI token 与端到端 `durationMs`，同时显示累计 token/latency 节省率；
 未知 usage 或 latency 保持缺口，不按 0 补齐。V17 的 12 个 G0 与 35 次 Fast 可展示，但页面明确
-说明没有 G1/G2 或匹配规则修订，不能把 Fast 命中称为递归结构进化。后续实验只有新增一条精确
-清单记录后才会成为可切换测试组，不能把 P0.5 candidate 拼入 V17 曲线。
+说明没有 G1/G2 或匹配规则修订，不能把 Fast 命中称为递归结构进化。V4 也只展示其自身 36 项：
+539,468→347,368 token、1,386,926→806,186.644ms 保存串行时长、6 个 G0 与 24/36 Fast；切换时
+整套替换上下文，不与 V17 拼接。后续实验只有新增一条精确清单记录后才会成为可切换测试组，
+不能把 P0.5 candidate 拼入任何历史曲线。
 
 `releases/manifest.json` 仍负责 P0.5 当前候选与历史发布审计。原 `CurrentEvidence.tsx` 不删除，
 从 `#archive?page=candidate` 打开，用于审阅 V3-r3 题面、工具契约和失败证据。`#archive` 继续

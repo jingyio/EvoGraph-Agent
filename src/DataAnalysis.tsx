@@ -478,6 +478,7 @@ export default function DataAnalysis() {
   const scopeBaselineRequests = sumKnown(visible.map((point) => point.baseline.modelRequests));
   const scopeRsiRequests = sumKnown(visible.map((point) => point.rsi.modelRequests));
   const scopeFast = visible.filter((point) => point.rsi.planningPath === "fast").length;
+  const scopeFastRate = visible.length ? scopeFast / visible.length : null;
   const scopeG0 = visible.reduce((total, point) => total + (point.rsi.generatedVersionIds?.length || 0), 0);
 
 
@@ -543,7 +544,7 @@ export default function DataAnalysis() {
             <article><Layers3 size={18} /><small>累计 token</small><strong>{number(scopeBaselineTokens)} → {number(scopeRsiTokens)}</strong><span>节省 {percent(scopeTokenSaving)}</span></article>
             <article><Clock3 size={18} /><small>累计串行延迟</small><strong>{duration(scopeBaselineLatency)} → {duration(scopeRsiLatency)}</strong><span>节省 {percent(scopeLatencySaving)}</span></article>
             <article><Activity size={18} /><small>LLM 请求</small><strong>{number(scopeBaselineRequests)} → {number(scopeRsiRequests)}</strong><span>保存运行中的真实请求数</span></article>
-            <article><Sparkles size={18} /><small>经验使用</small><strong>{number(scopeFast)} Fast · {number(scopeG0)} G0</strong><span>当前筛选范围</span></article>
+            <article><Sparkles size={18} /><small>经验使用</small><strong>{number(scopeFast)} Fast · {percent(scopeFastRate)}</strong><span>当前筛选范围</span></article>
           </section>
 
           <section className="analysis-section">
@@ -562,7 +563,7 @@ export default function DataAnalysis() {
             <article className="analysis-mechanism">
               <Route size={20} />
               <p className="eyebrow">MECHANISM BOUNDARY</p>
-              <h2>V17 展示 G0 形成与 Fast 复用</h2>
+              <h2>{metadata.displayName}展示 G0 形成与 Fast 复用</h2>
               <p>当前筛选范围记录了 {number(scopeG0)} 次 G0 形成和 {number(scopeFast)} 次 Fast 使用；完整测试组为 {number(learning.workflowCreated)} 次 G0 与 {number(learning.fastReuse)} 次 Fast。它没有 G1/G2，也没有真实图结构修订，因此这里不把 Fast 命中描述为递归结构进化。</p>
               <dl><div><dt>Composition</dt><dd>{number(learning.composition)}</dd></div><div><dt>Fallback</dt><dd>{number(learning.fallback)}</dd></div></dl>
             </article>

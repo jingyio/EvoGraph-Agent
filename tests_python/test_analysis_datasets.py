@@ -119,3 +119,41 @@ def test_analysis_dataset_api_returns_only_named_dataset(tmp_path, monkeypatch):
     assert client.get('/api/analysis/datasets').json()['defaultDatasetId'] == 'v17'
     assert client.get('/api/analysis/datasets/v17').json()['summary']['taskCount'] == 2
     assert client.get('/api/analysis/datasets/newest').status_code == 404
+
+
+def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
+    root = Path(__file__).resolve().parents[1]
+    store = AnalysisDatasets(root)
+    listing = store.list()
+    assert [row['datasetId'] for row in listing['items']] == ['workpack-v17-48', 'taskbank-v4-36']
+    result = store.get('taskbank-v4-36')
+    assert result['dataset']['status'] == 'historical'
+    assert result['dataset']['source'] == {'kind': 'online-e2e'}
+    assert result['summary']['taskCount'] == result['summary']['pairedCompleted'] == 36
+    assert result['summary']['baseline']['passed'] == result['summary']['rsi']['passed'] == 36
+    assert result['summary']['baseline']['tokens'] == 539468
+    assert result['summary']['rsi']['tokens'] == 347368
+    assert result['summary']['tokenSaving'] == .356092
+    assert result['summary']['latencySaving'] == .418724
+    assert result['summary']['learning'] == {
+        'workflowCreated': 6, 'fastReuse': 24, 'composition': 0, 'fallback': 12,
+    }
+    assert result['points'][0]['index'] == 1 and result['points'][0]['sourceIndex'] == 0
+    assert result['points'][-1]['index'] == 36 and result['points'][-1]['sourceIndex'] == 35
+    assert result['points'][0]['workpackId'] == 'finance-cancelled_payments-01'
+    assert result['points'][0]['workflowType'] == 'cancelled_payments'
+    assert result['points'][0]['baseline']['reportUrl'].startswith(
+        '/api/online-e2e/online-rsi-serial-final-v4/runs/baseline/'
+    )
+    assert result['points'][-1]['cumulativeBaselineTokens'] == 539468
+    assert result['points'][-1]['cumulativeRsiTokens'] == 347368
+
+
+def test_analysis_dataset_rejects_unregistered_source_paths(tmp_path):
+    store, _, _ = fixture(tmp_path)
+    registry_path = tmp_path / 'releases/analysis-manifest.json'
+    registry = json.loads(registry_path.read_text())
+    registry['datasets'][0]['source'] = {'kind': 'workpack', 'path': '../../outside.json'}
+    write_private(registry_path, registry)
+    with pytest.raises(ValueError, match='来源不受支持'):
+        store.get('v17')

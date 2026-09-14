@@ -34,6 +34,47 @@
         "这是V17历史正式实验，不代表当前P0.5/V3-r3候选runtime。",
         "V17形成12个G0并有35次Fast复用，但没有G1/G2或匹配规则修订；不能据此主张递归结构进化。",
         "durationMs是保存的端到端单任务时长串行求和，受模型服务波动影响；不等同纯推理耗时。"
+      ],
+      "source": {
+        "kind": "workpack"
+      }
+    },
+    {
+      "datasetId": "taskbank-v4-36",
+      "displayName": "V4 · 36-task 严格串行对照",
+      "status": "historical",
+      "experimentId": "online-rsi-serial-final-v4",
+      "source": {
+        "kind": "online-e2e"
+      },
+      "runtimeRevision": "1c32ff2ac2706fb351bf6b6b2bb5b1d8a3fa8090",
+      "assetVersion": "taskbank-train-36@329894eb",
+      "artifactDigest": "sha256:a21578576810d63e30dc79e2b420b42a414449e2d6f20cd333bc7ebaa755fac1",
+      "protocol": {
+        "id": "online-e2e-strict-serial-v4",
+        "runtimeLine": "V4",
+        "experimentStatus": "completed",
+        "qualityGateStatus": "passed",
+        "taskCountPerArm": 36,
+        "baseline": "plan_react",
+        "rsi": "graph_rsi",
+        "comparisonMode": "same_session_interleaved",
+        "singleAgentConcurrency": true,
+        "startFromEmpty": true,
+        "taskHash": "329894ebb99307428cabf78f796c3fcb3f18b70f1518c2fda8ec4bf81e6b3490",
+        "maxSteps": 24,
+        "order": "同一 session 内两臂交替、严格串行；RSI 从空经验开始"
+      },
+      "createdAt": "2026-09-10T16:45:30.314Z",
+      "claims": [
+        "Baseline 与 RSI Agent 均在36个固定train任务上36/36通过，usage完整。",
+        "同一实验内累计token为539,468与347,368，RSI Agent节省35.6092%。",
+        "同一实验内保存的串行duration为1,386,926ms与806,186.644ms，模型请求为203与114。"
+      ],
+      "limitations": [
+        "这是V4历史正式实验，独立于V17 48-task和当前P0.5候选runtime；页面切换时不会与其他实验拼接。",
+        "V4形成6个G0并有24次Fast复用，但没有G1/G2或匹配描述修订；不能据此主张递归结构进化。",
+        "durationMs是保存的端到端单任务时长串行求和，包含服务等待并受provider波动影响；不等同纯推理耗时。"
       ]
     }
   ]
