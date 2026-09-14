@@ -138,7 +138,11 @@ function normalizeArm(value: unknown, fallback: Record<string, unknown> = {}): A
     passed:
       typeof arm.passed === "boolean"
         ? arm.passed
-        : evaluation.status === "passed" || fallback.passed === true,
+        : typeof evaluation.status === "string"
+          ? evaluation.status === "passed"
+          : typeof fallback.passed === "boolean"
+            ? fallback.passed
+            : undefined,
     tokens:
       explicitTokens ??
       asNumber(fallback.tokens) ??
@@ -264,7 +268,7 @@ function PolylineChart({
   onSelect,
 }: {
   points: ChartPoint[];
-  metric: "tokens" | "latency" | "saving";
+  metric: "tokens" | "latency" | "requests" | "accuracy" | "saving";
   onSelect: (point: ChartPoint) => void;
 }) {
   if (!points.length)
@@ -278,16 +282,25 @@ function PolylineChart({
   const absoluteValue = (point: ChartPoint, arm: "baseline" | "rsi") => {
     if (metric === "tokens")
       return arm === "baseline" ? point.baselineCumulativeTokens : point.rsiCumulativeTokens;
-    return arm === "baseline" ? point.baselineCumulativeLatency : point.rsiCumulativeLatency;
+    if (metric === "latency")
+      return arm === "baseline" ? point.baselineCumulativeLatency : point.rsiCumulativeLatency;
+    if (metric === "requests")
+      return arm === "baseline" ? point.baselineCumulativeRequests : point.rsiCumulativeRequests;
+    return (arm === "baseline" ? point.baselineCumulativeAccuracy : point.rsiCumulativeAccuracy) == null
+      ? null
+      : (arm === "baseline" ? point.baselineCumulativeAccuracy! : point.rsiCumulativeAccuracy!) * 100;
   };
   const values = points.flatMap((point) =>
     metric === "saving"
       ? [point.tokenSavingRate == null ? null : point.tokenSavingRate * 100, point.latencySavingRate == null ? null : point.latencySavingRate * 100]
       : [absoluteValue(point, "baseline"), absoluteValue(point, "rsi")],
   ).filter((value): value is number => value != null);
-  if (!values.length) return <div className="analysis-empty">当前筛选范围缺少完整的 {metric === "latency" ? "latency" : "token"} 用量，未按 0 补齐。</div>;
+  if (!values.length) {
+    const missing = metric === "latency" ? "latency" : metric === "requests" ? "大模型调用" : metric === "accuracy" ? "结构化评分" : "token";
+    return <div className="analysis-empty">当前筛选范围缺少完整的 {missing} 数据，未按 0 补齐。</div>;
+  }
   const min = metric === "saving" ? Math.min(0, ...values) : 0;
-  const max = Math.max(1, ...values);
+  const max = metric === "accuracy" ? 100 : Math.max(1, ...values);
   const x = (index: number) =>
     left + (index / Math.max(1, points.length - 1)) * (width - left - right);
   const y = (value: number) =>
@@ -311,7 +324,7 @@ function PolylineChart({
   const displayValue = (value: number) =>
     metric === "latency"
       ? duration(value)
-      : metric === "saving"
+      : metric === "saving" || metric === "accuracy"
         ? `${value.toFixed(0)}%`
         : number(value);
   const last = points.at(-1)!;
@@ -328,7 +341,7 @@ function PolylineChart({
         )}
         <small>点击节点查看对应任务</small>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={metric === "tokens" ? "累计 token 曲线" : metric === "latency" ? "累计串行延迟曲线" : "累计 token 与 latency 节省率曲线"}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={metric === "tokens" ? "累计 token 曲线" : metric === "latency" ? "累计串行延迟曲线" : metric === "requests" ? "累计大模型调用次数曲线" : metric === "accuracy" ? "累计结构化准确率曲线" : "累计 token 与 latency 节省率曲线"}>
         {[0, 0.5, 1].map((ratio) => {
           const value = min + (max - min) * (1 - ratio);
           const lineY = top + ratio * (height - top - bottom);
@@ -471,12 +484,11 @@ export default function DataAnalysis() {
   const scopeLatencySaving = scopeLast?.latencySavingRate ?? (curve.length ? null : detail?.summary?.latencySaving);
   const scopeBaselinePassed = visible.filter((point) => point.baseline.passed).length;
   const scopeRsiPassed = visible.filter((point) => point.rsi.passed).length;
-  const sumKnown = (values: Array<number | null | undefined>) =>
-    values.some((value) => value == null)
-      ? null
-      : values.reduce<number>((total, value) => total + (value as number), 0);
-  const scopeBaselineRequests = sumKnown(visible.map((point) => point.baseline.modelRequests));
-  const scopeRsiRequests = sumKnown(visible.map((point) => point.rsi.modelRequests));
+  const scopeBaselineRequests = scopeLast?.baselineCumulativeRequests ?? null;
+  const scopeRsiRequests = scopeLast?.rsiCumulativeRequests ?? null;
+  const scopeRequestSaving = scopeLast?.requestSavingRate ?? null;
+  const scopeBaselineAccuracy = scopeLast?.baselineCumulativeAccuracy ?? null;
+  const scopeRsiAccuracy = scopeLast?.rsiCumulativeAccuracy ?? null;
   const scopeFast = visible.filter((point) => point.rsi.planningPath === "fast").length;
   const scopeFastRate = visible.length ? scopeFast / visible.length : null;
   const scopeG0 = visible.reduce((total, point) => total + (point.rsi.generatedVersionIds?.length || 0), 0);
@@ -540,10 +552,10 @@ export default function DataAnalysis() {
           </section>
 
           <section className="analysis-kpis" aria-label="当前筛选核心指标">
-            <article><ShieldCheck size={18} /><small>结构化通过</small><strong>{number(scopeBaselinePassed)}/{curve.length} · {number(scopeRsiPassed)}/{curve.length}</strong><span>Baseline · RSI Agent</span></article>
+            <article><ShieldCheck size={18} /><small>任务准确率</small><strong>{percent(scopeBaselineAccuracy)} · {percent(scopeRsiAccuracy)}</strong><span>结构化通过 {number(scopeBaselinePassed)}/{curve.length} · {number(scopeRsiPassed)}/{curve.length}</span></article>
             <article><Layers3 size={18} /><small>累计 token</small><strong>{number(scopeBaselineTokens)} → {number(scopeRsiTokens)}</strong><span>节省 {percent(scopeTokenSaving)}</span></article>
             <article><Clock3 size={18} /><small>累计串行延迟</small><strong>{duration(scopeBaselineLatency)} → {duration(scopeRsiLatency)}</strong><span>节省 {percent(scopeLatencySaving)}</span></article>
-            <article><Activity size={18} /><small>LLM 请求</small><strong>{number(scopeBaselineRequests)} → {number(scopeRsiRequests)}</strong><span>保存运行中的真实请求数</span></article>
+            <article><Activity size={18} /><small>大模型调用次数</small><strong>{number(scopeBaselineRequests)} → {number(scopeRsiRequests)}</strong><span>节省 {percent(scopeRequestSaving)} · 保存的真实请求数</span></article>
             <article><Sparkles size={18} /><small>经验使用</small><strong>{number(scopeFast)} Fast · {percent(scopeFastRate)}</strong><span>当前筛选范围</span></article>
           </section>
 
@@ -552,6 +564,14 @@ export default function DataAnalysis() {
             <div className="analysis-chart-grid">
               <article><h3>累计 token</h3><PolylineChart points={curve} metric="tokens" onSelect={(point) => setSelectedIndex(point.index)} /></article>
               <article><h3>累计串行 latency</h3><PolylineChart points={curve} metric="latency" onSelect={(point) => setSelectedIndex(point.index)} /></article>
+            </div>
+          </section>
+
+          <section className="analysis-section">
+            <header><div><p className="eyebrow">MODEL CALLS / TASK ACCURACY</p><h2>大模型调用与任务准确率</h2></div><p>准确率按当前范围内结构化校验通过数除以已评测任务数计算，失败保留在分母；它不是 Judge 分数或模型置信度。</p></header>
+            <div className="analysis-chart-grid">
+              <article><h3>累计大模型调用次数</h3><PolylineChart points={curve} metric="requests" onSelect={(point) => setSelectedIndex(point.index)} /></article>
+              <article><h3>累计任务准确率</h3><PolylineChart points={curve} metric="accuracy" onSelect={(point) => setSelectedIndex(point.index)} /></article>
             </div>
           </section>
 

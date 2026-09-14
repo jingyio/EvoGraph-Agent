@@ -38,3 +38,30 @@ test('filtered cumulative curves keep unknown usage and latency as gaps', async(
  assert.equal(rows[2].baselineCumulativeTokens,null);
  assert.equal(rows[2].latencySavingRate,null);
 });
+
+
+test('cumulative model calls and task accuracy keep failures in the denominator', async()=>{
+ const { cumulativePoints }=await import('../src/dataAnalysisMath.ts');
+ const rows=cumulativePoints([
+  {baseline:{tokens:100,durationMs:1000,modelRequests:4,passed:true},rsi:{tokens:50,durationMs:800,modelRequests:2,passed:true}},
+  {baseline:{tokens:100,durationMs:1000,modelRequests:3,passed:false},rsi:{tokens:50,durationMs:700,modelRequests:2,passed:true}},
+ ]);
+ assert.equal(rows[1].baselineCumulativeRequests,7);
+ assert.equal(rows[1].rsiCumulativeRequests,4);
+ assert.equal(rows[1].requestSavingRate,3/7);
+ assert.equal(rows[1].baselineCumulativeAccuracy,.5);
+ assert.equal(rows[1].rsiCumulativeAccuracy,1);
+});
+
+test('unknown model calls or unassessed outcomes remain gaps', async()=>{
+ const { cumulativePoints }=await import('../src/dataAnalysisMath.ts');
+ const rows=cumulativePoints([
+  {baseline:{tokens:100,durationMs:1000,modelRequests:4,passed:true},rsi:{tokens:50,durationMs:800,modelRequests:2,passed:true}},
+  {baseline:{tokens:100,durationMs:1000,modelRequests:null,passed:true},rsi:{tokens:50,durationMs:700,modelRequests:2,passed:true}},
+  {baseline:{tokens:100,durationMs:1000,modelRequests:3,passed:true},rsi:{tokens:50,durationMs:700,modelRequests:2}},
+ ]);
+ assert.equal(rows[1].baselineCumulativeRequests,null);
+ assert.equal(rows[2].rsiCumulativeRequests,6);
+ assert.equal(rows[2].baselineCumulativeAccuracy,1);
+ assert.equal(rows[2].rsiCumulativeAccuracy,null);
+});
