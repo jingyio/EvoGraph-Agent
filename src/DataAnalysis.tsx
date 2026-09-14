@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import {
+  attributionTimelineHeading,
   cumulativePoints,
   evolutionSignals,
   normalizedRevisionEvidence,
+  releaseAllowsCostClaims,
   type CumulativeMeasures,
   type RevisionEvidence,
 } from "./dataAnalysisMath";
@@ -166,6 +168,13 @@ type Detail = DatasetSummary & {
     costConclusionAllowed?: boolean;
     netTokenSaving?: number | null;
     netLatencySaving?: number | null;
+    actualGraphUse?: {
+      hits?: number;
+      attempts?: number;
+      rate?: number | null;
+      minimumRate?: number | null;
+      met?: boolean;
+    } | null;
     learning?: {
       fastReuse?: number;
       workflowCreated?: number;
@@ -331,10 +340,18 @@ function plannedTasks(
 function opportunityLabel(value?: string) {
   const labels: Record<string, string> = {
     create: "首次创建经验",
+    create_reconciliation: "首次创建订单复核经验",
     reuse_and_rebind: "相近任务复用与参数重绑",
     coverage_extension: "业务边界扩展",
+    use_extension: "检验扩展后使用",
     use_revision: "检验修订后使用",
     continued_reuse: "再次检验持续复用",
+    sustained_reuse: "持续复用检验",
+    continued_extension_reuse: "继续检验扩展复用",
+    amount_threshold_rebind: "金额阈值重绑",
+    installment_threshold_rebind: "分期阈值重绑",
+    mixed_threshold_rebind: "混合阈值重绑",
+    extension_threshold_rebind: "扩展任务阈值重绑",
     mixed_obligations: "混合义务完整交付",
   };
   return value ? labels[value] || value.replaceAll("_", " ") : undefined;
@@ -879,8 +896,10 @@ export default function DataAnalysis() {
     detail ||
     datasets.find((item) => item.datasetId === datasetId);
   const isAttribution = attributionMode(metadata, detail);
-  const costConclusionAllowed =
-    detail?.summary?.costConclusionAllowed !== false;
+  const costConclusionAllowed = releaseAllowsCostClaims(
+    metadata?.status,
+    detail?.summary?.costConclusionAllowed,
+  );
   const labels = armLabels(metadata, detail);
   const plan = plannedTasks(metadata, detail);
   const revisions = normalizedRevisions(detail);
@@ -1022,6 +1041,7 @@ export default function DataAnalysis() {
     (total, point) => total + (point.rsi.generatedMatchVersions?.length || 0),
     0,
   );
+  const actualGraphUse = detail?.summary?.actualGraphUse;
   const graphRevisions = revisions.filter(
     (revision) => revision.graphChanged === true,
   );
@@ -1151,6 +1171,19 @@ export default function DataAnalysis() {
               </details>
             )}
           </section>
+
+          {metadata.status === "candidate" && (
+            <section className="analysis-quality pending">
+              <Clock3 size={17} />
+              <div>
+                <small>RELEASE STATUS</small>
+                <strong>当前候选版本尚未完成正式对照</strong>
+                <span>
+                  可查看已保存的任务和绝对开销；在状态晋升为 formal 前，不展示或主张 token、成本、latency 与调用次数收益。
+                </span>
+              </div>
+            </section>
+          )}
 
           {detail?.summary?.qualityGate != null
             ? (() => {
@@ -1389,7 +1422,7 @@ export default function DataAnalysis() {
               <header>
                 <div>
                   <p className="eyebrow">LEARNING ATTRIBUTION</p>
-                  <h2>六任务机会链与实际证据</h2>
+                  <h2>{attributionTimelineHeading(timelineEntries.length)}</h2>
                 </div>
                 <p>
                   机会标签来自冻结协议。只有保存的实质 diff
@@ -1601,7 +1634,8 @@ export default function DataAnalysis() {
                   <>
                     <p>
                       当前保存结果包含 {number(scopeG0)} 个 G 版本、
-                      {number(scopeM0)} 个 M 版本；确认 {graphRevisions.length}{" "}
+                      {number(scopeM0)} 个 M 版本；历史图实际执行 {number(actualGraphUse?.hits)}/{number(actualGraphUse?.attempts)}
+                      （{percent(actualGraphUse?.rate)}）；确认 {graphRevisions.length}{" "}
                       次 G 实质修订、{matchingRevisions.length} 次 M
                       实质修订，其中 {usedRevisions.length}{" "}
                       个修订具有后续实际使用记录。只有复用而没有修订时，本页明确只支持经验复用结论。

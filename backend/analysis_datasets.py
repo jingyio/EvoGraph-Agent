@@ -832,6 +832,8 @@ class AnalysisDatasets:
                 reason = f'两臂{completed}/{target}任务均通过，usage完整。'
             elif item.get('status') == 'infrastructure_stopped':
                 reason = f'正式协议在完成{completed}/{target}个配对任务后因基础设施停止；失败与usage缺口已保留。'
+            elif completed == target:
+                reason = f'两臂已完成{completed}/{target}个配对任务，但质量门槛未通过；保留绝对开销与失败，不计算收益。'
             else:
                 reason = f'当前仅完成{completed}/{target}个配对任务，或质量与usage尚未满足可比条件。'
             quality = {
@@ -856,6 +858,23 @@ class AnalysisDatasets:
             baseline_summary['costUsd'] = self._projected_cost(points, 'baseline')
             rsi_summary['costUsd'] = self._projected_cost(points, 'rsi')
             later_use = [use for revision in revisions for use in revision.get('subsequentUses') or []]
+            actual_graph_use = deepcopy(saved.get('actualGraphUse'))
+            if not isinstance(actual_graph_use, dict):
+                online_runs = [pair.get('online_rsi') or {} for pair in item.get('pairs') or [] if pair.get('online_rsi')]
+                hits = sum(
+                    bool((run.get('evolution') or {}).get('usedVersionId')) and (
+                        any(row.get('executor') == 'graph' and row.get('ok') is True for row in run.get('toolTrace') or [])
+                        or any(state == 'completed' for state in (run.get('graph') or {}).get('nodeStates', {}).values())
+                    )
+                    for run in online_runs
+                )
+                minimum = (item.get('protocol') or {}).get('actualGraphUseMinimumRate')
+                rate = hits / len(online_runs) if online_runs else None
+                actual_graph_use = {
+                    'hits': hits, 'attempts': len(online_runs), 'rate': rate,
+                    'minimumRate': minimum,
+                    'met': minimum is None or (rate is not None and rate >= minimum),
+                }
             return {
                 'taskCount': target,
                 'pairedCompleted': completed,
@@ -866,6 +885,7 @@ class AnalysisDatasets:
                 'latencySaving': self._saving(baseline_summary['durationMs'], rsi_summary['durationMs']) if cost_allowed else None,
                 'costSaving': self._saving(baseline_summary['costUsd'], rsi_summary['costUsd']) if cost_allowed else None,
                 'costConclusionAllowed': cost_allowed,
+                'actualGraphUse': actual_graph_use,
                 'learning': {
                     'workflowCreated': created_graphs,
                     'matchingCreated': created_matches,

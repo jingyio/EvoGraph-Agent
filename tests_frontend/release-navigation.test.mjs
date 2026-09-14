@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { canonicalHash, legacyPages } from '../src/navigation.ts';
 import { verifyRelease, measure, savingMeasure } from '../src/releaseEvidence.ts';
 
@@ -143,4 +144,16 @@ test('post-release maintenance is visibly isolated from formal KPI curves', asyn
  assert.match(source,/不进入正式六任务 KPI、累计曲线、成功率或收益/);
  assert.match(source,/不能作为正式收益率或普遍性能结论/);
  assert.match(source,/首个配置失败诊断与解释边界/);
+});
+
+test('twelve-task attribution stays dynamic and candidate runs cannot claim savings', async()=>{
+ const { attributionTimelineHeading, releaseAllowsCostClaims }=await import('../src/dataAnalysisMath.ts');
+ assert.equal(attributionTimelineHeading(12),'12任务机会链与实际证据');
+ assert.equal(releaseAllowsCostClaims('candidate',true),false);
+ assert.equal(releaseAllowsCostClaims('historical',true),true);
+ assert.equal(releaseAllowsCostClaims('formal',false),false);
+ assert.equal(releaseAllowsCostClaims('formal',true),true);
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ assert.match(source,/create_reconciliation: "首次创建订单复核经验"/);
+ assert.match(source,/extension_threshold_rebind: "扩展任务阈值重绑"/);
 });

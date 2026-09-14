@@ -147,9 +147,29 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     listing = store.list()
     assert listing['defaultDatasetId'] == 'finance-attribution-v4-6'
     assert [row['datasetId'] for row in listing['items']] == [
-        'finance-attribution-v4-6', 'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
+        'finance-attribution-v4-6', 'finance-attribution-v5-12-expanded',
+        'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
     ]
     assert listing['items'][1]['status'] == 'historical'
+    current = store.get('finance-attribution-v4-6')
+    assert current['summary']['actualGraphUse']['hits'] == 4
+    assert current['summary']['actualGraphUse']['attempts'] == 6
+    expanded = store.get('finance-attribution-v5-12-expanded')
+    assert expanded['dataset']['status'] == 'historical'
+    assert expanded['experimentStatus'] == 'completed'
+    assert expanded['summary']['taskCount'] == expanded['summary']['pairedCompleted'] == 12
+    assert expanded['summary']['baseline']['passed'] == expanded['summary']['rsi']['passed'] == 8
+    assert expanded['summary']['baseline']['tokens'] == 1467397
+    assert expanded['summary']['rsi']['tokens'] == 1401822
+    assert expanded['summary']['costConclusionAllowed'] is False
+    assert expanded['summary']['actualGraphUse']['hits'] == 11
+    assert expanded['summary']['actualGraphUse']['rate'] == pytest.approx(11 / 12)
+    assert expanded['summary']['learning']['graphRevisions'] == 0
+    assert expanded['summary']['learning']['matchingRevisions'] == 0
+    assert len(expanded['points']) == 12
+    assert expanded['points'][8]['baseline']['passed'] is False
+    assert expanded['points'][8]['rsi']['passed'] is False
+    assert expanded['points'][0]['detailUrl'] == '/api/releases/finance-attribution-v5-12-expanded/pairs/FX01'
     result = store.get('taskbank-v4-36')
     assert result['dataset']['status'] == 'historical'
     assert result['dataset']['source'] == {'kind': 'online-e2e'}

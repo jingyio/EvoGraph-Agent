@@ -19,6 +19,7 @@ async def main() -> None:
     experiment_id = started['id']
     await experiment.tasks[experiment_id]
     saved = experiment.get(experiment_id)
+    summary = saved['summary']
     print(json.dumps({
         'id': experiment_id,
         'mode': saved['mode'],
@@ -26,7 +27,32 @@ async def main() -> None:
         'assetVersion': saved['assetVersion'],
         'fingerprint': saved['fingerprint']['digest'],
         'predecessorId': saved.get('predecessorId'),
-        'summary': saved['summary'],
+        'summary': {
+            'arms': summary['arms'],
+            'protocolComplete': summary['protocolComplete'],
+            'qualityGate': summary['qualityGate'],
+            'costConclusionAllowed': summary['costConclusionAllowed'],
+            'netTokenSaving': summary['netTokenSaving'],
+            'netLatencySaving': summary['netLatencySaving'],
+            'actualGraphUse': summary['actualGraphUse'],
+            'learning': {
+                'createdTaskIds': [point['taskId'] for point in summary['learning']['created']],
+                'revisionTaskIds': [point['taskId'] for point in summary['learning']['revisions']],
+                'laterUse': summary['learning']['laterUse'],
+                'revisionWithLaterUse': summary['learning']['revisionWithLaterUse'],
+            },
+            'points': [{
+                'taskId': point['taskId'],
+                'noLearningStatus': point['noLearning']['status'],
+                'noLearningEvaluation': (point['noLearning'].get('evaluation') or {}).get('status'),
+                'onlineRsiStatus': point['onlineRsi']['status'],
+                'onlineRsiEvaluation': (point['onlineRsi'].get('evaluation') or {}).get('status'),
+                'tokenSaving': point['tokenSaving'],
+                'latencySaving': point['latencySaving'],
+                'usedVersionId': point['usedVersionId'],
+                'generatedVersionIds': point['generatedVersionIds'],
+            } for point in summary['points']],
+        },
     }, ensure_ascii=False))
 
 

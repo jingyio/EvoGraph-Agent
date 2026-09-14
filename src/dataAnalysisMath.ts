@@ -294,3 +294,14 @@ export function normalizedRevisionEvidence(
     });
   });
 }
+
+export function releaseAllowsCostClaims(
+  status: string | undefined,
+  backendAllows: boolean | undefined,
+): boolean {
+  return (status === "formal" || status === "historical") && backendAllows !== false;
+}
+
+export function attributionTimelineHeading(taskCount: number): string {
+  return `${taskCount || 0}任务机会链与实际证据`;
+}

@@ -143,6 +143,95 @@
       ]
     },
     {
+      "datasetId": "finance-attribution-v5-12-expanded",
+      "releaseId": "finance-attribution-v5-12-expanded",
+      "displayName": "财务复核 · 十二任务扩大验证（8/12）",
+      "status": "historical",
+      "experimentId": "7b3e9244-1a2c-4a85-bad6-18d0cee3bf09",
+      "runtimeRevision": "sha256:3c4fd75319110c4d6dc5cb53964b82b72c4bdc196eef00092a1dadd738ab8f3d",
+      "assetVersion": "finance-rsi-attribution-v5-12",
+      "artifactDigest": "sha256:cadaa40e53a79482429ded9ecdb99b67b99465d3c3e372feffa038a71f7a1d63",
+      "createdAt": "2026-09-14T15:10:51.771Z",
+      "claims": [
+        "严格串行完成12任务×2臂共24次真实Agent运行；两臂均8/12通过，全部24次usage完整。",
+        "FX01创建G0；FX02–FX08七个订单复核任务实际执行该图并全部通过，在线臂在这一子簇稳定减少执行决策。",
+        "在线臂11/12次实际执行历史图，达到50%门槛；但FX09–FX12支付结构健康任务两臂均未通过。",
+        "本轮没有产生实质G或M修订，因此只证明订单复核经验复用，未证明支付健康覆盖扩展或反馈进化。"
+      ],
+      "limitations": [
+        "质量门槛未通过，不能把全链4.47% token差和18.89%串行时长差作为收益结论；当前正式发布仍为六任务finance-attribution-v4-6。",
+        "FX09–FX12稳定缺失正确的期间去重计数交付，`period_count` 期望9但提交为0或12，并出现报告恢复终止；支付结构子簇需要补充时间分桶/期间计数工具与交付映射后重新预检。",
+        "在线臂在FX11、FX12发生高成本恢复，分别达到24与20次模型请求；全部失败、token、工具错误和时长均保留。",
+        "11/12实际图执行包含对支付健康任务的部分旧子图复用；命中不等于任务成功，也不等于产生了结构修订。"
+      ],
+      "source": {
+        "kind": "attribution"
+      },
+      "protocol": {
+        "id": "finance-graph-rsi-learning-attribution-v5-12",
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "composition": "qwen/qwen3.5-27b",
+        "thinking": false,
+        "computeInterface": "granular-compute-v1",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "taskCountPerArm": 12,
+        "taskOrder": [
+          "FX01",
+          "FX02",
+          "FX03",
+          "FX04",
+          "FX05",
+          "FX06",
+          "FX07",
+          "FX08",
+          "FX09",
+          "FX10",
+          "FX11",
+          "FX12"
+        ],
+        "armOrder": "alternating per pair; same task order in each arm",
+        "noLearning": "graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task",
+        "onlineRsi": "same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment",
+        "shared": [
+          "model",
+          "prompt",
+          "tools",
+          "cold planning",
+          "graph compilation",
+          "parameter binding",
+          "report recovery",
+          "budget",
+          "inputs"
+        ],
+        "judge": "not_run",
+        "actualGraphUseMinimumRate": 0.5,
+        "actualGraphUsePolicy": "count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not",
+        "smokePolicy": "formal frozen twelve-task finance chain",
+        "failurePolicy": "retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure",
+        "mode": "formal",
+        "experimentStatus": "completed",
+        "qualityGateStatus": "failed",
+        "completedPairCount": 12
+      },
+      "taskCount": 12,
+      "attribution": {
+        "kind": "cross-task-learning",
+        "armLabels": {
+          "baseline": "图执行 · 不学习",
+          "rsi": "图执行 · 在线RSI"
+        },
+        "control": "每次冷规划和编译，不读写跨任务经验",
+        "learning": "独立空经验，仅学习此前成功train轨迹"
+      }
+    },
+    {
       "datasetId": "finance-attribution-2026-09-14",
       "displayName": "财务复核 · 图执行学习归因（3/6 后停止）",
       "status": "historical",

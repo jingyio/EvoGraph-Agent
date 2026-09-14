@@ -2,15 +2,15 @@
 
 ## 2026-09-14 细粒度学习归因运行线
 
-本轮冻结运行后端为 `trajectory-v5-granular`，六任务资产 `finance-rsi-attribution-v4`。当前发布与默认数据分析同为 `finance-attribution-v4-6`，绑定正式六任务实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`。两臂均使用图执行、同一 27B 模型及共享工具/提示/恢复；区别仅在跨任务经验读取与正常 train 学习。48任务扩展暂缓。旧任务与实验均保留。
+当前正式发布与默认数据分析仍为 `finance-attribution-v4-6`，绑定六任务实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`。随后冻结 runtime `sha256:3c4fd75319110c4d6dc5cb53964b82b72c4bdc196eef00092a1dadd738ab8f3d` 完成十二任务扩大验证 `7b3e9244-1a2c-4a85-bad6-18d0cee3bf09`：两臂各8/12通过，质量门槛失败，因此登记为 historical，不替换当前formal。两轮两臂均使用图执行、同一27B模型及共享工具/提示/恢复；区别只在跨任务经验读取与正常train学习。
 
 `backend/workspace_compute.py` 实现 run 内映射、聚合、关联、派生、比较和缺失工具；`ToolContext` 保存仅本次运行的计算收据。执行器为成功收据记录显式上游来源；轨迹诱导把这些来源编译为 `$output` 边，从当前附件重算，不保存旧业务结果。数值转换条件保留模型边界，不阻塞其他兼容子图。工具独立步骤仍可批量调用。
 
-正式六任务资产和工件保持冻结。`backend/attribution_assets.py` 当前生成下一轮 `finance-rsi-attribution-v5-12`：
+正式六任务资产和工件保持冻结。`backend/attribution_assets.py` 生成并已运行扩大验证资产 `finance-rsi-attribution-v5-12`：
 从同一 V3-r3 来源精确复制题面、附件和私有评分，依次使用8个订单对账实例及4个支付结构健康实例，
 离线机会标签不进入Agent或匹配器。`backend/attribution_experiment.py` 用独立空经验、交替臂顺序和
 严格串行1/1/1运行；formal要求同runtime、同资产的双任务probe已通过，并要求至少50%的在线任务
-真正选择且执行保存图，只有版本加载不算命中。失败、usage和维护开销全部保存。详见
+真正选择且执行保存图，只有版本加载不算命中。正式扩大验证已完成：FX01–FX08订单复核通过，FX09–FX12支付健康任务因期间计数交付缺口失败；在线臂实际图执行11/12但无G/M修订。失败、usage和维护开销全部保存。详见
 [工具与复用设计](granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
 
 
