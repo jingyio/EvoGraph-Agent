@@ -1,0 +1,31 @@
+这里就是供你拖入工作台的测试材料。
+
+财务、客服、技术工单三个文件夹，每类只有问题文本和 Excel 附件。
+基础试用：拖入“输入附件.xlsx”，把“问题.txt”的正文填到工作要求中。
+轻微变化试用：新开一个工作区，拖入“输入附件-扩展版.xlsx”，使用“问题-小幅变化.txt”。
+基础版有12条业务主记录；扩展版保留这12条，再增加4条新记录。
+两个 Excel 是替代关系，单次选其中一个，不同时上传，以免重复计算。
+
+你可以直接改问题中的阈值、排序或输出要求，也可以在 Excel 中改值、增删行。
+多张表通过 order_id / complaint_id / issue_id 关联；修改关联键时请同步相关表。
+财务金额单位是巴西雷亚尔的分（BRL centavos），100分=1 BRL。
+日期保留来源的时间文本，避免 Excel 日期序列号被当前上传解析器误当普通数字。
+这不是前端题库，不需要上传任何 workspace.json、tables.json 或 .rsi 文件。
+
+来源：
+财务：Olist 公开匿名电商记录，CC BY-NC-SA 4.0。
+https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+客服：CFPB 公开消费者投诉记录。消费者陈述不等于已核实的企业事实。
+https://www.consumerfinance.gov/data-research/consumer-complaints/
+技术工单：zammad/zammad 的公开 GitHub Issues，排除 Pull Request。
+https://github.com/zammad/zammad/issues
+Issue 文本保留原作者权利；这些是公开软件问题，不是企业内部生产工单。
+
+问题由本项目本轮新编写；附件从已有公开原始数据缓存重新选取并整理为 Excel，未改造业务值。
+选取时排除了冻结任务库全部1800条记录及已有工作区中的业务ID，只使用剩余的train分区记录。
+未使用历史运行报告或参考答案。原始数据仍是历史公开记录，不声称为实时企业数据。
+详细来源、原始缓存哈希和本次记录清单位于隐藏的 .rsi/provenance.json，仅供审计，不必上传。
+
+这些材料用于自由交互试用，不是新的已完成评测。
+问题和附件变化后以当前内容为准，系统可能重新规划或请求澄清，不保证历史图一定命中。
+当前普通用户工作区不写入共享经验；报告仍需业务复核，不能把“执行完成”当作事实全部正确。

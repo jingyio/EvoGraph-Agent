@@ -1,0 +1,67 @@
+{
+  "modelCalls": 0,
+  "checks": [
+    {
+      "file": "财务/输入附件.xlsx",
+      "sha256": "403b7c06a5741991b63ebaf2e1e5d7e02c00bb15be942fcb253234d2a180a8cd",
+      "tables": {
+        "orders": 12,
+        "payments": 13,
+        "items": 21
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    },
+    {
+      "file": "财务/输入附件-扩展版.xlsx",
+      "sha256": "b1c5e3cc4c379d22582efa247cd040e1af97a89ad047cd4ee905babe413547c2",
+      "tables": {
+        "orders": 16,
+        "payments": 17,
+        "items": 25
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    },
+    {
+      "file": "客服/输入附件.xlsx",
+      "sha256": "6e64b72531aaa6d5d8ec5a41fae41470d8956f7d888ff0e782b6fae40d7ef706",
+      "tables": {
+        "complaints": 12,
+        "responses": 12
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    },
+    {
+      "file": "客服/输入附件-扩展版.xlsx",
+      "sha256": "ee23739d832bf57a00ba5df4764d516917b6e65858c477e40a2c35d62db79e1a",
+      "tables": {
+        "complaints": 16,
+        "responses": 16
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    },
+    {
+      "file": "技术工单/输入附件.xlsx",
+      "sha256": "b37e583d31376a0490d591fbbe3df18db41e260091c9c97d030548df44e51568",
+      "tables": {
+        "issues": 12,
+        "activity": 12
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    },
+    {
+      "file": "技术工单/输入附件-扩展版.xlsx",
+      "sha256": "ea0f9d89d637b4ca2315dd523a68e26ac2788ebde61852aad5bdc1205f7e632c",
+      "tables": {
+        "issues": 16,
+        "activity": 16
+      },
+      "exactSourceValues": true,
+      "uploadAndTaskCreation": true
+    }
+  ]
+}

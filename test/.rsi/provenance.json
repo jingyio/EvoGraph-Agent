@@ -1,0 +1,120 @@
+{
+  "finance": {
+    "source": {
+      "provider": "Olist",
+      "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+      "license": "CC BY-NC-SA 4.0",
+      "rawSha256": {
+        "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+      },
+      "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
+    },
+    "excludedRecordCount": 1001,
+    "eligibleCount": 58856,
+    "recordIds": [
+      "24778d0f71e47bff8721b93b3aa5b898",
+      "fb4717856a1a4e0a10b9230a1f4b7e51",
+      "e8dbddc8a7fd19aaf321cf4e7b00c787",
+      "0d71624d3497568c5af4fa0fc5faa967",
+      "7d77cbd8b988f81a25289a02429fab42",
+      "0a2fff457eab3cadff378f87851dac15",
+      "30bdf3d824d824610a49887486debcaf",
+      "c462577fbdd44f40d9ded05b2ebd6096",
+      "4fe6e6eee2e643359d66860e9954cb84",
+      "de4b205a30d85c902a79bf99f8c77c21",
+      "085bc46be56c7b3c4d5d805843d02e5e",
+      "767f23439c8a87792b7b5b43fc057411",
+      "32d5345315b43fe6681946d54874262c",
+      "16211bb7c07fe77216ea0a0074954ead",
+      "75d035594c312309908a318d046d712d",
+      "a4de95599a7ceea15c118d8a59c8d574"
+    ],
+    "baseCount": 12,
+    "extendedCount": 16,
+    "selection": "fixed hash ordering; no outcome-based selection"
+  },
+  "support": {
+    "source": {
+      "provider": "CFPB",
+      "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+      "license": "CC0 (API metadata)",
+      "requests": [
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+      ],
+      "rawSha256": {
+        "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+        "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+        "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+      },
+      "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
+    },
+    "excludedRecordCount": 500,
+    "eligibleCount": 949,
+    "recordIds": [
+      "9999454",
+      "9998304",
+      "9998965",
+      "9717197",
+      "9999759",
+      "9999984",
+      "9998629",
+      "9777751",
+      "9999727",
+      "9999064",
+      "9999591",
+      "9997644",
+      "9998761",
+      "9996794",
+      "9899292",
+      "9999710"
+    ],
+    "baseCount": 12,
+    "extendedCount": 16,
+    "selection": "fixed hash ordering; no outcome-based selection"
+  },
+  "tickets": {
+    "source": {
+      "provider": "Zammad GitHub Issues",
+      "url": "https://github.com/zammad/zammad/issues",
+      "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+      "rawSha256": {
+        "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+        "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+        "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+        "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+        "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+        "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+        "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+        "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+        "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+        "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+      },
+      "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
+    },
+    "excludedRecordCount": 300,
+    "eligibleCount": 307,
+    "recordIds": [
+      "5667",
+      "5821",
+      "3975",
+      "6261",
+      "2739",
+      "5816",
+      "6161",
+      "3251",
+      "5781",
+      "6061",
+      "4619",
+      "4923",
+      "5834",
+      "5019",
+      "5970",
+      "4757"
+    ],
+    "baseCount": 12,
+    "extendedCount": 16,
+    "selection": "fixed hash ordering; no outcome-based selection"
+  }
+}
