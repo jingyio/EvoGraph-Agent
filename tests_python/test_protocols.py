@@ -112,3 +112,9 @@ async def test_autotool_new_spec_generates_enum_validation_without_custom_wrappe
     spec['paths']['/api/new/{recordId}']['post'] = spec['paths']['/api/new/{recordId}']['get']
     with pytest.raises(ValueError, match='GET'):
         acquire_tools(spec, transport, lambda value, r, c: value)
+
+
+def test_required_tool_choice_is_opt_in_and_never_applied_without_tools():
+    options = ModelOptions('https://openrouter.ai/api/v1', 'key', 'qwen')
+    assert request_body(options, [], [Tool('read', 'read', 'read', object_schema(), lambda a, c: {})], require_tool=True)['tool_choice'] == 'required'
+    assert request_body(options, [], [], require_tool=True)['tool_choice'] == 'auto'

@@ -33,10 +33,10 @@ def valid_count(value):
     return type(value) is int and 0 <= value <= 9007199254740991
 
 
-def request_body(options, messages, tools):
+def request_body(options, messages, tools, *, require_tool=False):
     body = {'model': options.model, 'messages': messages, 'tools': [
         {'type': 'function', 'function': {'name': t.name, 'description': t.description, 'parameters': t.parameters}} for t in tools],
-        'tool_choice': 'auto', 'parallel_tool_calls': True, 'enable_thinking': False}
+        'tool_choice': 'required' if require_tool and tools else 'auto', 'parallel_tool_calls': True, 'enable_thinking': False}
     if urlsplit(options.base_url).hostname == 'openrouter.ai':
         body['reasoning'] = {'enabled': False}
     return body
@@ -53,10 +53,11 @@ class ModelClient:
             raise ValueError('模型地址必须是无内嵌凭据的 HTTP(S) API 基础地址')
         self.options, self.model, self.transport = options, options.model, transport
         self.settings = {'enableThinking': False, 'parallelToolCalls': True}
+        self.supports_required_tool_choice = True
         if parsed.hostname == 'openrouter.ai':
             self.settings['reasoningEnabled'] = False
 
-    async def complete(self, messages, tools):
+    async def complete(self, messages, tools, *, require_tool=False):
         retries = 0
         retryable_statuses = {408, 429, 500, 502, 503, 504}
         async with httpx.AsyncClient(timeout=self.options.timeout, follow_redirects=False, trust_env=False, transport=self.transport) as client:
@@ -64,7 +65,7 @@ class ModelClient:
                 try:
                     response = await client.post(self.options.base_url.rstrip('/') + '/chat/completions',
                                                  headers={'Authorization': 'Bearer ' + self.options.api_key},
-                                                 json=request_body(self.options, messages, tools))
+                                                 json=request_body(self.options, messages, tools, require_tool=require_tool))
                 except httpx.TimeoutException:
                     if retries == 0:
                         retries = 1

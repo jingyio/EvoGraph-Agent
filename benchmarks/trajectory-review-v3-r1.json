@@ -1,0 +1,3859 @@
+{
+  "version": "trajectory-review-v3-r1",
+  "taskDesignVersion": "heterogeneous-operations-v3-r1",
+  "taskDesign": "48 project-authored heterogeneous business requests over disjoint public records; public business-ID/report-evidence contract clarified; audit labels are offline only",
+  "splitPolicy": "train only learning; validation/test frozen and unrun",
+  "protocol": {
+    "trainPairs": 48,
+    "validationPairs": 6,
+    "testPairs": 6,
+    "precheckPairs": 12,
+    "organization": "three scenarios × sixteen heterogeneous train requests; twelve fixed precheck pairs"
+  },
+  "tasks": [
+    {
+      "id": "F01",
+      "scenario": "finance",
+      "title": "多原因订单财务复核",
+      "kind": "reconcile",
+      "position": 1,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "缺失",
+        "重叠",
+        "单位"
+      ],
+      "group": "reconcile",
+      "groupLabel": "多原因订单财务复核",
+      "recordIds": [
+        "a9aaaf24646d60bb635aee235c06db11",
+        "f081d9c6f03801d55a6b730962b9620b",
+        "af76a45a10524549102e010f2bd9d3cd",
+        "52da3d9903e65cea92aa96e6d890ff15",
+        "e74c8d6962373b0c0e984e97fe2fa674",
+        "7254b66719addb416bd46b5f01fbfa67",
+        "cddbe0d3e12cc6ae8effe83bd9831c81",
+        "7ac766e40565c0fcc2a226dfc3f6d89b",
+        "63b6bb683b45ebaf42d0979fae65ad35",
+        "abdd969b6261591f58d7f5fcc24c30f1",
+        "9ca192d3fd38d4aff0c137f84cf7e121",
+        "4b90a2d18610d0b0ebb42c4abda69034"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4831,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "缺失",
+          "重叠",
+          "单位"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "8d8f7a0b5148452577a23882a03a4ab8b18c89d0e19dd2e0f94e495581eb7581",
+      "inputHash": "e0a0e10b299f0dc1aae97a72f4e8c1608716a51c2b7dd0dc1770baec97a4fda3"
+    },
+    {
+      "id": "F02",
+      "scenario": "finance",
+      "title": "支付方式与金额异常概览",
+      "kind": "payment",
+      "position": 2,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "多表关联",
+        "状态交叉",
+        "重叠"
+      ],
+      "group": "payment",
+      "groupLabel": "支付方式与金额异常概览",
+      "recordIds": [
+        "467cebcc0da9e810f821e951c04dd59e",
+        "64e5cb1dfa641be49d6baa62b8f41b9c",
+        "acb09adeef280bd9475bbc0fed1eb8ee",
+        "4d06a731cdfaf790a65798f65ec6ccab",
+        "4726e333b8605a51b03b823f5021f3d1",
+        "54586394af32e5d816910c2bace53a0e",
+        "b172124e9aab2e37fbc87515ab36ea81",
+        "314639bc2e41647756681b0f2afdb306",
+        "76ed9741ef1e5ae8641e9c885d775c82",
+        "77b24e14e65cdeff7657a0ea3c9e9878",
+        "faa3c806c150cf6f037882a8c4db259d",
+        "0cf7571add1c69ad1e6c35589c2a8876"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4835,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "状态交叉",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "d36feac11aebcec24982dc06de5646b1e6fb2b9052d9feba09e8a3770634740a",
+      "inputHash": "64f824fb9d46b950335bf1e2e84093fb1b8e200f6176667f7681fbdd5db2cffe"
+    },
+    {
+      "id": "F03",
+      "scenario": "finance",
+      "title": "高金额订单支付结构复核",
+      "kind": "payment",
+      "position": 3,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "排序",
+        "一对多",
+        "状态交叉"
+      ],
+      "group": "payment",
+      "groupLabel": "高金额订单支付结构复核",
+      "recordIds": [
+        "b4fc77bdadd28d0ee631208831bc0d49",
+        "99a50db34d17b1f845a8ea04de3e747d",
+        "020c2cd20d09193b79c51797a82aaa3e",
+        "eb45ff263f9e77136f626c712add7354",
+        "c4e1529b643ecfaa202d2805ee2d17fa",
+        "636cae28249d7bd12aa6fb8d96bbe735",
+        "4498a90ce01bc4d0f03ee12f1779ecbf",
+        "1fc147ecded099d8acf876cfaf66f731",
+        "a91e25d9e242b0545cddf83a2bb46954",
+        "c7740e0a4fdfedf93d82593caadc5640",
+        "9102c4cce353ccf061738fc045c2e27d",
+        "7b907821024740432d6d005caa3451ee"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4984,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "排序",
+          "一对多",
+          "状态交叉"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "4120306b3cd9ea86999f03be342a400b6a1b7a24df3168ed38bcba7114cf4ea2",
+      "inputHash": "9a0a126f2003ace9c75b19f656f21d02d6b8b6dc21344817285698cdaff9a6cf"
+    },
+    {
+      "id": "F04",
+      "scenario": "finance",
+      "title": "确定性分段金额变化复核",
+      "kind": "reconcile",
+      "position": 4,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "派生期间",
+        "多表关联",
+        "缺失"
+      ],
+      "group": "reconcile",
+      "groupLabel": "确定性分段金额变化复核",
+      "recordIds": [
+        "2eb6d51ef9ae3ae319b31ce4e4ec0097",
+        "82419d35f3c2a4d515d9bd272ecbc050",
+        "9630c641313083fe39397cfa75810e4b",
+        "e94157cd8482dadb5e152f977ac0a097",
+        "da1630ace2e5b7e69a1bbe87059a4286",
+        "25ed8cc8c43f4ebcabd60fc31840c401",
+        "12734d5805fd317dc486f3630fd82bcb",
+        "5ae255c95ad57c93f6b3a623b8b5505f",
+        "e13f9d9f79f8325d4f77d26e7384e9fd",
+        "6d983186ed41c01b43e558f2d7a68010",
+        "43f5b8a8303562c644185a6bfd2cf3dd",
+        "cff314344e536186940328c1c6ceec96"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4599,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "派生期间",
+          "多表关联",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "08f17c7a051fefd8b0fbc338953f7bd0db2a5455495f6729d269d91aa0005618",
+      "inputHash": "df1d114900f897a70ae141127b56326f35c09bd55d63a78ff49cddc88a65480d"
+    },
+    {
+      "id": "F05",
+      "scenario": "finance",
+      "title": "月度支付与商品金额复核",
+      "kind": "reconcile",
+      "position": 5,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "期间",
+        "一对多",
+        "重叠"
+      ],
+      "group": "reconcile",
+      "groupLabel": "月度支付与商品金额复核",
+      "recordIds": [
+        "8b1999cf2912d6be6f23ce1474751748",
+        "bae1791d3987fa528b382adcc1de4db1",
+        "6e3a62e4b3150455350d30705dc23ac3",
+        "e32f30334d29fb3811f44538904a8517",
+        "0e87d2e51cc9889baf44d689d0f5827e",
+        "f398a143c0fe171d965db2096cf064cf",
+        "e7a2b8d18d8cf1501a61b55d6f154346",
+        "a8a92512496f02da00cf23fc2066121c",
+        "6b17faa4e2b485586a3bbe992eb96d0a",
+        "51bfb3720850ad59846938a017083559",
+        "844b8b73a94f61b9ff8dc1e88c081365",
+        "ef0dcf520a0a4634713a5ef4806433c2"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4983,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "期间",
+          "一对多",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "6097d40dc8d7992da39ac49b1ea6b85b853d691cf9371bdccb62f8ca5a094ea3",
+      "inputHash": "0ac9a66d6d75e826b0424661876c4979cc997ec09c5567026dd003efd61e7145"
+    },
+    {
+      "id": "F06",
+      "scenario": "finance",
+      "title": "指定支付结构内部复核",
+      "kind": "payment",
+      "position": 6,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "筛选",
+        "状态交叉",
+        "边界"
+      ],
+      "group": "payment",
+      "groupLabel": "指定支付结构内部复核",
+      "recordIds": [
+        "3e7433883ed362df81977e1b24e3d6ec",
+        "7e85dd5c64bfd481355a0662f9f9f777",
+        "279eab1ce88064419806859e4575a10e",
+        "33fc608633261bfde6d48fc0a431f14f",
+        "b77da58943f12a6562df928e821440c9",
+        "084ac56b13107e32ab92934f70638bc9",
+        "d84d29e12f989c8237aa0f2a2213168e",
+        "2ef3dc148b9087149e2b5673eea276ac",
+        "3c860daefaca397a28e5f1909a3d6813",
+        "085505e898297808653c70305ae11f47",
+        "6ca834e14df3fb5924d4e7fe551c80d9",
+        "34be06fa6e60f24cfb03b4b2303d9861"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5095,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "筛选",
+          "状态交叉",
+          "边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "c6b0d30d1aeedaae317800b94cc28d6e7f7574c8031b598acb2d641a550d9f92",
+      "inputHash": "4d1c4dfff3316c08d27e5d7f9aace5f60e9873d677556e7d9efbdcb3de7952de"
+    },
+    {
+      "id": "F07",
+      "scenario": "finance",
+      "title": "订单关联完整性待核查",
+      "kind": "reconcile",
+      "position": 7,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "缺失",
+        "一对多",
+        "重叠"
+      ],
+      "group": "reconcile",
+      "groupLabel": "订单关联完整性待核查",
+      "recordIds": [
+        "56966791d3e19333e9cdf99782963127",
+        "c4d2f075fc3bf3a06d1e68e113c35cbd",
+        "eb5063779e537e3b04fb1f0a50774ffb",
+        "13c275bb0585b060da0d45973177dc80",
+        "942bfba61040fe93e3038099eb60fe31",
+        "87fbaf80a5baf8a4b61821115117f999",
+        "8af844e18cf7ddedd50343fcd0990863",
+        "33cf8e9da9865079f64965b83061baae",
+        "76b5cf2989344419461ec7b13b23fd3b",
+        "6066fbcebeaf378770ad9fbe8e30d1f0",
+        "9cb197309d8105d9d407533fce50ae34",
+        "1fef84eb15d7b166c3e3008a8dd48ef1"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4732,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "缺失",
+          "一对多",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "490858d61d3536052bdc283adeee7aa7558c84b7b443e0083951ccde28f07533",
+      "inputHash": "35de729921e5428968499f9e1b64f7b4cf5481003e64a71268345e7423846162"
+    },
+    {
+      "id": "F08",
+      "scenario": "finance",
+      "title": "金额边界与分期复核",
+      "kind": "reconcile",
+      "position": 8,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "运算符边界",
+        "单位",
+        "缺失"
+      ],
+      "group": "reconcile",
+      "groupLabel": "金额边界与分期复核",
+      "recordIds": [
+        "061f31c732cb84a989d5b62660212ecc",
+        "0ba1afba0d7716b50cd8b5f3c7e4e638",
+        "caae7bbaec61968f200bdb5a27df0d4b",
+        "c131acb8c30ee5b5d6063dac2470d95d",
+        "5e1a8017512badbdf543b509991dba6d",
+        "48a40810ca9950462e73f0796c863b88",
+        "0c29ee02f432c35cb24a70317de6457c",
+        "5a85ba245a3a3bcb21334e761e0ef1a2",
+        "81dbb577a47365babeaa44fe4f9a5666",
+        "37e96fc1d814b16ee6b763bd52e9e0de",
+        "79347dc228cde031ba95adb6a647ab6b",
+        "da1614839066b897fd837a7898bd26e0"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4966,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "运算符边界",
+          "单位",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "5a0ca73f9b0c992fc5c22ad481f61ac882ed485d142316eef00226cdeb0cb29b",
+      "inputHash": "a2c7d1c3a1a7c2d77d429f3849daeeb1cb5b1235a0fffc01b52a7e7cba7f362a"
+    },
+    {
+      "id": "F09",
+      "scenario": "finance",
+      "title": "措辞变化的订单复核",
+      "kind": "reconcile",
+      "position": 9,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "重述",
+        "参数重绑定",
+        "重叠"
+      ],
+      "group": "reconcile",
+      "groupLabel": "措辞变化的订单复核",
+      "recordIds": [
+        "5037eaa70390c5b3b4073d0aaac80c15",
+        "2a0a79550fc18171ae34cf327fc5f0e3",
+        "b62be88e52e1a504211a9b93f83cfa78",
+        "83649f5bef804caee20776fbd535d29d",
+        "0618bf2e52dc2aaefd882d186558e642",
+        "14ac73e061a88e655cc2d6b984f3c81d",
+        "3d65824e9d761678f1695afde11107ab",
+        "d1e51d46442dbad6b79b800dc7293869",
+        "2504fffc2c378bdcd1a74f47fefd3a2b",
+        "49ef8c27301b117dac497090ecd4876d",
+        "87d65accbbf482b8a87bd13bb444cf6d",
+        "366b94daa22781675a0ffffbcbd517a9"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 20
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5489,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "重述",
+          "参数重绑定",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "df108671b4776292ed1914f640f3e91be2b7465544115c108d1b84548ac2fdd0",
+      "inputHash": "db3001767c2bfc4f150af93f531b4e815fb41af7f565142f12fbcaa2e17d58c0"
+    },
+    {
+      "id": "F10",
+      "scenario": "finance",
+      "title": "扩展的金额与支付状态复核",
+      "kind": "payment",
+      "position": 10,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "覆盖扩展",
+        "金额",
+        "状态交叉"
+      ],
+      "group": "payment",
+      "groupLabel": "扩展的金额与支付状态复核",
+      "recordIds": [
+        "103333c1fad5bfda8e9b1c84615fae2f",
+        "d03665e5fcb519e311e5609b2d0d2282",
+        "25a9d190845d7c88b05484cc31ae09e6",
+        "b7261927790781e114d3a12f39ef44c0",
+        "93667ea4f04019c0c0010be42972ab42",
+        "f96344495ad4aa6c46d0b40c3b6e4424",
+        "dda7e9dc97ce2a40812663bc5e279c71",
+        "a748925874331f44c16af90066858c9e",
+        "331b367bdd766f3d1cf518777317b5d9",
+        "9d08114eba8cc347f5073bc95311a728",
+        "4c9671e28ccfc8dafb3a9479e8f51adf",
+        "0fe7e34c13cf8781647bd4cfe053099e"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 17
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5296,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "覆盖扩展",
+          "金额",
+          "状态交叉"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "84b9990a71aae772802ba68d2a7673a9f1fc7a39819ce570204f72e73fd3befe",
+      "inputHash": "ca3a02c1ac9340d8d5abe5e42c8dc50ac528e002b8cd03e1532741ace6fae519"
+    },
+    {
+      "id": "F11",
+      "scenario": "finance",
+      "title": "复核交接组合清单",
+      "kind": "reconcile",
+      "position": 11,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "组合",
+        "多交付",
+        "一对多"
+      ],
+      "group": "reconcile",
+      "groupLabel": "复核交接组合清单",
+      "recordIds": [
+        "5c932e0a181410b67c77daaed30991af",
+        "9fdbbd0977c4f7330b8c2c4aecd30110",
+        "a4e62639ac0ca7429854efc494c1915f",
+        "548cef769a379d873b5a602a8bf39af6",
+        "c76a06605f09c1a1e5cf90bea47a528f",
+        "5eee79207209ec0e102581f289e2a6db",
+        "a1b4a9a7a29abaef91be9fc53831d32c",
+        "2cfc79d9582e9135c0a9b61fa60e6b21",
+        "e77eb7578799cc588feca0f6cf56a49e",
+        "c038a5b29abf034f262370c75f739875",
+        "ff2d25d8b1b734099dee10e90e23a2ab",
+        "fa94c44f1539dcab4c8b936951d319d6"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 15
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5060,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "组合",
+          "多交付",
+          "一对多"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "fe002908509d6cd1858ec76219433699f0e25094d81a30a8027dcc28648b01a3",
+      "inputHash": "59edeb62bd1d2095b5578682c5f0206f767d9747014f7e70fda8336bc5fe583f"
+    },
+    {
+      "id": "F12",
+      "scenario": "finance",
+      "title": "仅支付结构的局部复核",
+      "kind": "payment",
+      "position": 12,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界"
+      ],
+      "group": "payment",
+      "groupLabel": "仅支付结构的局部复核",
+      "recordIds": [
+        "843ad442f1f401e52f43a4b176e211fa",
+        "14b1311682489866d9a6b5c6dbc0372f",
+        "90181a7780a0fa0a32d7449931661c2b",
+        "fa014da3aa5b1fd99b79a24c7a17d778",
+        "cd3ad05bdb70488e29c3afb5641cc178",
+        "c12921c117b48d3bdcf10d1983d3b9e1",
+        "f577c78346131418552c3d7fea582723",
+        "f23155f5fa9b826631c5b8e038b38393",
+        "13b1d703b453fd67b66850bd2846e13b",
+        "ec706e6ca42af828f8d9d2495e6c39c3",
+        "4db75bd1ea5ff7061d7e6d7e76328073",
+        "8cbb4c68b07f1ffbb2a640bcede44b4b"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4947,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "d478190a735de11838903bd472678ce680958f6e3d2a24b28c7fb9d7878d0930",
+      "inputHash": "6e4ed800b3751dad0f224975aa2edaf04aa7983adcc691c0ba11772fb572c765"
+    },
+    {
+      "id": "F13",
+      "scenario": "finance",
+      "title": "多支付与高分期交叉复核",
+      "kind": "payment",
+      "position": 13,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "交叉复核",
+        "一对多",
+        "重叠"
+      ],
+      "group": "payment",
+      "groupLabel": "多支付与高分期交叉复核",
+      "recordIds": [
+        "03467d8a7741a3737d4e3ae45ebba94c",
+        "836f05665160acaa74d19db5d614994b",
+        "18af086e1527bd81145db05cf74a0188",
+        "77c8db7df9de4c8788b211bf6a67a2f2",
+        "31e2d0fd6a89e7bd4d343d5de73a68ea",
+        "52076105d0ca4133091c2c1db1d4bb9c",
+        "68fa625f02107978e969340da28d0c89",
+        "c5dd2f75157908db9c6c6586ce1a8834",
+        "65eabb940466e3db08bb339bdf5bb283",
+        "17e604bb550e265b46ebefe61430751b",
+        "a46e7e8e02915adecb392ad065121a51",
+        "77d6b708885d2096c60a2c70d6339b47"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 15
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5079,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "交叉复核",
+          "一对多",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "99395aa8d1f867d059c24bf64413620beae062b346e4dd58b7dcb93eeccbc7b1",
+      "inputHash": "a943559bbc34e5bf41151d25ea99e370678fd36c79e72bd7425517cb9a2c9f5d"
+    },
+    {
+      "id": "F14",
+      "scenario": "finance",
+      "title": "支付金额与状态优先清单",
+      "kind": "payment",
+      "position": 14,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "优先清单",
+        "状态交叉"
+      ],
+      "group": "payment",
+      "groupLabel": "支付金额与状态优先清单",
+      "recordIds": [
+        "01255808a3d38a8dd69aa93265a4cb88",
+        "fdb987001ececccfd2e9320c8115d125",
+        "a3270f2613a807c71433dada7bf3876a",
+        "458c3becc527a774b463c7beaa28b105",
+        "170bcd63e3232e54611bd455d3fb5ab0",
+        "e91f5d1bdbfb622d2b861447bbd89468",
+        "5a2fc8deabae69566f89581221d9a0dd",
+        "a241bea87dcdd0160ca94ebdba5bdbb9",
+        "c6b504c2796cc68a698cd95f0b68d569",
+        "e2b6044bf56157198c939856a105b5ed",
+        "67864542c9896d890a14b76003098580",
+        "2a8d909d2c102155c7ce2c9a24769447"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4843,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "优先清单",
+          "状态交叉"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "34ae234bc1dd1a4ecda18372c7fbf6539f9792be3f88ea02fb9f642eb5f88d96",
+      "inputHash": "f01c29b3ca91787b9c170dcc121da9803abd656c980a8a3117f8262fbc4d4ef6"
+    },
+    {
+      "id": "F15",
+      "scenario": "finance",
+      "title": "严格差额边界复核",
+      "kind": "reconcile",
+      "position": 15,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "严格比较",
+        "边界",
+        "缺失"
+      ],
+      "group": "reconcile",
+      "groupLabel": "严格差额边界复核",
+      "recordIds": [
+        "42cfc35f78bd1eb6e25d12d8920328f4",
+        "6c8b1b59b9c97b5dc0a4c618e3ccbf19",
+        "a38ac9649bb7a8aaad0dd2d678036429",
+        "8737b567a657802c6dd1761fdf3c256f",
+        "3e160e93900d5da52f6a8e6fc88d737c",
+        "e80e2664d9e641d53ecead2bda1c5879",
+        "38606eb20bdd1b2f56309287e809510d",
+        "a19b529d70b6aa8addb01c2721350ba3",
+        "1c6df404972aaa1832eabdde60936615",
+        "29d86db6d5cb58b37df26cfa3efb17bb",
+        "8c224eb700e9dd039606fbfd1ca725f5",
+        "f5eff661c2631c9cd86938bef47aa2d4"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4871,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "严格比较",
+          "边界",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "4896aebd6e0db635cacaba182cd6156024bb4ddbbabebfcb75ae04cb02a9826c",
+      "inputHash": "4919420ecdf1e39bbfb8330213c292294381ce116df4634544c29965bc90a654"
+    },
+    {
+      "id": "F16",
+      "scenario": "finance",
+      "title": "财务全范围内部简报",
+      "kind": "reconcile",
+      "position": 16,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "多交付",
+        "总览",
+        "证据"
+      ],
+      "group": "reconcile",
+      "groupLabel": "财务全范围内部简报",
+      "recordIds": [
+        "9bdc00acb04f677adc8329b932122fd6",
+        "b41d775a8d51e0fc8f93d72cdcdf1b39",
+        "97823d6731e59cd6b4f9d3ea113a976e",
+        "801cef5186265455233814aeb19bec4d",
+        "257ab9903352539e481128aa856113b5",
+        "ae19a9db6bd3ac0b94a591ee4a228a83",
+        "74961e9aef3b109cd91120c7697363af",
+        "5dbbb88d9ab8820dbe265323e2ab44a9",
+        "9f7b080a95ae234fcd5614181167f158",
+        "fc00556d8a4cf362add9deb2574aae92",
+        "bb2caac45ef66a094d2d41aee4daea5d",
+        "f5eb2c9c8751b09f7637a10a9c40aef2"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4737,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多交付",
+          "总览",
+          "证据"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "d724bab130f9e139654940ac1fcd71ec5a77ef7f87abe89383125a35d061ddb3",
+      "inputHash": "c09b00ee964267e967a552921fc2cdc11d50f02c72510269616b9c8e09573766"
+    },
+    {
+      "id": "F02-V1",
+      "scenario": "finance",
+      "title": "支付方式与金额异常概览（validation）",
+      "kind": "payment",
+      "position": 2,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "多表关联",
+        "状态交叉",
+        "重叠"
+      ],
+      "group": "payment",
+      "groupLabel": "支付方式与金额异常概览（validation）",
+      "recordIds": [
+        "a434358927e93bb6e639e7f0b9355e8c",
+        "cf893eae56a00ef5d7a02f3db19dd687",
+        "20d07181f8cec8c3fa51212c7dd926ea",
+        "60e43c5f5ba559d9dd19357ed72cb2f2",
+        "66b486554acb55a7b13333a6155103ac",
+        "8fc1991bfbb78b4d939d11ffef79c398",
+        "7b497afd7e9512da3d6780bf6b5c9971",
+        "bc42a955f289870d5789e6e437206300",
+        "16a325dc8df44f9cc135ee3ca5afb8e5",
+        "c3e622f24839ec7bd509af46cc7cde22",
+        "69e0526abe64c820d4dd97f2b9921e60",
+        "021645306ea1563079aaec6e96f20d38"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4760,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "状态交叉",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "d36feac11aebcec24982dc06de5646b1e6fb2b9052d9feba09e8a3770634740a",
+      "inputHash": "52df3309e575ca68c8b91c1c451bfa99bfbf9d67ac553f39a791dc9cfcf84ccf"
+    },
+    {
+      "id": "F12-V2",
+      "scenario": "finance",
+      "title": "仅支付结构的局部复核（validation）",
+      "kind": "payment",
+      "position": 12,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界"
+      ],
+      "group": "payment",
+      "groupLabel": "仅支付结构的局部复核（validation）",
+      "recordIds": [
+        "3a2055cbe4a8f77c7d7a861ca36170f4",
+        "d0cbe4010369ff1b911352d8d99b162b",
+        "a2ade02b971edbc56f74ca5ee48e766e",
+        "a7b984cb7dba04216ef3408f9fdc724f",
+        "4c342c53eed805e5712a130cccf665ee",
+        "bc089a713e2c97ed61557065adbf9cf2",
+        "f14ad4bdd2fd477e4a9cb6e6c990d79b",
+        "521a5e451c66c756246637be9f54f0ff",
+        "75626319165f5a98618d8916fd5c6df8",
+        "fd3634dbb2f578420b7b7dc1633766ce",
+        "93c9e800268063cefb7efac3c9025276",
+        "4687c3020abeb53cfbd7f64de9092b18"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4624,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "requestHash": "d478190a735de11838903bd472678ce680958f6e3d2a24b28c7fb9d7878d0930",
+      "inputHash": "edf56e95530b6d5dfbd6f3b78d2ca37ebd009af14247763c80dc49a656d6674e"
+    },
+    {
+      "id": "F04-T1",
+      "scenario": "finance",
+      "title": "确定性分段金额变化复核（test）",
+      "kind": "reconcile",
+      "position": 4,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "派生期间",
+        "多表关联",
+        "缺失"
+      ],
+      "group": "reconcile",
+      "groupLabel": "确定性分段金额变化复核（test）",
+      "recordIds": [
+        "597310d5c3dc11229fe9221f13489cab",
+        "ab640e57ace8f9edd426ca8a503d3169",
+        "7337e1be328f68eb9c54cc01eee3e19f",
+        "6ca9c0a909bbc8eebf30f6c1fdd2c3af",
+        "1cc21285010bbdedb27bdf5995367df5",
+        "44e5e4871a2b86afa53f08e86001bca5",
+        "4db13e29abf6d3e8e492111088e60d9b",
+        "dc40cf72430bda627804ff38c8fa6116",
+        "046bc7c1d7122be13009a28d66977149",
+        "923e0c030350975afcfa4ffbc70c0146",
+        "c25e9bf813225380ada966afae6d6b95",
+        "b5218d83b7c9bd571babdb7edffe6e02"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4604,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "派生期间",
+          "多表关联",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "08f17c7a051fefd8b0fbc338953f7bd0db2a5455495f6729d269d91aa0005618",
+      "inputHash": "c97cab7941b56b8ae319c39a56435030e5c6e31031c10c9c45b15c2708eae2f4"
+    },
+    {
+      "id": "F15-T2",
+      "scenario": "finance",
+      "title": "严格差额边界复核（test）",
+      "kind": "reconcile",
+      "position": 15,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "严格比较",
+        "边界",
+        "缺失"
+      ],
+      "group": "reconcile",
+      "groupLabel": "严格差额边界复核（test）",
+      "recordIds": [
+        "fe7d49cdcf690228d8d476caf24ef2d5",
+        "5c76d1348426fdd99247825f50c45a2d",
+        "2a96041dfde21cce25d270579cde8119",
+        "6851d4a26dc9bdbce52550f0c68d61ff",
+        "723eb8a15a9c1cd6038c3af64f0b0fad",
+        "2a93ea3d6dc877b7e20d51aa102aae6a",
+        "4550b64fee9966c0a5d7b0b9f7606f10",
+        "5e5e74b102f501b1f57aa7ee1a7b84de",
+        "774398c3ac79463f502a2fff60e2518f",
+        "e66871adf6309bd5dfab0e92fc591487",
+        "4048feff4f2e6e394bcaf4981d27a9bd",
+        "3783e0b4f1ef0985e0d9aca4629f756b"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4623,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "严格比较",
+          "边界",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "requestHash": "4896aebd6e0db635cacaba182cd6156024bb4ddbbabebfcb75ae04cb02a9826c",
+      "inputHash": "546c610327d7b4a27d6bdaf27eddaa01490f90ee645c5e67f39650c820b706d5"
+    },
+    {
+      "id": "C01",
+      "scenario": "support",
+      "title": "投诉时效与转交复核",
+      "kind": "timing",
+      "position": 1,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "时间",
+        "重叠",
+        "边界"
+      ],
+      "group": "timing",
+      "groupLabel": "投诉时效与转交复核",
+      "recordIds": [
+        "9814682",
+        "9999115",
+        "9999647",
+        "9999321",
+        "9999783",
+        "9999077",
+        "9783615",
+        "9999095",
+        "9999632",
+        "9993521"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 10150,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "时间",
+          "重叠",
+          "边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "37c2b1a8850c638947bfb508688323586d69036b886dedb9cc7e09b4cbf9ce17",
+      "inputHash": "51c63e081360f83044f2439a1b3f684f745cebfc7283a2fb92e69e5f71060cc4"
+    },
+    {
+      "id": "C02",
+      "scenario": "support",
+      "title": "响应完整性与叙述复核",
+      "kind": "coverage",
+      "position": 2,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "多源",
+        "文本",
+        "缺失"
+      ],
+      "group": "coverage",
+      "groupLabel": "响应完整性与叙述复核",
+      "recordIds": [
+        "9999476",
+        "9996303",
+        "9999963",
+        "9999370",
+        "9999514",
+        "9999724",
+        "9999536",
+        "9997685",
+        "9805681",
+        "9999099"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 8579,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9,
+        "auditFeatures": [
+          "多源",
+          "文本",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "dcc93cf6d5403f7166d96fdef774740955d956c5872cc2fd7d1de7c688491e53",
+      "inputHash": "d27ff4d39841e7b276dbd98ac09f56e1748bad8c92fbdb524f5daf00b4a1a0f5"
+    },
+    {
+      "id": "C03",
+      "scenario": "support",
+      "title": "渠道与问题类型响应概览",
+      "kind": "coverage",
+      "position": 3,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "分组",
+        "文本",
+        "缺失"
+      ],
+      "group": "coverage",
+      "groupLabel": "渠道与问题类型响应概览",
+      "recordIds": [
+        "9999458",
+        "9996682",
+        "9740858",
+        "9999644",
+        "9999149",
+        "9999749",
+        "9804095",
+        "9998691",
+        "9998342",
+        "9999914"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10321,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "分组",
+          "文本",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "451f0d39cda64508f45804100c200b72442a773843d64ce2aac0c6b93a05a082",
+      "inputHash": "19e8e46aa2d9a48c5488fff3ecd9cbeaee45e9fd59cb7ecfefe1ff9295b9da4d"
+    },
+    {
+      "id": "C04",
+      "scenario": "support",
+      "title": "确定性分段投诉变化复核",
+      "kind": "timing",
+      "position": 4,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "派生期间",
+        "时间",
+        "边界"
+      ],
+      "group": "timing",
+      "groupLabel": "确定性分段投诉变化复核",
+      "recordIds": [
+        "9999098",
+        "9999937",
+        "9997421",
+        "9998355",
+        "9997954",
+        "9719320",
+        "9996960",
+        "9998307",
+        "9996247",
+        "9998665"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 11163,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "派生期间",
+          "时间",
+          "边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "0a3e9f0cb1ecfb18a64d0c4f99c6b02019223fb86a25552c8ad0a9ecbe36f2d8",
+      "inputHash": "5fc2154910b4459a143db9d39904f75b5a9fcbe779cdb36122e0c53c1debd17c"
+    },
+    {
+      "id": "C05",
+      "scenario": "support",
+      "title": "公司集中投诉时效队列",
+      "kind": "timing",
+      "position": 5,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "公司聚合",
+        "时间",
+        "重叠"
+      ],
+      "group": "timing",
+      "groupLabel": "公司集中投诉时效队列",
+      "recordIds": [
+        "9739241",
+        "9999201",
+        "9999121",
+        "9999805",
+        "9998597",
+        "9999828",
+        "9999208",
+        "9999213",
+        "9999228",
+        "9999473"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9624,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12,
+        "auditFeatures": [
+          "公司聚合",
+          "时间",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "b27dbeb9ad32c027074c7a07432e41415bcafb9994636b58279c4318d0cac1e6",
+      "inputHash": "b971301ce48de772d19e0cf7654d238d6ec29f102d8169bf1e54321bbddeeac8"
+    },
+    {
+      "id": "C06",
+      "scenario": "support",
+      "title": "指定期间SLA复核",
+      "kind": "timing",
+      "position": 6,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "时间槽",
+        "筛选",
+        "缺失"
+      ],
+      "group": "timing",
+      "groupLabel": "指定期间SLA复核",
+      "recordIds": [
+        "9999174",
+        "9891746",
+        "9997952",
+        "9999348",
+        "9997502",
+        "9998121",
+        "9999332",
+        "9998489",
+        "9999537",
+        "9835226"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8324,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12,
+        "auditFeatures": [
+          "时间槽",
+          "筛选",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "6c869c56310ea15f6abd1277c1e9a59b4107f77d110bccd707e51beae0a3984f",
+      "inputHash": "910f8dd9b1d62f08865f5cc0407b473e981ed91575fa887a5623c2f0ca449e3e"
+    },
+    {
+      "id": "C07",
+      "scenario": "support",
+      "title": "日期与响应缺失待核查",
+      "kind": "timing",
+      "position": 7,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "缺失",
+        "时间",
+        "重叠"
+      ],
+      "group": "timing",
+      "groupLabel": "日期与响应缺失待核查",
+      "recordIds": [
+        "9998529",
+        "9833289",
+        "9741379",
+        "999897",
+        "9999683",
+        "9999199",
+        "9999858",
+        "9775619",
+        "9996511",
+        "9951128"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8897,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "缺失",
+          "时间",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "f84aff4944ca94d1f611d30c43bcee9de6c1c95b047fb9668ba1b819a08b0f4e",
+      "inputHash": "f3d5c9413a79b07b6335bda00de42c5d32eb7bcd0646fe84935e3010721fdff9"
+    },
+    {
+      "id": "C08",
+      "scenario": "support",
+      "title": "政策资料支持的内部跟进",
+      "kind": "coverage",
+      "position": 8,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "文本证据",
+        "本地产物",
+        "缺失"
+      ],
+      "group": "coverage",
+      "groupLabel": "政策资料支持的内部跟进",
+      "recordIds": [
+        "9997644",
+        "9999508",
+        "9998607",
+        "9999831",
+        "9998967",
+        "9996436",
+        "9999880",
+        "9998631",
+        "9999070",
+        "9998678"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 8111,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "文本证据",
+          "本地产物",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "9ebd921d8a35faebce4cf3fc178c693b50bc2691a361cf31e172a4adb0a5bc62",
+      "inputHash": "7137079373f343b932da61cf405dc0e6bbe9349f80f67a7ce64c3e2d052bad05"
+    },
+    {
+      "id": "C09",
+      "scenario": "support",
+      "title": "时效参数重绑定复核",
+      "kind": "timing",
+      "position": 9,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "参数重绑定",
+        "时间边界"
+      ],
+      "group": "timing",
+      "groupLabel": "时效参数重绑定复核",
+      "recordIds": [
+        "9999869",
+        "9998186",
+        "9998950",
+        "9999589",
+        "9999454",
+        "9999049",
+        "9998973",
+        "9999405",
+        "9998080",
+        "9999772"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8220,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11,
+        "auditFeatures": [
+          "参数重绑定",
+          "时间边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "a3a5e29ae2d3a9d9539b53882aea69c8282ee1a0fd52e8de3fd1996758e9b965",
+      "inputHash": "6b153daee98520208216f888681c8b76c837b1553bad9c259c0b85b6c361e30f"
+    },
+    {
+      "id": "C10",
+      "scenario": "support",
+      "title": "响应完整性覆盖扩展",
+      "kind": "coverage",
+      "position": 10,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "覆盖扩展",
+        "聚合",
+        "文本"
+      ],
+      "group": "coverage",
+      "groupLabel": "响应完整性覆盖扩展",
+      "recordIds": [
+        "9932677",
+        "9999976",
+        "9948789",
+        "9920837",
+        "9999313",
+        "9997866",
+        "9870553",
+        "9999894",
+        "9999954",
+        "9999465"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10161,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12,
+        "auditFeatures": [
+          "覆盖扩展",
+          "聚合",
+          "文本"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "fdc209d3e7b244bb8451b77f7219b676e820e09df019c74de059e1f0e0272542",
+      "inputHash": "b8a1cec32f452ee099843cf7bb9393380018b833d4dcdff82d2ef6e09a2520fb"
+    },
+    {
+      "id": "C11",
+      "scenario": "support",
+      "title": "多原因客服交接清单",
+      "kind": "timing",
+      "position": 11,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "组合",
+        "交接",
+        "时间"
+      ],
+      "group": "timing",
+      "groupLabel": "多原因客服交接清单",
+      "recordIds": [
+        "9999839",
+        "9998676",
+        "9877821",
+        "9999310",
+        "9951802",
+        "9997118",
+        "9999102",
+        "9998272",
+        "9999736",
+        "9998761"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 11464,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "组合",
+          "交接",
+          "时间"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "3c037207d6cc2395939bf463ff655ae39258573cffa3e1cc21f5e7ead335723d",
+      "inputHash": "9a99ea2fca900fd293c51796cbe94e74c7e824353cbee9ee2d4cd272010cadd7"
+    },
+    {
+      "id": "C12",
+      "scenario": "support",
+      "title": "仅响应内容局部复核",
+      "kind": "coverage",
+      "position": 12,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界",
+        "文本"
+      ],
+      "group": "coverage",
+      "groupLabel": "仅响应内容局部复核",
+      "recordIds": [
+        "9996314",
+        "9998922",
+        "9997437",
+        "9998767",
+        "9996794",
+        "9761391",
+        "9999352",
+        "9999797",
+        "9839358",
+        "9999592"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 11762,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界",
+          "文本"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "5ebb461ab6a881dccedefcdc49991f6a38e5190982a797fd653d5e88d289d0fa",
+      "inputHash": "fdea2f7f7def540620545beb20b58ba1aced4da82be6a0c1df446fbeae0d6c6c"
+    },
+    {
+      "id": "C13",
+      "scenario": "support",
+      "title": "公司产品集中度与异常交叉复核",
+      "kind": "timing",
+      "position": 13,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "交叉复核",
+        "公司×产品",
+        "时间"
+      ],
+      "group": "timing",
+      "groupLabel": "公司产品集中度与异常交叉复核",
+      "recordIds": [
+        "9998009",
+        "9998935",
+        "9996704",
+        "9999460",
+        "9910310",
+        "9998992",
+        "9998386",
+        "9999453",
+        "9999153",
+        "9999557"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8914,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9,
+        "auditFeatures": [
+          "交叉复核",
+          "公司×产品",
+          "时间"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "eab64a88e404ae31b40177515686580ad6659f7918ee161fe3bb62be2f73fbc6",
+      "inputHash": "1284863909928beeb2608984386306fbb165377707851482b4e6f1f1180d5e17"
+    },
+    {
+      "id": "C14",
+      "scenario": "support",
+      "title": "重点渠道响应证据清单",
+      "kind": "coverage",
+      "position": 14,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "证据",
+        "分组",
+        "文本"
+      ],
+      "group": "coverage",
+      "groupLabel": "重点渠道响应证据清单",
+      "recordIds": [
+        "9777880",
+        "9998731",
+        "9705919",
+        "9999945",
+        "9998366",
+        "9999612",
+        "9999872",
+        "9998617",
+        "9999046",
+        "9999900"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 7217,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 12,
+        "auditFeatures": [
+          "证据",
+          "分组",
+          "文本"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "1b13bbcae9da8c5bb6bb558bb0b9cac1b74f85d9b22a6daa52cb4689b7b99b66",
+      "inputHash": "1181c6fc1500fa9259c860c707feac4fb5b1ac33c149dbeb3322766d39d6fa58"
+    },
+    {
+      "id": "C15",
+      "scenario": "support",
+      "title": "严格时效边界复核",
+      "kind": "timing",
+      "position": 15,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "严格比较",
+        "边界",
+        "时间"
+      ],
+      "group": "timing",
+      "groupLabel": "严格时效边界复核",
+      "recordIds": [
+        "9999502",
+        "9996701",
+        "9790790",
+        "9998711",
+        "9999842",
+        "9998795",
+        "9998842",
+        "9999596",
+        "9868108",
+        "9998005"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 11824,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 9,
+        "auditFeatures": [
+          "严格比较",
+          "边界",
+          "时间"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "bd9f2b70355963cfdb93bbf6a67afb81761e7d37e4961c045f9a829b309fb685",
+      "inputHash": "be67a05bf726f49d92e96cff2c9e7620fc5806a506cf6859c0d0c2cb719c5f26"
+    },
+    {
+      "id": "C16",
+      "scenario": "support",
+      "title": "客服全范围内部简报",
+      "kind": "coverage",
+      "position": 16,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "多交付",
+        "总览",
+        "证据"
+      ],
+      "group": "coverage",
+      "groupLabel": "客服全范围内部简报",
+      "recordIds": [
+        "9999400",
+        "9999471",
+        "9999203",
+        "9998094",
+        "9997678",
+        "9913185",
+        "9999386",
+        "9999775",
+        "9997529",
+        "9999368"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 8422,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 13,
+        "auditFeatures": [
+          "多交付",
+          "总览",
+          "证据"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "b16861cab1b30ce09d5a6581326987571d0e4707705c28e0b4fd11683772aa94",
+      "inputHash": "2e2df84b33e848fc25b418a5b1f5184ae730799a89ec8444b68c50ec5bdd1f4a"
+    },
+    {
+      "id": "C02-V1",
+      "scenario": "support",
+      "title": "响应完整性与叙述复核（validation）",
+      "kind": "coverage",
+      "position": 2,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "多源",
+        "文本",
+        "缺失"
+      ],
+      "group": "coverage",
+      "groupLabel": "响应完整性与叙述复核（validation）",
+      "recordIds": [
+        "9999921",
+        "9981326",
+        "9997205",
+        "9999906",
+        "9997156",
+        "9949487",
+        "9998006",
+        "9999569",
+        "9996350",
+        "9873735"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10280,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "多源",
+          "文本",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "dcc93cf6d5403f7166d96fdef774740955d956c5872cc2fd7d1de7c688491e53",
+      "inputHash": "127a054f928224c9ec7e08fc88700e3b91f41b984c781b89caf922f0d4226978"
+    },
+    {
+      "id": "C12-V2",
+      "scenario": "support",
+      "title": "仅响应内容局部复核（validation）",
+      "kind": "coverage",
+      "position": 12,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界",
+        "文本"
+      ],
+      "group": "coverage",
+      "groupLabel": "仅响应内容局部复核（validation）",
+      "recordIds": [
+        "9999593",
+        "9998220",
+        "9997418",
+        "9996257",
+        "9999496",
+        "9996605",
+        "9997724",
+        "9996963",
+        "9996680",
+        "9999619"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 10465,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界",
+          "文本"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "channel_count",
+        "missing_public_response_count",
+        "missing_company_response_count",
+        "narrative_followup_count",
+        "missing_link_count"
+      ],
+      "requiredGroupNames": [
+        "missing_public_response",
+        "missing_company_response",
+        "narrative_followup",
+        "missing_link"
+      ],
+      "requestHash": "5ebb461ab6a881dccedefcdc49991f6a38e5190982a797fd653d5e88d289d0fa",
+      "inputHash": "1eb104c55fda2687c7d8888deac99e1817825958edd3fafab5ab45d3113ffe5c"
+    },
+    {
+      "id": "C04-T1",
+      "scenario": "support",
+      "title": "确定性分段投诉变化复核（test）",
+      "kind": "timing",
+      "position": 4,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "派生期间",
+        "时间",
+        "边界"
+      ],
+      "group": "timing",
+      "groupLabel": "确定性分段投诉变化复核（test）",
+      "recordIds": [
+        "9997035",
+        "9998974",
+        "9999827",
+        "9999425",
+        "9999328",
+        "9921129",
+        "9997383",
+        "9999654",
+        "9999383",
+        "9998436"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9901,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "派生期间",
+          "时间",
+          "边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "0a3e9f0cb1ecfb18a64d0c4f99c6b02019223fb86a25552c8ad0a9ecbe36f2d8",
+      "inputHash": "45f9afe2973aaaea6bf930c5589a244834793df1efb4d95d7618af1c214863ac"
+    },
+    {
+      "id": "C15-T2",
+      "scenario": "support",
+      "title": "严格时效边界复核（test）",
+      "kind": "timing",
+      "position": 15,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "严格比较",
+        "边界",
+        "时间"
+      ],
+      "group": "timing",
+      "groupLabel": "严格时效边界复核（test）",
+      "recordIds": [
+        "9999512",
+        "9998619",
+        "9997532",
+        "9998776",
+        "9997830",
+        "9997537",
+        "9999856",
+        "9795383",
+        "9998327",
+        "9984014"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 11366,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 3,
+        "auditFeatures": [
+          "严格比较",
+          "边界",
+          "时间"
+        ]
+      },
+      "requiredMetricKeys": [
+        "complaint_count",
+        "company_count",
+        "late_count",
+        "delayed_transfer_count",
+        "date_review_count"
+      ],
+      "requiredGroupNames": [
+        "late",
+        "delayed_transfer",
+        "date_review"
+      ],
+      "requestHash": "bd9f2b70355963cfdb93bbf6a67afb81761e7d37e4961c045f9a829b309fb685",
+      "inputHash": "704eccc03e64082cef43e6eafb862187b4e62c6fdca8537da9de9ad76c9b6bb5"
+    },
+    {
+      "id": "T01",
+      "scenario": "tickets",
+      "title": "活动与指派重点分诊",
+      "kind": "activity",
+      "position": 1,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "状态",
+        "活动",
+        "缺失"
+      ],
+      "group": "activity",
+      "groupLabel": "活动与指派重点分诊",
+      "recordIds": [
+        "6265",
+        "6303",
+        "6279",
+        "6120",
+        "6018",
+        "5691",
+        "5648",
+        "6215",
+        "4866",
+        "6039"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3467,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4,
+        "auditFeatures": [
+          "状态",
+          "活动",
+          "缺失"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "b3eea81bed44a91c4f83bd2f9ef426ad24f55e588a5cd1fa4b67da5d33e9597d",
+      "inputHash": "97f76f1287ae4cf7eeb43230d4f3866d1be3eb1e5ccca80eb2effa169ff94fcd"
+    },
+    {
+      "id": "T02",
+      "scenario": "tickets",
+      "title": "排期与指派复核",
+      "kind": "readiness",
+      "position": 2,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "多原因",
+        "重叠",
+        "状态"
+      ],
+      "group": "readiness",
+      "groupLabel": "排期与指派复核",
+      "recordIds": [
+        "5758",
+        "5763",
+        "5766",
+        "4777",
+        "6068",
+        "4375",
+        "5768",
+        "2622",
+        "6122",
+        "6314"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3322,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5,
+        "auditFeatures": [
+          "多原因",
+          "重叠",
+          "状态"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "168c512d3542e3d92f86e95ce650e05364dc2cad66a7c1deb610d2170bac3bc7",
+      "inputHash": "77d4a306a56fea96921548bc46e14ec94febf66bdf8e559d8c909c9bd0d0629c"
+    },
+    {
+      "id": "T03",
+      "scenario": "tickets",
+      "title": "标签与活动优先队列",
+      "kind": "activity",
+      "position": 3,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "筛选",
+        "活动",
+        "优先级"
+      ],
+      "group": "activity",
+      "groupLabel": "标签与活动优先队列",
+      "recordIds": [
+        "5008",
+        "3601",
+        "3961",
+        "5798",
+        "6212",
+        "5808",
+        "6221",
+        "5824",
+        "5735",
+        "3715"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3318,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "筛选",
+          "活动",
+          "优先级"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "e591df6378798ed232e609510e2376d843bcd857c3cc7144b0e39658f18119e7",
+      "inputHash": "88c98dc3c67c115476d1a7b4800289f0a6c0dfca34b8b700f494ed93d3d7a5bc"
+    },
+    {
+      "id": "T04",
+      "scenario": "tickets",
+      "title": "确定性分段工单变化复核",
+      "kind": "readiness",
+      "position": 4,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "派生期间",
+        "状态",
+        "变化"
+      ],
+      "group": "readiness",
+      "groupLabel": "确定性分段工单变化复核",
+      "recordIds": [
+        "6096",
+        "5818",
+        "2949",
+        "5713",
+        "6301",
+        "5803",
+        "6254",
+        "5072",
+        "5909",
+        "3241"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3326,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "派生期间",
+          "状态",
+          "变化"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "c8058a5fd7db3691313c7464702b855156d7d60bdaf8048dd8b1f7e8c0f535a1",
+      "inputHash": "41a34a33add9062ab76672e7ce4b1151790ccc53c76d820aa0640c0a9af0ce8f"
+    },
+    {
+      "id": "T05",
+      "scenario": "tickets",
+      "title": "长期活动问题分诊",
+      "kind": "activity",
+      "position": 5,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "时间",
+        "活动",
+        "优先队列"
+      ],
+      "group": "activity",
+      "groupLabel": "长期活动问题分诊",
+      "recordIds": [
+        "4398",
+        "5129",
+        "6026",
+        "6179",
+        "3504",
+        "6261",
+        "6248",
+        "5714",
+        "5796",
+        "5850"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3330,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "时间",
+          "活动",
+          "优先队列"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "70b7285b7167be69d253c0d691ebc45053ea2c732e8794da2bf4904a0f960d53",
+      "inputHash": "3d7625ab966513fa1b8e8be79150ef50f7b240f55c40cf15e265dfdad00f48b5"
+    },
+    {
+      "id": "T06",
+      "scenario": "tickets",
+      "title": "状态与活动冲突待核查",
+      "kind": "activity",
+      "position": 6,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "状态冲突",
+        "活动",
+        "边界"
+      ],
+      "group": "activity",
+      "groupLabel": "状态与活动冲突待核查",
+      "recordIds": [
+        "6349",
+        "5810",
+        "6103",
+        "2849",
+        "6017",
+        "4716",
+        "4923",
+        "2535",
+        "4458",
+        "6006"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3504,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "状态冲突",
+          "活动",
+          "边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "fcb555df342030118f95f27955d81cdf1ccd40958e8ac8f78b50c46d42cf302a",
+      "inputHash": "43f218bec014588617efbd1ee2af59adb043382e591e269d0101be71d24b7bc0"
+    },
+    {
+      "id": "T07",
+      "scenario": "tickets",
+      "title": "负责人和排期完整性",
+      "kind": "readiness",
+      "position": 7,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "缺失",
+        "重叠",
+        "状态"
+      ],
+      "group": "readiness",
+      "groupLabel": "负责人和排期完整性",
+      "recordIds": [
+        "5936",
+        "5486",
+        "4896",
+        "6225",
+        "3911",
+        "6336",
+        "4938",
+        "5860",
+        "5829",
+        "2843"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3272,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "缺失",
+          "重叠",
+          "状态"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "7d9079134d8db82e4328ee060267f1538c470822701d3f6ab0c58f6706344aaa",
+      "inputHash": "5427ac600a66e4bd90a37da3c150f569f0413210eb78d747f38779431ac8660e"
+    },
+    {
+      "id": "T08",
+      "scenario": "tickets",
+      "title": "标题标签证据清单",
+      "kind": "readiness",
+      "position": 8,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "文本",
+        "标签",
+        "证据"
+      ],
+      "group": "readiness",
+      "groupLabel": "标题标签证据清单",
+      "recordIds": [
+        "6276",
+        "5136",
+        "6135",
+        "4882",
+        "6291",
+        "5776",
+        "5771",
+        "6033",
+        "6340",
+        "2822"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3295,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "文本",
+          "标签",
+          "证据"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "66a730cbe3ed081b4563c59cd34f2c4f2f55cfcc52bf057302eb8c89c7ecbc84",
+      "inputHash": "47650ff07d104738426ad1b9d38960cee35cc7dd85c512628a1e874f5802e8ac"
+    },
+    {
+      "id": "T09",
+      "scenario": "tickets",
+      "title": "评论阈值重新绑定",
+      "kind": "activity",
+      "position": 9,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "参数重绑定",
+        "活动",
+        "状态"
+      ],
+      "group": "activity",
+      "groupLabel": "评论阈值重新绑定",
+      "recordIds": [
+        "5775",
+        "6102",
+        "3975",
+        "5666",
+        "5983",
+        "5827",
+        "6139",
+        "5717",
+        "5906",
+        "6251"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3182,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4,
+        "auditFeatures": [
+          "参数重绑定",
+          "活动",
+          "状态"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "3f5616a58da72f4cba786795e4c86e4c744543c04edac72deb6dd37e6421048a",
+      "inputHash": "9535bdc6c9eb432517d0eabea5c1e4bb291b57553c1cc41d48930d03f1c4c216"
+    },
+    {
+      "id": "T10",
+      "scenario": "tickets",
+      "title": "活动分诊覆盖扩展",
+      "kind": "activity",
+      "position": 10,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "覆盖扩展",
+        "多交付",
+        "活动"
+      ],
+      "group": "activity",
+      "groupLabel": "活动分诊覆盖扩展",
+      "recordIds": [
+        "2635",
+        "5927",
+        "4374",
+        "5904",
+        "6024",
+        "2643",
+        "5931",
+        "5965",
+        "5799",
+        "3683"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3333,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "覆盖扩展",
+          "多交付",
+          "活动"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "0f0c42f02a3a525f755488917d47e274bd81d796209736c1346bfbf3c58a9aac",
+      "inputHash": "847c4d7c48b63259fe0b34b4238b0615e39a1afbcaef55cf489e13aba3cfba7d"
+    },
+    {
+      "id": "T11",
+      "scenario": "tickets",
+      "title": "活动标签排期组合交接",
+      "kind": "readiness",
+      "position": 11,
+      "split": "train",
+      "precheck": true,
+      "auditFeatures": [
+        "组合",
+        "交接",
+        "标签"
+      ],
+      "group": "readiness",
+      "groupLabel": "活动标签排期组合交接",
+      "recordIds": [
+        "6174",
+        "5642",
+        "5658",
+        "6036",
+        "6019",
+        "5119",
+        "6257",
+        "5113",
+        "5750",
+        "6131"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3386,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 2,
+        "auditFeatures": [
+          "组合",
+          "交接",
+          "标签"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "36ca2e3ab7ee51252a666978dca121d1fa4ca8e3e9f3e97897c0feb9c5497138",
+      "inputHash": "0c6a1d604f92732b18684310e7a856464ec8a20b17678e3e74af1802988ae70f"
+    },
+    {
+      "id": "T12",
+      "scenario": "tickets",
+      "title": "仅导出变化局部复核",
+      "kind": "readiness",
+      "position": 12,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界"
+      ],
+      "group": "readiness",
+      "groupLabel": "仅导出变化局部复核",
+      "recordIds": [
+        "6166",
+        "5882",
+        "6078",
+        "5839",
+        "6324",
+        "5751",
+        "6337",
+        "6344",
+        "6075",
+        "5811"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3297,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "2565e3280aea26e475297a2e714cd0950771eef750af9c011995f7a849d92523",
+      "inputHash": "3cbb5e85890efb96ff52368fc82105a8cb1bf0950ecbe9b66be47d150af66bc0"
+    },
+    {
+      "id": "T13",
+      "scenario": "tickets",
+      "title": "负责人标签里程碑活动联合风险复核",
+      "kind": "readiness",
+      "position": 13,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "联合风险",
+        "多条件",
+        "重叠"
+      ],
+      "group": "readiness",
+      "groupLabel": "负责人标签里程碑活动联合风险复核",
+      "recordIds": [
+        "5955",
+        "5716",
+        "6181",
+        "5821",
+        "5749",
+        "5812",
+        "5902",
+        "4916",
+        "6093",
+        "5788"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3420,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4,
+        "auditFeatures": [
+          "联合风险",
+          "多条件",
+          "重叠"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "95143b0a256dd0942a709e4d11c4829f727563f6da8bd7860245ebdf6e4df4a7",
+      "inputHash": "090edbe001f7af8819ab9b67ec74335855e6f5c7529a3d981ca178bad8c8a53d"
+    },
+    {
+      "id": "T14",
+      "scenario": "tickets",
+      "title": "未指派高活动优先清单",
+      "kind": "activity",
+      "position": 14,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "排序",
+        "活动",
+        "链接"
+      ],
+      "group": "activity",
+      "groupLabel": "未指派高活动优先清单",
+      "recordIds": [
+        "5732",
+        "2913",
+        "5898",
+        "6175",
+        "6025",
+        "5836",
+        "4878",
+        "6247",
+        "5819",
+        "4162"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3495,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "排序",
+          "活动",
+          "链接"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "closed_count",
+        "open_comment_total",
+        "focus_count",
+        "unassigned_focus_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "focus",
+        "unassigned_focus",
+        "missing_activity"
+      ],
+      "requestHash": "b271ca804ee4017bd15e9bfade8b20c999617c11befedd2b7402cc1b392f5864",
+      "inputHash": "b09cbc74a857960d462e72b5d4d28f8b25c8dfb7427b633a067ca638fe9ba62d"
+    },
+    {
+      "id": "T15",
+      "scenario": "tickets",
+      "title": "状态与标签边界复核",
+      "kind": "readiness",
+      "position": 15,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "边界",
+        "状态",
+        "标签"
+      ],
+      "group": "readiness",
+      "groupLabel": "状态与标签边界复核",
+      "recordIds": [
+        "4619",
+        "2840",
+        "5683",
+        "4506",
+        "5655",
+        "6323",
+        "6208",
+        "5935",
+        "5883",
+        "5915"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3272,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7,
+        "auditFeatures": [
+          "边界",
+          "状态",
+          "标签"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "c5f27e332c09e17b0635cf9f8b2f0dd99150c88f31a2f22b0bc07a11b003e56a",
+      "inputHash": "adb38abe0acc5e35724aeeab156d0a911d807751bb5f805376da7dbcf02e9e5b"
+    },
+    {
+      "id": "T16",
+      "scenario": "tickets",
+      "title": "技术工单全范围简报",
+      "kind": "readiness",
+      "position": 16,
+      "split": "train",
+      "precheck": false,
+      "auditFeatures": [
+        "总览",
+        "多交付",
+        "证据"
+      ],
+      "group": "readiness",
+      "groupLabel": "技术工单全范围简报",
+      "recordIds": [
+        "6258",
+        "5755",
+        "6125",
+        "2845",
+        "2739",
+        "6086",
+        "2900",
+        "3904",
+        "5694",
+        "5667"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3312,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "总览",
+          "多交付",
+          "证据"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "236a8d6aab928a87939cf73502ef128cccc8b357422e53d97d970d58cb195694",
+      "inputHash": "81404b0427bc5c3c9c9dfea5a8b578ba4bf010728f52d4cb5feb3fd2b5b73988"
+    },
+    {
+      "id": "T02-V1",
+      "scenario": "tickets",
+      "title": "排期与指派复核（validation）",
+      "kind": "readiness",
+      "position": 2,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "多原因",
+        "重叠",
+        "状态"
+      ],
+      "group": "readiness",
+      "groupLabel": "排期与指派复核（validation）",
+      "recordIds": [
+        "5205",
+        "2738",
+        "5774",
+        "5100",
+        "6064",
+        "5110",
+        "6297",
+        "6223",
+        "5696",
+        "4895"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3495,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "多原因",
+          "重叠",
+          "状态"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "168c512d3542e3d92f86e95ce650e05364dc2cad66a7c1deb610d2170bac3bc7",
+      "inputHash": "9a1de66050baaa5466883790d465b132bb548c0260778e1e65a0f36a2b817fe0"
+    },
+    {
+      "id": "T12-V2",
+      "scenario": "tickets",
+      "title": "仅导出变化局部复核（validation）",
+      "kind": "readiness",
+      "position": 12,
+      "split": "validation",
+      "precheck": false,
+      "auditFeatures": [
+        "局部覆盖",
+        "拒绝边界"
+      ],
+      "group": "readiness",
+      "groupLabel": "仅导出变化局部复核（validation）",
+      "recordIds": [
+        "5900",
+        "3440",
+        "6199",
+        "5180",
+        "5676",
+        "6309",
+        "5687",
+        "6209",
+        "5859",
+        "6321"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3134,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 8,
+        "auditFeatures": [
+          "局部覆盖",
+          "拒绝边界"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "2565e3280aea26e475297a2e714cd0950771eef750af9c011995f7a849d92523",
+      "inputHash": "4ef520e8b3719258f19ba0e20a5af71a45d442d184894853b66aef42dacd435a"
+    },
+    {
+      "id": "T04-T1",
+      "scenario": "tickets",
+      "title": "确定性分段工单变化复核（test）",
+      "kind": "readiness",
+      "position": 4,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "派生期间",
+        "状态",
+        "变化"
+      ],
+      "group": "readiness",
+      "groupLabel": "确定性分段工单变化复核（test）",
+      "recordIds": [
+        "3066",
+        "3670",
+        "6126",
+        "5636",
+        "5725",
+        "5742",
+        "5815",
+        "6315",
+        "5837",
+        "5739"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3250,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6,
+        "auditFeatures": [
+          "派生期间",
+          "状态",
+          "变化"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "c8058a5fd7db3691313c7464702b855156d7d60bdaf8048dd8b1f7e8c0f535a1",
+      "inputHash": "94ae6370de0cf13a2a3a95ffcfd51352a285dd015853431193d6b820cf32a692"
+    },
+    {
+      "id": "T15-T2",
+      "scenario": "tickets",
+      "title": "状态与标签边界复核（test）",
+      "kind": "readiness",
+      "position": 15,
+      "split": "test",
+      "precheck": false,
+      "auditFeatures": [
+        "边界",
+        "状态",
+        "标签"
+      ],
+      "group": "readiness",
+      "groupLabel": "状态与标签边界复核（test）",
+      "recordIds": [
+        "5175",
+        "5924",
+        "6224",
+        "6077",
+        "6013",
+        "4946",
+        "6111",
+        "5891",
+        "6239",
+        "5721"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 4,
+        "textCharacters": 3289,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4,
+        "auditFeatures": [
+          "边界",
+          "状态",
+          "标签"
+        ]
+      },
+      "requiredMetricKeys": [
+        "issue_count",
+        "open_count",
+        "no_milestone_count",
+        "unassigned_count",
+        "bug_label_count",
+        "missing_activity_count"
+      ],
+      "requiredGroupNames": [
+        "no_milestone",
+        "unassigned",
+        "bug_label",
+        "missing_activity"
+      ],
+      "requestHash": "c5f27e332c09e17b0635cf9f8b2f0dd99150c88f31a2f22b0bc07a11b003e56a",
+      "inputHash": "1e69eea9707ac8dad8ccef2d8b4c72e575d11c54712403dc471c8cd831b7d767"
+    }
+  ],
+  "sources": {
+    "finance": {
+      "provider": "Olist",
+      "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+      "license": "CC BY-NC-SA 4.0",
+      "rawSha256": {
+        "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+      },
+      "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
+    },
+    "support": {
+      "provider": "CFPB",
+      "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+      "license": "CC0 (API metadata)",
+      "requests": [
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+      ],
+      "rawSha256": {
+        "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+        "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+        "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+      },
+      "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
+    },
+    "tickets": {
+      "provider": "Zammad GitHub Issues",
+      "url": "https://github.com/zammad/zammad/issues",
+      "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+      "rawSha256": {
+        "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+        "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+        "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+        "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+        "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+        "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+        "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+        "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+        "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+        "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+      },
+      "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
+    }
+  }
+}

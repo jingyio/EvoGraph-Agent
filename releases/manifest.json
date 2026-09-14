@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "trajectory-p05-v3-candidate",
+  "currentReleaseId": "trajectory-p05-v3-r1-candidate",
   "releases": [
     {
-      "releaseId": "trajectory-p05-v3-candidate",
-      "displayName": "轨迹驱动数字员工 · P0.5 V3",
+      "releaseId": "trajectory-p05-v3-r1-candidate",
+      "displayName": "轨迹驱动数字员工 · P0.5 V3-r1",
       "status": "candidate",
       "experimentId": "not-started",
       "runtimeRevision": "pending:recorded-at-experiment-start",
-      "assetVersion": "trajectory-review-v3",
-      "assetManifest": "benchmarks/trajectory-review-v3.json",
+      "assetVersion": "trajectory-review-v3-r1",
+      "assetManifest": "benchmarks/trajectory-review-v3-r1.json",
       "protocol": {
         "runtimeProtocol": "trajectory-v3",
         "limits": {
@@ -30,13 +30,52 @@
       "createdAt": "2026-09-14",
       "source": "trajectory-plan",
       "claims": [
-        "已冻结48项异构公开业务任务、独立validation/test和离线机会审计。",
-        "尚未产生模型运行、效率或进化结论。"
+        "冻结48项异构公开业务任务、独立validation/test和离线机会审计。",
+        "V3-r1只澄清 selectedIds 的公开业务字段与 evidenceIds 的工作区行证据边界；保留V3原始失败预检。"
       ],
       "limitations": [
         "当前候选版本尚未完成正式对照",
-        "12对严格预检和48项train对照均未启动，因此没有token、延迟、质量或G/M修订证据。",
+        "尚未产生可主张的 token、延迟、质量、可靠性或 G/M 修订收益。",
+        "12对严格预检需从新的空 RSI 经验库开始；正式48对只在预检全部通过后启动。",
         "runtime revision将在实验启动时按实际源码快照记录。"
+      ]
+    },
+    {
+      "releaseId": "trajectory-p05-v3-9b-precheck-2026-09-14",
+      "displayName": "轨迹驱动数字员工 · P0.5 V3（9B 失败预检）",
+      "status": "historical",
+      "experimentId": "350cd048-9b15-4ead-bae5-073b03ca63ad",
+      "runtimeRevision": "sha256:ce4b605fde6153b38fd5a28c63330a76edf40bb51969cb628a0bd3992006240e",
+      "assetVersion": "trajectory-review-v3",
+      "protocol": {
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "model": "qwen/qwen3.5-9b",
+        "planner": "qwen/qwen3.5-9b",
+        "runtimeProtocol": "trajectory-v3",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "maxToolCallsPerRun": 80,
+        "judge": "not_run",
+        "qualityPolicy": "stop expansion on first failing pair; retain all attempts",
+        "learning": "RSI empty library; prior successful normal train only; labels excluded from matching",
+        "windowSize": 4,
+        "targetTokenSaving": 0.3,
+        "size": "48 train = three scenarios × sixteen heterogeneous business requests; 6 validation + 6 test reserved",
+        "precheckSize": "12 train = each scenario four fixed coverage requests"
+      },
+      "createdAt": "2026-09-14T08:57:15.950Z",
+      "source": "trajectory",
+      "claims": [
+        "保留 qwen/qwen3.5-9b 下 F01 的 Baseline 与 RSI 完整运行凭据、失败和消耗。"
+      ],
+      "limitations": [
+        "预检在首对任务即因两侧质量失败停止；不构成业务、效率、可靠性或进化收益结论。",
+        "Baseline 在180秒时限前未发布报告；RSI发布后因业务ID与工作区行ID契约歧义未通过结构化验收。",
+        "不得与其它模型或历史运行拼接。"
       ]
     },
     {

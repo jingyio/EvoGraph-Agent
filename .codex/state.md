@@ -1,5 +1,20 @@
 # 项目状态快照
 
+## 2026-09-14 当前接力：V3-r1 运行前修复
+
+- 当前模型配置为 `qwen/qwen3.5-9b`（执行、规划、组合），thinking 关闭；`.env` 为本地未提交配置。
+- 已结束并保留 V3 9B 预检 `350cd048-9b15-4ead-bae5-073b03ca63ad`：F01 Baseline 超时未报告，RSI 的
+  `selectedIds/groups` 用了 rowId 而非业务 ID，整体 `quality_stopped`。不得重写、删除或合并其成本。
+- 当前 Release Manifest 指向 `trajectory-p05-v3-r1-candidate` / `trajectory-review-v3-r1`，尚未运行。
+  V3-r1 与 V3 的 60 个公开记录、任务排序、split 和私有评分一致；只冻结了业务 ID / evidence ID
+  的公开交付语义。
+- 本次实现：`backend/trajectory_assets_v3_r1.py`、报告工具的 ID 描述、报告恢复约束，以及 live provider
+  的执行阶段 `tool_choice=required`。相关测试 71 项通过；直接系统 Python 缺少 pytest-asyncio，必须用
+  `.venv/bin/python -m pytest` 或 `npm test`。
+- 下一步：重启后端确认 `/api/releases/current` 读取 V3-r1 任务审阅，提交这次修复；随后用全新空库启动
+  一次且仅一次 V3-r1 的 12 对严格预检。预检不全通过不得启动 48 对。
+
+
 - 2026-09-14 正式运行前审阅已就绪：`/#evidence` 现在展示6个业务契约、输入字段、48个
   train题面及冻结hash；题面hash漂移会由Release API失败关闭。当前仍为`not-started`，等待
   用户审核，不启动付费模型。自然cohort审计发现48个train中8个为空清单，且若干缺失类分组

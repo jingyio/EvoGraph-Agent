@@ -1149,20 +1149,23 @@ class WorkspaceManager:
         delivery = task.get('deliveryContract') or {}
         required_metric_keys = delivery.get('requiredMetricKeys') or []
         required_group_names = delivery.get('requiredGroupNames') or []
+        selected_id_field = delivery.get('selectedIdField') if isinstance(delivery.get('selectedIdField'), str) else None
+        selected_id_description = (f'业务记录 ID：使用当前资料字段 {selected_id_field} 的值，不得使用工作区 rowId 或 evidenceId。'
+                                   if selected_id_field else '任务要求的业务记录 ID。')
         metric_schema = (
             object_schema({name: {'type': 'integer'} for name in required_metric_keys})
             if required_metric_keys else {'type': 'object', 'additionalProperties': True}
         )
         group_name_schema = ({'type': 'string', 'enum': required_group_names}
                              if required_group_names else {'type': 'string', 'minLength': 1})
-        group_schema = object_schema({'name': group_name_schema, 'reason': {'type': 'string', 'minLength': 1}, 'condition': {'type': 'string', 'minLength': 1}, 'count': {'type': 'integer', 'minimum': 0}, 'selectedIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}, 'evidenceIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string'}}})
+        group_schema = object_schema({'name': group_name_schema, 'reason': {'type': 'string', 'minLength': 1}, 'condition': {'type': 'string', 'minLength': 1}, 'count': {'type': 'integer', 'minimum': 0}, 'selectedIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string', 'description': selected_id_description}}, 'evidenceIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string', 'description': '当前实际观察到的工作区行 rowId 或完整 evidenceId。'}}})
         report_required = ['metrics', 'selectedIds', 'evidenceIds', 'summary']
         if required_group_names:
             report_required.append('groups')
         report_schema = {'type': 'object', 'properties': {'metrics': metric_schema,
                                                           'groups': {'type': 'array', 'maxItems': 40, 'items': group_schema},
-                                                          'selectedIds': {'type': 'array', 'maxItems': 1000, 'uniqueItems': True, 'items': {'type': 'string'}},
-                                                          'evidenceIds': {'type': 'array', 'minItems': 1, 'maxItems': 2000, 'uniqueItems': True, 'items': {'type': 'string'}},
+                                                          'selectedIds': {'type': 'array', 'maxItems': 1000, 'uniqueItems': True, 'items': {'type': 'string', 'description': selected_id_description}},
+                                                          'evidenceIds': {'type': 'array', 'minItems': 1, 'maxItems': 2000, 'uniqueItems': True, 'items': {'type': 'string', 'description': '当前实际观察到的工作区行 rowId 或完整 evidenceId。'}},
                                                           'summary': {'type': 'string', 'minLength': 1, 'maxLength': 6000},
                                                           'assumptions': {'type': 'array', 'maxItems': 100, 'items': {'type': 'string'}}},
                          'required': report_required, 'additionalProperties': False}
@@ -1224,7 +1227,7 @@ class WorkspaceManager:
             Tool('workspace_list_saved_reports', '列出当前工作区此前保存的报告摘要，用于同一工作区追问。', 'read', object_schema(), saved_reports, outputs=['reports']),
             Tool('workspace_save_draft', '保存内部草稿；不会发送消息、修改账务或关闭工单。', 'artifact', object_schema({'title': {'type': 'string', 'minLength': 1, 'maxLength': 180}, 'body': {'type': 'string', 'minLength': 1, 'maxLength': 8000}}), idempotent('draft', save_draft)),
             Tool('workspace_export_csv', '把当前表的全部或指定行导出为本地 CSV 文件。', 'artifact', object_schema({'tableId': table_id_schema(), 'rowIds': {'type': 'array', 'maxItems': 5000, 'uniqueItems': True, 'items': {'type': 'string'}}, 'name': {'type': 'string', 'minLength': 1, 'maxLength': 160}}, required=['tableId', 'name']), idempotent('export', export)),
-            Tool('workspace_publish_report', '保存有证据的分析报告。多个独立原因用 groups 分别给出 name/reason/condition/count/selectedIds/evidenceIds；允许重叠，空组也明确0。不会执行外部业务动作。', 'artifact', report_schema, idempotent('publish', publish)),
+            Tool('workspace_publish_report', '保存有证据的分析报告。多个独立原因用 groups 分别给出 name/reason/condition/count/selectedIds/evidenceIds；允许重叠，空组也明确0。'+selected_id_description+' evidenceIds 必须使用当前观察的工作区行 rowId 或完整 evidenceId。不会执行外部业务动作。', 'artifact', report_schema, idempotent('publish', publish)),
         ]
         # The runtime still validates against each current workspace's table-ID
         # enum.  Only the experience identity uses stable table slots/fields.

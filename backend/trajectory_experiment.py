@@ -10,7 +10,7 @@ from .domain import now
 from .graph_store import write_private
 from .task_runner import TaskRunner, TaskRunRequest
 from .workspace import WorkspaceManager, WorkspaceBank
-from .trajectory_assets_v3 import VERSION, install
+from .trajectory_assets_v3_r1 import VERSION, install
 
 
 def fingerprint(root):

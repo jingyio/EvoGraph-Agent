@@ -1,5 +1,23 @@
 # 当前架构
 
+## 2026-09-14 V3-r1 当前运行线
+
+`releases/manifest.json` 当前唯一发布候选是
+`trajectory-p05-v3-r1-candidate` / `trajectory-review-v3-r1`。它冻结 48 个 train、6 个
+validation、6 个 test 任务，固定 12 对预检和 `run=model=read=1`；此刻尚未启动 V3-r1
+预检，因此当前证据页只能展示任务审阅与“尚未完成正式对照”。
+
+原 V3 的 9B 预检 `350cd048-9b15-4ead-bae5-073b03ca63ad` 已移入历史发布：首对 F01 的
+Baseline 在 180 秒总时限前未发布报告；RSI 在 175.136 秒发布了报告，但把工作区 `rowId`
+填入业务 `selectedIds`，而私有结构化验收要求 `order_id`，所以 `selectedIds/groups` 失败。
+它不提供效果、效率、可靠性或进化结论，也不会与任何其他运行拼接。
+
+V3-r1 复用相同任务顺序和同一批公开记录，只新冻结了公开 ID 契约：顶层和分组
+`selectedIds` 使用 `order_id` / `complaint_id` / `issue_id`，`evidenceIds` 才使用本次观察的
+工作区 `rowId`。运行时把此契约写进报告工具描述和恢复提示；Live provider 在执行阶段要求
+工具调用，避免无工具的逐行长推理消耗时限。两臂共享该修订。
+
+
 核对日期：2026-09-14。当前前端采用单一发布上下文；业务runtime的既有边界及历史实验保持原义。
 
 
