@@ -1,0 +1,18 @@
+{
+  "provider": "Zammad GitHub Issues",
+  "url": "https://github.com/zammad/zammad/issues",
+  "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+  "rawSha256": {
+    "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+    "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+    "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+    "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+    "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+    "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+    "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+    "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+    "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+    "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+  },
+  "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
+}

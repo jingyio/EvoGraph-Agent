@@ -2,11 +2,35 @@
 
 核对日期：2026-09-13；功能演进基线：`9520ae7`，本文包含其后的沙箱清理和交互式工作区，当前行为以本文所属提交为准。本文件描述已实现状态，未实现方向见 [TODO.md](TODO.md)，设计约束见 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)。
 
+
+## 2026-09-14 工作区轨迹路径（P0.5首阶段）
+
+`backend/trajectory.py` 对通过结构化评分的正常train收据诱导read/compute节点，记录
+sourceRun/traceIndex/digest、嵌套当前table/task槽、源请求和操作覆盖描述。临时Plan仍可
+用于冷启动，但未执行节点不进入该经验。工作区走当前API/schema硬筛选＋一次有界
+语义匹配，不使用family/template/workpackId/difficulty/privateValidation路由；匹配请求
+计入同一Agent模型预算与`match`阶段。无法可靠参数化的操作和语义正文留给本次模型。
+
+G保存结构变化；M保存适用描述变化。正常成功同结构在新schema下执行可单独扩展M的
+schema约束；结构相同/仅顺序变化不增加G。普通用户只读使用reviewed经验、不学习；
+validation/test不写工作区经验。真实G1已有，但后续使用未观察到，不能称进化验收完成。
+嵌套上游output推导及报告/草稿/导出图调度尚未实现；本地产物仅已具运行内幂等。
+
+`workspace_reconcile_keyed_sums` 支持按键sum/max/min，缺失值返回null并排除相应比较，
+保留一对多行证据、独立集合和空集合。`workspace_publish_report.groups` 保存每组
+name/reason/condition/count/selectedIds/evidenceIds；组内缩写只从本次唯一观察引用绑定。
+所有能力两臂共享，私有真值仅评分；P0.5公开证据范围单独生成，不读取gold补报告。
+
+`trajectory_assets.py` 生成版本化公开任务资料，`trajectory_experiment.py` 冻结并串行执行，
+首次失败pair后停止扩大。`/#trajectory` 只消费同run保存结果、匹配/G/M差异和成本曲线。
+独立新材料见 `test/轨迹复核-v1`，不混入首页固定题库。详细结论与限制见
+[轨迹V2结果](trajectory-v2-results-2026-09-14.md)。以下旧任务库图路径继续保留。
+
 ## 目标与边界
 
 用数字员工任务证明相同或更好质量下的 token/cost/latency 改善，并取得递归进化与流程可靠性的独立证据。不是通用 Agent 平台；没有训练或修改基础模型。前端 React/TypeScript，后端 Python/FastAPI，图处理 NetworkX。
 
-核心思想是把可确定执行的结构从模型决策中分离。当前主要覆盖读取图，不能把它描述成完整业务工作流编译器，也不声称完整复现 AutoTool/G-Agent/MotifAgent 论文。
+核心思想是把可确定执行的结构从模型决策中分离。旧任务库主要覆盖读取图，工作区另支持受限compute片段；不能把它描述成完整业务工作流编译器，也不声称完整复现 AutoTool/G-Agent/MotifAgent 论文。
 
 ## 当前任务库路径
 
@@ -46,7 +70,7 @@ backend/app.py → WorkspaceManager（上传/预览/追问） / WorkpackExperime
 
 ## Plan、图与状态
 
-Graph RSI 命中版本时同时复用保存的 Plan 和读取图，规划请求为零。Plan 已去除旧任务自由文本，仅保留字段需求/工具说明；业务 ID 从本次读取绑定，不复用旧观察结果。匹配使用场景、family、规范化任务模板、工具契约、数据集摘要与执行器版本。
+Graph RSI 命中版本时同时复用保存的 Plan 和读取图，规划请求为零。Plan 已去除旧任务自由文本，仅保留字段需求/工具说明；业务 ID 从本次读取绑定，不复用旧观察结果。旧任务库路径匹配使用场景、family、规范化任务模板、工具契约、数据集摘要与执行器版本；工作区已由上面的轨迹匹配路径替代。
 
 当前图节点沿用 Python dict：`tool/arguments/dependencies/foreach/paginate`，可加 `reuse` 和 `defer`。`foreach.filter` 是由 Plan `selection.kind=match` 绑定到已声明列表字段的精确相等筛选：图先读取当前列表、复用筛选字段，只对入选记录调用详情。无法可靠绑定的 Plan 使用 `selection.kind=model`，该详情子图交给模型；当前字段缺失或类型变化也失败关闭并保留上游观察。`reuse.onMissing=detail` 逐条检查并补查缺失字段。没有独立 IR 框架；准确协议见 [graph-ir.md](graph-ir.md)。
 

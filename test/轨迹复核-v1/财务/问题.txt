@@ -1,0 +1,6 @@
+请根据这份订单、支付和商品明细做一份财务复核简报，范围只限本次附件。
+按 order_id 汇总每个订单的支付金额、商品金额及运费。一个订单可以有多笔支付、多条商品明细，不要把它们当作重复行直接删除。
+请分别列出：支付总额与商品金额加运费总额相差严格大于5分的订单；最大分期数达到8期（>=8）的订单。两类可以重叠，不要合并后丢掉原因。
+缺支付记录或缺商品明细的订单单独列为待核查，不能当成金额为零已完成对账。
+给出附件内订单数、支付总额、商品加运费总额、各类复核订单数，附订单ID及证据；金额展示为BRL并注明原始字段为分。
+最后给出内部复核建议。即使某类没有入选订单，也请明确写0并说明筛选条件。只分析和生成报告，不执行退款或改账。 输出 metrics 精确包含以下键：order_count、paid_cents、line_cents、difference_count、installments_count、missing_payment_count、missing_items_count。groups 使用以下name，逐组给 reason、condition、count、selectedIds、evidenceIds：difference、installments、missing_payment、missing_items。selectedIds 是各组去重并集，所有ID用字符串。

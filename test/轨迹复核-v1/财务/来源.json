@@ -1,0 +1,9 @@
+{
+  "provider": "Olist",
+  "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+  "license": "CC BY-NC-SA 4.0",
+  "rawSha256": {
+    "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+  },
+  "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
+}

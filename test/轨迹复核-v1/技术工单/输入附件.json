@@ -1,0 +1,146 @@
+{
+  "issues": [
+    {
+      "issue_id": "5785",
+      "title": "Case insensitive in customer mail using the API not always true",
+      "state": "closed",
+      "milestone": "6.5",
+      "url": "https://github.com/zammad/zammad/issues/5785"
+    },
+    {
+      "issue_id": "5955",
+      "title": "Inline images from quoted emails cause invalid base64 GraphQL error in desktop view",
+      "state": "open",
+      "milestone": "7.2",
+      "url": "https://github.com/zammad/zammad/issues/5955"
+    },
+    {
+      "issue_id": "3219",
+      "title": "Determine if ES-Reindex is required and if so do it optionally",
+      "state": "open",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/3219"
+    },
+    {
+      "issue_id": "6122",
+      "title": "Remove redundant header in Admin / Channel pages",
+      "state": "closed",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/6122"
+    },
+    {
+      "issue_id": "2533",
+      "title": "Notes not available in variables (signature) during ticket creation",
+      "state": "open",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/2533"
+    },
+    {
+      "issue_id": "4203",
+      "title": "Merging tickets does not update `last_contact_at` fields",
+      "state": "open",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/4203"
+    },
+    {
+      "issue_id": "5828",
+      "title": "AI Agents> Add descriptions to group dispatcher",
+      "state": "closed",
+      "milestone": "7.0",
+      "url": "https://github.com/zammad/zammad/issues/5828"
+    },
+    {
+      "issue_id": "5702",
+      "title": "Custom css is not applied to mobile view",
+      "state": "closed",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/5702"
+    },
+    {
+      "issue_id": "5778",
+      "title": "AI Analytics - Writing Assistant - Collection of agent feedback",
+      "state": "closed",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/5778"
+    },
+    {
+      "issue_id": "5057",
+      "title": "Multiple LDAP: Multiple configured with \"Users without assigned LDAP groups: Don't synchronize\" result in disabled users with same named user accounts",
+      "state": "open",
+      "milestone": "",
+      "url": "https://github.com/zammad/zammad/issues/5057"
+    }
+  ],
+  "activity": [
+    {
+      "issue_id": "5785",
+      "comments": 5,
+      "assignee_count": 2,
+      "updated_at": "2025-09-24T07:30:47Z",
+      "labels": "bug, API, ticket, verified, user"
+    },
+    {
+      "issue_id": "5955",
+      "comments": 0,
+      "assignee_count": 3,
+      "updated_at": "2026-06-17T05:46:16Z",
+      "labels": "verified, 📱mobile-view📱, text editor"
+    },
+    {
+      "issue_id": "3219",
+      "comments": 0,
+      "assignee_count": 0,
+      "updated_at": "2024-10-02T09:23:06Z",
+      "labels": "enhancement, specification required"
+    },
+    {
+      "issue_id": "6122",
+      "comments": 4,
+      "assignee_count": 2,
+      "updated_at": "2026-05-13T20:19:09Z",
+      "labels": "admin area"
+    },
+    {
+      "issue_id": "2533",
+      "comments": 1,
+      "assignee_count": 0,
+      "updated_at": "2026-01-28T11:19:38Z",
+      "labels": "bug, verified, ticket: create, variable processing"
+    },
+    {
+      "issue_id": "4203",
+      "comments": 2,
+      "assignee_count": 0,
+      "updated_at": "2022-08-23T11:47:32Z",
+      "labels": "enhancement, specification required"
+    },
+    {
+      "issue_id": "5828",
+      "comments": 0,
+      "assignee_count": 2,
+      "updated_at": "2025-10-28T12:14:18Z",
+      "labels": "AI"
+    },
+    {
+      "issue_id": "5702",
+      "comments": 1,
+      "assignee_count": 0,
+      "updated_at": "2025-07-10T10:37:57Z",
+      "labels": "question, works as designed / wontfix, specification required"
+    },
+    {
+      "issue_id": "5778",
+      "comments": 0,
+      "assignee_count": 2,
+      "updated_at": "2025-10-16T14:36:24Z",
+      "labels": "AI"
+    },
+    {
+      "issue_id": "5057",
+      "comments": 3,
+      "assignee_count": 0,
+      "updated_at": "2025-04-02T09:38:38Z",
+      "labels": "bug, LDAP, verified, prioritised by payment"
+    }
+  ]
+}

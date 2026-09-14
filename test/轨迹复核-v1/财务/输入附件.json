@@ -1,0 +1,225 @@
+{
+  "orders": [
+    {
+      "order_id": "158745a153fbab78119f6c57c38c5306",
+      "status": "delivered",
+      "purchased_at": "2017-04-23 21:14:56"
+    },
+    {
+      "order_id": "f80bb64f9bb2ac4ced01632c44a67e0d",
+      "status": "delivered",
+      "purchased_at": "2017-02-01 13:01:34"
+    },
+    {
+      "order_id": "4ea17d0c90f37e942470706403d14a7b",
+      "status": "delivered",
+      "purchased_at": "2017-08-15 20:28:02"
+    },
+    {
+      "order_id": "3e9e43fb06f07b42b4bb306628866e20",
+      "status": "delivered",
+      "purchased_at": "2018-03-03 18:16:14"
+    },
+    {
+      "order_id": "c2dd3125d2c742a487adbbd0704b4775",
+      "status": "canceled",
+      "purchased_at": "2017-09-16 14:24:39"
+    },
+    {
+      "order_id": "504a90faaf31b2457b86f7179a6bd79e",
+      "status": "delivered",
+      "purchased_at": "2017-11-27 17:59:36"
+    },
+    {
+      "order_id": "3777fdee1e90e53636623e02ecccc4ba",
+      "status": "delivered",
+      "purchased_at": "2018-07-08 02:34:52"
+    },
+    {
+      "order_id": "9aeecc9e1b5dc77872bddd35b141fd83",
+      "status": "delivered",
+      "purchased_at": "2017-11-23 22:05:20"
+    },
+    {
+      "order_id": "260799d8b7f9539cd4cd5a5e513a281d",
+      "status": "delivered",
+      "purchased_at": "2018-03-18 11:09:02"
+    },
+    {
+      "order_id": "2281b9a155dc821e33ba9e7360964450",
+      "status": "delivered",
+      "purchased_at": "2017-12-14 15:16:51"
+    },
+    {
+      "order_id": "43f15e122ae8ae3eda33bf64b011c085",
+      "status": "unavailable",
+      "purchased_at": "2017-08-06 22:09:17"
+    },
+    {
+      "order_id": "61417f74f6caf083ff60fa4dc315f050",
+      "status": "delivered",
+      "purchased_at": "2018-01-19 02:33:59"
+    }
+  ],
+  "payments": [
+    {
+      "order_id": "158745a153fbab78119f6c57c38c5306",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 1,
+      "amount_cents": 4686
+    },
+    {
+      "order_id": "f80bb64f9bb2ac4ced01632c44a67e0d",
+      "sequence": 2,
+      "method": "voucher",
+      "installments": 1,
+      "amount_cents": 9220
+    },
+    {
+      "order_id": "f80bb64f9bb2ac4ced01632c44a67e0d",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 1,
+      "amount_cents": 844
+    },
+    {
+      "order_id": "4ea17d0c90f37e942470706403d14a7b",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 8,
+      "amount_cents": 20641
+    },
+    {
+      "order_id": "3e9e43fb06f07b42b4bb306628866e20",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 2,
+      "amount_cents": 2611
+    },
+    {
+      "order_id": "c2dd3125d2c742a487adbbd0704b4775",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 8,
+      "amount_cents": 16454
+    },
+    {
+      "order_id": "504a90faaf31b2457b86f7179a6bd79e",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 3,
+      "amount_cents": 9075
+    },
+    {
+      "order_id": "3777fdee1e90e53636623e02ecccc4ba",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 1,
+      "amount_cents": 13816
+    },
+    {
+      "order_id": "9aeecc9e1b5dc77872bddd35b141fd83",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 1,
+      "amount_cents": 3177
+    },
+    {
+      "order_id": "260799d8b7f9539cd4cd5a5e513a281d",
+      "sequence": 1,
+      "method": "boleto",
+      "installments": 1,
+      "amount_cents": 2929
+    },
+    {
+      "order_id": "2281b9a155dc821e33ba9e7360964450",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 1,
+      "amount_cents": 6414
+    },
+    {
+      "order_id": "43f15e122ae8ae3eda33bf64b011c085",
+      "sequence": 1,
+      "method": "boleto",
+      "installments": 1,
+      "amount_cents": 5828
+    },
+    {
+      "order_id": "61417f74f6caf083ff60fa4dc315f050",
+      "sequence": 1,
+      "method": "credit_card",
+      "installments": 3,
+      "amount_cents": 8723
+    }
+  ],
+  "items": [
+    {
+      "order_id": "158745a153fbab78119f6c57c38c5306",
+      "sequence": 1,
+      "price_cents": 3590,
+      "freight_cents": 1096
+    },
+    {
+      "order_id": "f80bb64f9bb2ac4ced01632c44a67e0d",
+      "sequence": 1,
+      "price_cents": 7990,
+      "freight_cents": 2074
+    },
+    {
+      "order_id": "4ea17d0c90f37e942470706403d14a7b",
+      "sequence": 1,
+      "price_cents": 16990,
+      "freight_cents": 3651
+    },
+    {
+      "order_id": "3e9e43fb06f07b42b4bb306628866e20",
+      "sequence": 1,
+      "price_cents": 1800,
+      "freight_cents": 811
+    },
+    {
+      "order_id": "c2dd3125d2c742a487adbbd0704b4775",
+      "sequence": 1,
+      "price_cents": 14875,
+      "freight_cents": 1579
+    },
+    {
+      "order_id": "504a90faaf31b2457b86f7179a6bd79e",
+      "sequence": 1,
+      "price_cents": 7299,
+      "freight_cents": 1776
+    },
+    {
+      "order_id": "3777fdee1e90e53636623e02ecccc4ba",
+      "sequence": 1,
+      "price_cents": 12999,
+      "freight_cents": 817
+    },
+    {
+      "order_id": "9aeecc9e1b5dc77872bddd35b141fd83",
+      "sequence": 1,
+      "price_cents": 2399,
+      "freight_cents": 778
+    },
+    {
+      "order_id": "260799d8b7f9539cd4cd5a5e513a281d",
+      "sequence": 1,
+      "price_cents": 2190,
+      "freight_cents": 739
+    },
+    {
+      "order_id": "2281b9a155dc821e33ba9e7360964450",
+      "sequence": 1,
+      "price_cents": 2999,
+      "freight_cents": 3415
+    },
+    {
+      "order_id": "61417f74f6caf083ff60fa4dc315f050",
+      "sequence": 1,
+      "price_cents": 7550,
+      "freight_cents": 1173
+    }
+  ]
+}

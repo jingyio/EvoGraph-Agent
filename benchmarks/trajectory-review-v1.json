@@ -1,0 +1,1142 @@
+{
+  "version": "trajectory-review-v1",
+  "taskDesign": "project-authored requests, public historical records; no injected business/tool failures",
+  "splitPolicy": "source partition, train only learning; validation/test remain unrun",
+  "tasks": [
+    {
+      "id": "finance-train-01",
+      "scenario": "finance",
+      "split": "train",
+      "position": 1,
+      "group": "finance-review",
+      "title": "财务多原因复核 1",
+      "recordIds": [
+        "158745a153fbab78119f6c57c38c5306",
+        "f80bb64f9bb2ac4ced01632c44a67e0d",
+        "4ea17d0c90f37e942470706403d14a7b",
+        "3e9e43fb06f07b42b4bb306628866e20",
+        "c2dd3125d2c742a487adbbd0704b4775",
+        "504a90faaf31b2457b86f7179a6bd79e",
+        "3777fdee1e90e53636623e02ecccc4ba",
+        "9aeecc9e1b5dc77872bddd35b141fd83",
+        "260799d8b7f9539cd4cd5a5e513a281d",
+        "2281b9a155dc821e33ba9e7360964450",
+        "43f15e122ae8ae3eda33bf64b011c085",
+        "61417f74f6caf083ff60fa4dc315f050"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 11
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4271,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "4821043a5962496ef902b5eba41e9294f9ec052c36dbc1c173a1bd16416aad1a",
+      "inputHash": "11286fb2107e2704473ae1d493c9a64d743fafe87981103aac46676b040fa104"
+    },
+    {
+      "id": "finance-train-02",
+      "scenario": "finance",
+      "split": "train",
+      "position": 2,
+      "group": "finance-review",
+      "title": "财务多原因复核 2",
+      "recordIds": [
+        "4a0746838da42155bfc10fe57284b734",
+        "252c40159f2a9ab94b552a779514e790",
+        "f517ea1343dd2e2db6ad7e82cdcd6109",
+        "d7dd7b5a139c49fb68a6977797599973",
+        "2e914af8bdaefffc2e6ea38a39a64d4a",
+        "84275d513f92f95d3e62865feeaab895",
+        "c4a3a64bb10616483729097dead2a6f0",
+        "6ee51c0635bd64edb1ee4563a3d6d34d",
+        "9790041c37fe439f3ad230642670a149",
+        "e56cf4189e005351c2158740a5861875",
+        "67bc7ad5678269583e9bb44b18c5083b",
+        "c138ed76de074431ead0f918198673f3"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4376,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "d85c33cabc36f3358fe4800acf0045138867653d1c424981c0ce954503b72410",
+      "inputHash": "dfc8816aa7969f665535a898bb9812f6fc3be47ba5e5bec59915d81b16877aa8"
+    },
+    {
+      "id": "finance-train-03",
+      "scenario": "finance",
+      "split": "train",
+      "position": 3,
+      "group": "finance-review",
+      "title": "财务多原因复核 3",
+      "recordIds": [
+        "2a463210d1a9df13867520674e9358dc",
+        "175e57b0e30236d6cff85c13372a5592",
+        "69fd81b0cd556f5da5000c1ed874ed19",
+        "af5248d345341f797de31954e0d3d2f4",
+        "79dcf055e74b18132713733d8a66a44d",
+        "7a5b3f682886d750ce6eae941ad0d793",
+        "8904df7b2c7b44d20e741ca675815130",
+        "7faf49d330e4e0fca17c5a17b339bd4b",
+        "f2cb4c78271f262506be85373706f5ba",
+        "b6b73b9c0cab8ac7a2b02a49623d4cfe",
+        "7ac818621c9efe9a8f6ef6d66477fc3a",
+        "43204c34d259bc75adc3de4d29d26684"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4634,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "a25610488aeff9244a1b42826d2af252a468009178a6168791e642af6a4c67ce",
+      "inputHash": "634838b77c260190b760ddd39463ff00c8b944c6f88afea11d0907059d293b70"
+    },
+    {
+      "id": "finance-train-04",
+      "scenario": "finance",
+      "split": "train",
+      "position": 4,
+      "group": "finance-review",
+      "title": "财务多原因复核 4",
+      "recordIds": [
+        "275d77a4c30d29824ec29e90244c95f4",
+        "2c4f41fd30cdd44de346e77247380dd2",
+        "d01105351950ac50f4969205d5d249f9",
+        "cd81ba816ce2aa9e8c681c321ddf0a22",
+        "17bfbacddb5eaccbb988fe17e60da5f8",
+        "67eb4ef90121427f1b21fabc4a4ae8ca",
+        "e9592428987296ef5360c23a102ef91e",
+        "0017afd5076e074a48f1f1a4c7bac9c5",
+        "04784f58d6d77df7f4c12da82a4577dc",
+        "0f63563be96b463e62d59a8d51ef5d3d",
+        "67adba02e0955286954975ea56f9d17f",
+        "9630f4af52c269bea30409c275052f6e"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4263,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "c1625f9e03d0cfd2027b32cd9ae0761bfd7858d128a60864b2625476749e7f4c",
+      "inputHash": "6c4f2914f57324a639c79d81adfbd63f46264369a7a7bd389690b0783a7bb0ba"
+    },
+    {
+      "id": "finance-train-05",
+      "scenario": "finance",
+      "split": "train",
+      "position": 5,
+      "group": "finance-review",
+      "title": "财务多原因复核 5",
+      "recordIds": [
+        "3b090f7fe6e2cf01b468a154dc9c546a",
+        "5652c98b769d7fdf952be85f0f4caa1f",
+        "f0acad80eb7ba5bc5df9257759e12330",
+        "db655922543a6cebb4a48f8290405a60",
+        "d1cd7d486ae6facbe6c2a59a51c6d1f3",
+        "b790fce1eff8be3c9ff35c97cde2afaa",
+        "0a33a983476b5e9f23c0fc9f95c9682f",
+        "5c6fb1efa6d074731c88c7209909b511",
+        "3354a9e699cdd99dae33906e55a8ca17",
+        "83b168c70ec0325445963b36cda1eef3",
+        "3cbf332e7f3e5a7c73f6106f0ba94967",
+        "741f2c4e19ea249883b7eab05a4061f6"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 15
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4598,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "39ad187a35f7d08c5d09dc71dd52ea75e99a36ab4f1aa7615c19231a343c8209",
+      "inputHash": "17ed05fa843c548ce54825aa5045ae46ad8f2c7cb4f458cc1bf02308f677c28c"
+    },
+    {
+      "id": "finance-train-06",
+      "scenario": "finance",
+      "split": "train",
+      "position": 6,
+      "group": "finance-review",
+      "title": "财务多原因复核 6",
+      "recordIds": [
+        "73627dfa9a67ee111fb528be6f9d4b02",
+        "d572cde58d2fd1fcd7d019dae26cd911",
+        "a29c6282a6e4ec30881051cfaa99029c",
+        "0a46f220430c5aeaea27e7ebc76bae76",
+        "655bc8e53bf6638c8e7c49962fb60a4f",
+        "4efe78f6ef58eecff2dee027fca3a31f",
+        "aea27cd16b5e532056c2ea57db75b66f",
+        "c76b5689857b2dc863826762f8b07cd3",
+        "e1d91f5481b7e7a48c0ceefd3feb4ba5",
+        "0fb55482ffb326ed131c67051fe87192",
+        "03e53a3c2ea313a49e89aee8f8c44970",
+        "caa0b1f68d02953d97d190e4e4e7191e"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4512,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "c9d33f094953df8047c3f5840a0a9d28076b3a2fe409795be9d7c12e030eebb3",
+      "inputHash": "ce223b69788f3a136d9d83326d53471abf051a4b24e1763c5b68d13a32a09730"
+    },
+    {
+      "id": "finance-train-07",
+      "scenario": "finance",
+      "split": "train",
+      "position": 7,
+      "group": "finance-review",
+      "title": "财务多原因复核 7",
+      "recordIds": [
+        "423557ab2406aca36516f1d1b9765ae7",
+        "75979ee68f846e2cb2439240380d5291",
+        "2aedaa475bd0650b62bfadfdeaf83132",
+        "5895d82d31799f8d7ad6748c25e76dad",
+        "116c5326c53701c0cef3abac7b086466",
+        "d98c5ae5ced12b3d997f7b614a8f1bb7",
+        "5e7d51bfc94acb16cfcc272c581f85cc",
+        "61fd7198f99b6dfea49f9a7cd0fe2789",
+        "241ed1aad96c4cc788ee6f8ab96242ef",
+        "6c902413dba57690cf1e5dd592553b6f",
+        "db64a5b6724f1501323cc11154cbaf39",
+        "1aba19a11ad5276dc9d409b95680caa6"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 17
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4803,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "b5195e8e4e558b1e226e0d4302780330ab59c89a113169ee7043cfa02c0faf46",
+      "inputHash": "f20ac6d55d81d8c758c5cc441d09ec06670e1ec8b7148e012651ac568a75658d"
+    },
+    {
+      "id": "finance-train-08",
+      "scenario": "finance",
+      "split": "train",
+      "position": 8,
+      "group": "finance-review",
+      "title": "财务多原因复核 8",
+      "recordIds": [
+        "7c1bc8447c240b37b3ce9222a1daf420",
+        "b02513666ca6bc4ca57d794a58854d76",
+        "57a7b18332c1b9b26d96e35379af3a38",
+        "f2614c602a0621707ca12e9a6cf3b112",
+        "c2c7db553def6f2b47769b8bd9d08432",
+        "a185e5cd569eb1436c80f83bae2d91bb",
+        "63a737026bbe83be3d56d70c83923ebd",
+        "1480130e23141d8399f31672d874d60f",
+        "a5c89a2b81869ebc3877b6a27a2892ca",
+        "203a378a78cc26ef2e1bfd90a6d48a29",
+        "a231611f82f7625fba490466e2606aa5",
+        "7e73a37d2876badd7341bc42b0c1ac42"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 5,
+        "textCharacters": 4362,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "0d8f46c26f76e08bb0a01869be4fa4d0444a06aecfb1fc1436f8a087b0a6566e",
+      "inputHash": "454d3fa5ab5f6734416951284dcc4d67e278aa8e972313fc986f1f3a7ed47468"
+    },
+    {
+      "id": "finance-validation-01",
+      "scenario": "finance",
+      "split": "validation",
+      "position": 1,
+      "group": "finance-review",
+      "title": "财务多原因复核 1",
+      "recordIds": [
+        "178a25841b0490cf789963c9a98cac1e",
+        "39b9820979b360fd55967934e0bc3f80",
+        "013a98b3a668bcef05b98898177f6923",
+        "3837859eff41b5dbbd1dfad5a066d0ae",
+        "0c3190b4838c596fd1d6cd74e0436120",
+        "c2628077fa4edd2ebee4f13e2f58368c",
+        "ef31477820679f9801481f607b13f32e",
+        "e411a2fed65c00ae40544a4ffe4b6480",
+        "9436cfaa861428f70a41ac0a7e91d752",
+        "b7dd6e83a855d2ed0804d8ff84535092",
+        "a27bc60b5829ed193c7a85e25f6de764",
+        "4b8531adbebcd4cee2f85862c7827dee"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4483,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "4821043a5962496ef902b5eba41e9294f9ec052c36dbc1c173a1bd16416aad1a",
+      "inputHash": "b784f0e7f74ba1b27dee388fa83ad60e4ab147509bdec42089ec33682fe93179"
+    },
+    {
+      "id": "finance-test-01",
+      "scenario": "finance",
+      "split": "test",
+      "position": 1,
+      "group": "finance-review",
+      "title": "财务多原因复核 1",
+      "recordIds": [
+        "49ac83265a3a9d7d492eb5e1909b485a",
+        "74e033208dc13a7b8127eb8e73d09b76",
+        "a6b7a54fd0db4d3a5d6c9d6af0aae6d1",
+        "32bcd8b7a5501464ffa9586eb4794f53",
+        "5de9ecce32c65cf52b1602cdac27f7f2",
+        "178b47270e98b91b6d34278d77b27bb3",
+        "a30cba7093267abeb0f8489d5c16c7af",
+        "ddc18af6ae773bf05e10a4f26aaf0b33",
+        "efade7725d5dfe59a8c281511cea69e2",
+        "a7db257661f3cc8b9b661474199da586",
+        "0c47c8eb31ce1b27d2cc41c7475aeab8",
+        "361a8e5d36aa919ab0d8de09ee9a3013"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 15
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4602,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0
+      },
+      "requestHash": "4821043a5962496ef902b5eba41e9294f9ec052c36dbc1c173a1bd16416aad1a",
+      "inputHash": "fdb91a965e3864e60d8973ddfb0c2152669adcce52e56e89c4a7f9dc3b417500"
+    },
+    {
+      "id": "support-train-01",
+      "scenario": "support",
+      "split": "train",
+      "position": 1,
+      "group": "support-review",
+      "title": "客服多原因复核 1",
+      "recordIds": [
+        "9999114",
+        "9996304",
+        "9999032",
+        "9999894",
+        "9913185",
+        "9999880",
+        "9999025",
+        "9997158",
+        "9999324",
+        "9839358"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 6977,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "dbb3ef49a77e23487b097a931529eb72165dbde685e101ebec3c37298f52c317"
+    },
+    {
+      "id": "support-train-02",
+      "scenario": "support",
+      "split": "train",
+      "position": 2,
+      "group": "support-review",
+      "title": "客服多原因复核 2",
+      "recordIds": [
+        "9997954",
+        "9998937",
+        "9997743",
+        "9997866",
+        "9999284",
+        "9997925",
+        "999958",
+        "9773350",
+        "9998760",
+        "9999533"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 8650,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 10
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "840a749d780c991392d1cf182b68058ccc8080b4939b88ab0aed5dd4c60b606e"
+    },
+    {
+      "id": "support-train-03",
+      "scenario": "support",
+      "split": "train",
+      "position": 3,
+      "group": "support-review",
+      "title": "客服多原因复核 3",
+      "recordIds": [
+        "9840714",
+        "9999948",
+        "9997879",
+        "9999984",
+        "9999963",
+        "9998242",
+        "9997066",
+        "9998342",
+        "9999352",
+        "9998307"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 10257,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "fdb62ee86228657a89abf726564d2cbf24b1a041c69682d6bdac3ce3152a7c4a",
+      "inputHash": "73a6733e2c7f2dcef93ea0456fad2f7aa54eead778e6c4f4180aad9647072b90"
+    },
+    {
+      "id": "support-train-04",
+      "scenario": "support",
+      "split": "train",
+      "position": 4,
+      "group": "support-review",
+      "title": "客服多原因复核 4",
+      "recordIds": [
+        "9999888",
+        "9998148",
+        "9999891",
+        "9999975",
+        "9778834",
+        "9984337",
+        "9998989",
+        "9996268",
+        "9999692",
+        "9998851"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8642,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "fdb62ee86228657a89abf726564d2cbf24b1a041c69682d6bdac3ce3152a7c4a",
+      "inputHash": "3a609eb49a8a30e241ffd3be9441a68296b395f46209ab9b976dd7b3603f453e"
+    },
+    {
+      "id": "support-train-05",
+      "scenario": "support",
+      "split": "train",
+      "position": 5,
+      "group": "support-review",
+      "title": "客服多原因复核 5",
+      "recordIds": [
+        "9999612",
+        "9733461",
+        "9996361",
+        "9996972",
+        "9998505",
+        "9999063",
+        "9835226",
+        "9997882",
+        "9999002",
+        "9999249"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 7902,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 10
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "9c948674f009142ba648809a6a57dcd1e4c41c00b1c9f5804ba7d42d97336ceb"
+    },
+    {
+      "id": "support-train-06",
+      "scenario": "support",
+      "split": "train",
+      "position": 6,
+      "group": "support-review",
+      "title": "客服多原因复核 6",
+      "recordIds": [
+        "9996303",
+        "9997602",
+        "9731944",
+        "9999743",
+        "9998807",
+        "9999296",
+        "9997464",
+        "9864100",
+        "9999174",
+        "9999796"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 8312,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "648a2d41b837649c48f5aa795dfe9d31ed921d7fa1ec5a3cb4509dc946e9392c"
+    },
+    {
+      "id": "support-train-07",
+      "scenario": "support",
+      "split": "train",
+      "position": 7,
+      "group": "support-review",
+      "title": "客服多原因复核 7",
+      "recordIds": [
+        "9996727",
+        "9999761",
+        "9997680",
+        "9999163",
+        "9998631",
+        "9999933",
+        "9997658",
+        "9999727",
+        "9999487",
+        "9777702"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 8168,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 10
+      },
+      "requestHash": "fdb62ee86228657a89abf726564d2cbf24b1a041c69682d6bdac3ce3152a7c4a",
+      "inputHash": "4f3f3fd1a31e6e97789eea86d762f4f5c632c752718653625dc0b9c8eee02e61"
+    },
+    {
+      "id": "support-train-08",
+      "scenario": "support",
+      "split": "train",
+      "position": 8,
+      "group": "support-review",
+      "title": "客服多原因复核 8",
+      "recordIds": [
+        "9999830",
+        "9998491",
+        "9998419",
+        "9996247",
+        "9996935",
+        "9999684",
+        "9999577",
+        "9999995",
+        "9877821",
+        "9999047"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 3,
+        "textCharacters": 9334,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "fdb62ee86228657a89abf726564d2cbf24b1a041c69682d6bdac3ce3152a7c4a",
+      "inputHash": "b01ec49c3623c9e47cef986f51091fe361e581231dd8499a033f0ac3fa873974"
+    },
+    {
+      "id": "support-validation-01",
+      "scenario": "support",
+      "split": "validation",
+      "position": 1,
+      "group": "support-review",
+      "title": "客服多原因复核 1",
+      "recordIds": [
+        "9999723",
+        "9999545",
+        "9998543",
+        "9999534",
+        "9999447",
+        "9999143",
+        "9997361",
+        "9999254",
+        "9999733",
+        "9999392"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 9469,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "07542d82816411983c3d06b0f33b175e7cc74ab51adef2636137da2f6c397ebb"
+    },
+    {
+      "id": "support-test-01",
+      "scenario": "support",
+      "split": "test",
+      "position": 1,
+      "group": "support-review",
+      "title": "客服多原因复核 1",
+      "recordIds": [
+        "9998971",
+        "9997524",
+        "9999512",
+        "9999850",
+        "9993028",
+        "9999689",
+        "9791835",
+        "9999101",
+        "9998970",
+        "9997060"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "complaints": 10,
+          "responses": 10,
+          "narratives": 10
+        },
+        "tables": 3,
+        "deliveryGroups": 2,
+        "textCharacters": 7377,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 11
+      },
+      "requestHash": "a50189085b8dfcbbdecfb1bdec22ec70722efcdc250e4ea285ecdb1be4895a86",
+      "inputHash": "d15014a79391ac1b78fa7f415f0556089a143a5120d1f9f80869507f6ef4c22c"
+    },
+    {
+      "id": "tickets-train-01",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 1,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 1",
+      "recordIds": [
+        "5785",
+        "5955",
+        "3219",
+        "6122",
+        "2533",
+        "4203",
+        "5828",
+        "5702",
+        "5778",
+        "5057"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3372,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "b99360992583b6f5149089273d547f1ae9eeeb01e562963bb8c3af385f7288b6",
+      "inputHash": "de96656a6c443b7615a4cac1f58c9d24df19ba215ec054de8121f704d144c4f0"
+    },
+    {
+      "id": "tickets-train-02",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 2,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 2",
+      "recordIds": [
+        "5776",
+        "4908",
+        "6172",
+        "6265",
+        "4486",
+        "5737",
+        "6348",
+        "5708",
+        "5005",
+        "5771"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3423,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "dace8ab29a00ff9144e61960d1c7a6159b71dfe65789a5ad811c34e27b42c8e1",
+      "inputHash": "17b19cb257f12e0fead6fb0b114b94dc216540626050fa3d58222cf7bc26371c"
+    },
+    {
+      "id": "tickets-train-03",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 3,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 3",
+      "recordIds": [
+        "5836",
+        "5763",
+        "6033",
+        "3118",
+        "6023",
+        "5930",
+        "5773",
+        "6076",
+        "5887",
+        "6026"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3349,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "471282208d274ca452de3ca433c37ffb2fe82642d642e3ef676deafac024cbfb",
+      "inputHash": "d24c2bc586f123ca32663e8ebd3a9c53332d00291877d709d1586d0b00cd57cb"
+    },
+    {
+      "id": "tickets-train-04",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 4,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 4",
+      "recordIds": [
+        "5698",
+        "5746",
+        "6327",
+        "4138",
+        "6262",
+        "2962",
+        "6185",
+        "4523",
+        "4287",
+        "5965"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3458,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "ba2bd299625cd1b09dbc934654cc85dfa8df3e50bdcf60d241d6ba77d8bcc7b5",
+      "inputHash": "e6e205b45eab65923a99dda90aa7d13938a112194f515121cd7a1403f92992e5"
+    },
+    {
+      "id": "tickets-train-05",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 5,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 5",
+      "recordIds": [
+        "5749",
+        "6036",
+        "5973",
+        "5620",
+        "6303",
+        "6193",
+        "6176",
+        "5683",
+        "6347",
+        "5881"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3312,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "b99360992583b6f5149089273d547f1ae9eeeb01e562963bb8c3af385f7288b6",
+      "inputHash": "6161ae4e07bad143d780ae021a9dad163e9cdff73692765c9824083dc068a24a"
+    },
+    {
+      "id": "tickets-train-06",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 6,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 6",
+      "recordIds": [
+        "6230",
+        "5920",
+        "5927",
+        "5869",
+        "2737",
+        "5113",
+        "3104",
+        "5974",
+        "3951",
+        "5933"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3550,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 7
+      },
+      "requestHash": "dace8ab29a00ff9144e61960d1c7a6159b71dfe65789a5ad811c34e27b42c8e1",
+      "inputHash": "e04572d04d0a561c140bb727b3f48acc9851d2ac385c3d8d1b6dea4662fff549"
+    },
+    {
+      "id": "tickets-train-07",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 7,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 7",
+      "recordIds": [
+        "5716",
+        "6334",
+        "4716",
+        "5733",
+        "5950",
+        "5838",
+        "5931",
+        "5876",
+        "4971",
+        "5781"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3294,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "ba2bd299625cd1b09dbc934654cc85dfa8df3e50bdcf60d241d6ba77d8bcc7b5",
+      "inputHash": "a1516fbba426ff3579597aedcd20b3de6a6e19f747f073604f7975067a28cb3a"
+    },
+    {
+      "id": "tickets-train-08",
+      "scenario": "tickets",
+      "split": "train",
+      "position": 8,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 8",
+      "recordIds": [
+        "5786",
+        "6161",
+        "3328",
+        "5750",
+        "6148",
+        "6056",
+        "6186",
+        "5732",
+        "5998",
+        "4939"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 3,
+        "textCharacters": 3310,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 4
+      },
+      "requestHash": "471282208d274ca452de3ca433c37ffb2fe82642d642e3ef676deafac024cbfb",
+      "inputHash": "1157c800fa803f63f982b8672ea71464e4228f49208eec062e8642bd7394a2a4"
+    },
+    {
+      "id": "tickets-validation-01",
+      "scenario": "tickets",
+      "split": "validation",
+      "position": 1,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 1",
+      "recordIds": [
+        "6015",
+        "6268",
+        "6083",
+        "5800",
+        "2786",
+        "5675",
+        "6074",
+        "4490",
+        "6297",
+        "2839"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3326,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 6
+      },
+      "requestHash": "b99360992583b6f5149089273d547f1ae9eeeb01e562963bb8c3af385f7288b6",
+      "inputHash": "8fcf897d2bea80381588e21887e65b60f1c94abca2443560f047e06b8ab360bc"
+    },
+    {
+      "id": "tickets-test-01",
+      "scenario": "tickets",
+      "split": "test",
+      "position": 1,
+      "group": "tickets-review",
+      "title": "技术工单多原因复核 1",
+      "recordIds": [
+        "4797",
+        "5851",
+        "6194",
+        "5815",
+        "6351",
+        "6065",
+        "5703",
+        "5722",
+        "5813",
+        "6009"
+      ],
+      "features": {
+        "primaryRecords": 10,
+        "rowsByTable": {
+          "issues": 10,
+          "activity": 10
+        },
+        "tables": 2,
+        "deliveryGroups": 2,
+        "textCharacters": 3361,
+        "unit": "records",
+        "association": "one-to-one",
+        "missingCells": 5
+      },
+      "requestHash": "b99360992583b6f5149089273d547f1ae9eeeb01e562963bb8c3af385f7288b6",
+      "inputHash": "8ab2c23b5745269ab95d2f99590d76e526f6377918b84b6038f88bd0a874a86a"
+    }
+  ],
+  "sources": {
+    "finance": {
+      "provider": "Olist",
+      "url": "https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce",
+      "license": "CC BY-NC-SA 4.0",
+      "rawSha256": {
+        "olist.zip": "967e41e04fc306fe604e2a693f488995a8b41e5047418f8a5c8e4abd6deca784"
+      },
+      "note": "真实匿名商业记录；任务由本项目设计，原始金额转换为 BRL 分。"
+    },
+    "support": {
+      "provider": "CFPB",
+      "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+      "license": "CC0 (API metadata)",
+      "requests": [
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+        "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+      ],
+      "rawSha256": {
+        "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+        "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+        "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+      },
+      "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
+    },
+    "tickets": {
+      "provider": "Zammad GitHub Issues",
+      "url": "https://github.com/zammad/zammad/issues",
+      "license": "公开 Issue 内容保留原作者权利；不将仓库代码许可证推定为用户文本许可证",
+      "rawSha256": {
+        "zammad-issues-1.json": "21c96acf3e1a19c81159b634292c9b2be95cf69b43a34535c2670755e5329f17",
+        "zammad-issues-2.json": "514776ab921a600a78fd5630ec563b6512172b9d6b8b17ffe8ee0acdd6db6b64",
+        "zammad-issues-3.json": "583bc2e1735babe90a2f4c804eddf79cf0e1116ed4b2afcd09380522a25eef16",
+        "zammad-issues-4.json": "65cd7710cca0afb568e41550df6b42c52500f1c5c1931f756b1b63d442566626",
+        "zammad-issues-5.json": "5f1bebf5155a79f813a779de8255101048a11cf6d19eb84e8f575343e436f341",
+        "zammad-issues-6.json": "1d183688fd7d2ec63b2cbde9d33221637dee8a44b069c49b5874df69b29cdf90",
+        "zammad-issues-7.json": "f2c09a780c8ba5a446f008c085f45ccd6536b7db6f1f7a3b731d63ec39b263bb",
+        "zammad-open-1.json": "6927b575cee0fa0bb73f0d91910b9055566a9280097467b2734de6e2d9523f78",
+        "zammad-open-2.json": "e541c577770a75a595dfae9ed5f07e40148a01b561aef3933a25f8814557ba1a",
+        "zammad-open-3.json": "98f817ce44e3cb2cf7edcbe13d782bc718d3fb5f3f233fae763184ac66da1b58"
+      },
+      "note": "真实软件问题记录，已排除 PR；不等同于企业内部客服工单。保留指派人数，不保留作者或负责人身份。"
+    }
+  }
+}

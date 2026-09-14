@@ -1,0 +1,188 @@
+{
+  "complaints": [
+    {
+      "complaint_id": "9999114",
+      "company": "TRANSUNION INTERMEDIATE HOLDINGS, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9996304",
+      "company": "Experian Information Solutions Inc.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9999032",
+      "company": "EQUIFAX, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9999894",
+      "company": "EQUIFAX, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9913185",
+      "company": "Dunn Law, P.A.",
+      "product": "Debt collection",
+      "timely": "No",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9999880",
+      "company": "EQUIFAX, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9999025",
+      "company": "EQUIFAX, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9997158",
+      "company": "EQUIFAX, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9999324",
+      "company": "TRANSUNION INTERMEDIATE HOLDINGS, INC.",
+      "product": "Credit reporting or other personal consumer reports",
+      "timely": "Yes",
+      "submitted_via": "Web"
+    },
+    {
+      "complaint_id": "9839358",
+      "company": "SmartCredit LLC",
+      "product": "Debt or credit management",
+      "timely": "No",
+      "submitted_via": "Web"
+    }
+  ],
+  "responses": [
+    {
+      "complaint_id": "9999114",
+      "company_public_response": "Company has responded to the consumer and the CFPB and chooses not to provide a public response",
+      "company_response": "Closed with non-monetary relief",
+      "date_received": "2024-09-03T23:04:40.000Z"
+    },
+    {
+      "complaint_id": "9996304",
+      "company_public_response": "Company has responded to the consumer and the CFPB and chooses not to provide a public response",
+      "company_response": "Closed with explanation",
+      "date_received": "2024-09-04T06:12:45.000Z"
+    },
+    {
+      "complaint_id": "9999032",
+      "company_public_response": null,
+      "company_response": "Closed with non-monetary relief",
+      "date_received": "2024-09-04T00:09:24.000Z"
+    },
+    {
+      "complaint_id": "9999894",
+      "company_public_response": null,
+      "company_response": "Closed with explanation",
+      "date_received": "2024-09-03T17:00:55.000Z"
+    },
+    {
+      "complaint_id": "9913185",
+      "company_public_response": null,
+      "company_response": "Untimely response",
+      "date_received": "2024-08-25T22:57:45.000Z"
+    },
+    {
+      "complaint_id": "9999880",
+      "company_public_response": null,
+      "company_response": "Closed with non-monetary relief",
+      "date_received": "2024-09-03T17:00:08.000Z"
+    },
+    {
+      "complaint_id": "9999025",
+      "company_public_response": null,
+      "company_response": "Closed with non-monetary relief",
+      "date_received": "2024-09-03T23:02:01.000Z"
+    },
+    {
+      "complaint_id": "9997158",
+      "company_public_response": null,
+      "company_response": "Closed with explanation",
+      "date_received": "2024-09-03T20:20:36.000Z"
+    },
+    {
+      "complaint_id": "9999324",
+      "company_public_response": "Company has responded to the consumer and the CFPB and chooses not to provide a public response",
+      "company_response": "Closed with non-monetary relief",
+      "date_received": "2024-09-04T00:01:37.000Z"
+    },
+    {
+      "complaint_id": "9839358",
+      "company_public_response": null,
+      "company_response": "Untimely response",
+      "date_received": "2024-08-18T20:58:02.000Z"
+    }
+  ],
+  "narratives": [
+    {
+      "complaint_id": "9999114",
+      "narrative_excerpt": "",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9996304",
+      "narrative_excerpt": "this CFPB complaint has been filed to request pursuant to FCRA 605B ( 15 U.S.C 1681c-2 ) that you, that Experian credit reporting agency, block information appearing on my consumer credit report, that is the result of identity theft and fraud within 4 business days of you receiving this complaint This fraudulent, inaccurate, and false information consists of a debt account opened at Texas office attn general on XX/XX/XXXX XXXX under the account XXXX with a balance of XXXX this account have resulted in several fraudulent late payments and fraudulent debt appearing on my consumer FICO credit report. I do not recognize the aforementioned accounts debt, or Late payments as reported. The aforementioned accounts, debt, and Late payments appearing on my report. The aforementioned accounts, debt, and late payments appearing on my consumer credit report maintained by you were not opened, made, or initiated by me. All of the aforementioned accounts, debt, and late payments are the result of identity theft and fraud. I have attached a copy of FTC Identity Theft Criminal Complaint # ( XXXX ) as proof from the US Federal Trade Commission that all of the aforementioned consumer credit accounts, ",
+      "excerpt_truncated": true
+    },
+    {
+      "complaint_id": "9999032",
+      "narrative_excerpt": "",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9999894",
+      "narrative_excerpt": "",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9913185",
+      "narrative_excerpt": "Dunn Law PA, is a debt collector attempting to collect a debt for XXXX XXXX XXXX XXXX. They are communicating via mail/phone. I have submitted a cease letter for communication to said \" collector ''. I have filed a complaint on this matter with the CFPB previously.",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9999880",
+      "narrative_excerpt": "",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9999025",
+      "narrative_excerpt": "Hi Equifax, I just get my credit report today and I saw 3 fraud inquiries that shall be delete from my credit report. I never authorized those inaccurate inquiries. \n\n\nXXXX XXXX, INQUIRY DATE : XX/XX/2024 XXXX XXXX XXXX, INQUIRY DATE : XX/XX/2024 XXXX XXXX XXXX, INQUIRY DATE : XX/XX/2024",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9997158",
+      "narrative_excerpt": "These inquiries are not relevant to me, and I did not give authorization for them. I request their immediate removal from my credit report.",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9999324",
+      "narrative_excerpt": "I asked for legitimate documents to prove the appearance of these items in the credit report.",
+      "excerpt_truncated": false
+    },
+    {
+      "complaint_id": "9839358",
+      "narrative_excerpt": "On XX/XX/year>, I initiated a request via the SmartCreditXXXX website, an online credit monitoring platform, for one of their products called a smart action. This particular smart action was for them to inquire about an interest rate reduction with a credit card holder. It was later discovered that they partnered with a third party company that may or may not provide services for debt management. Because of such, the creditor has locked my account until confirmation that I am not in business with them. There have been numerous attempts to resolve via this company and their 3rd party with no success as of XX/XX/year>.",
+      "excerpt_truncated": false
+    }
+  ]
+}

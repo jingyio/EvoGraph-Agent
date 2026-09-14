@@ -1,0 +1,16 @@
+{
+  "provider": "CFPB",
+  "url": "https://www.consumerfinance.gov/data-research/consumer-complaints/",
+  "license": "CC0 (API metadata)",
+  "requests": [
+    "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true",
+    "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=1000&no_aggs=true&has_narrative=true",
+    "https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?size=300&no_aggs=true&has_narrative=true&timely=No"
+  ],
+  "rawSha256": {
+    "cfpb.json": "39d69b2429472341297e84acf7c8e9e757f31c6a9c36253e47cae2d5ae873d37",
+    "cfpb-narratives.json": "30e8abe18a48abd09daa24f1ff0135822b49bc9f54ac3ce9a609042ce74e92eb",
+    "cfpb-late.json": "c9fcb5f57c1322fc572012a1c14135eb9c0c712077939256ed0b526ed334eeba"
+  },
+  "note": "真实公开投诉记录；消费者叙述未经事实核实，不包含完整客服对话。未保留邮编、地域和用户身份字段。"
+}

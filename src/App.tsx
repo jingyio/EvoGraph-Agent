@@ -12,10 +12,11 @@ import TaskReplay from './TaskReplay';
 import LiveComparison from './LiveComparison';
 import WorkspaceWorkbench from './WorkspaceWorkbench';
 import WorkpackExperimentPanel from './WorkpackExperimentPanel';
+import TrajectoryPanel from './TrajectoryPanel';
 
-const pages = { home: '工作台', compare: '成本与对比', live: '现场演示', insights: 'RSI 运行时', replay: '执行记录', experiments: '实验中心', showcase: '已保存展示', demo: '历史执行工作台', evaluation: '成对评测与成果', evolution: '随任务进化', taskbank: '真实数据任务库', platforms: '平台只读工作台' };
+const pages = { trajectory: '轨迹重构预检', home: '工作台', compare: '成本与对比', live: '现场演示', insights: 'RSI 运行时', replay: '执行记录', experiments: '实验中心', showcase: '已保存展示', demo: '历史执行工作台', evaluation: '成对评测与成果', evolution: '随任务进化', taskbank: '真实数据任务库', platforms: '平台只读工作台' };
 type Page = keyof typeof pages;
-const primaryPages = ['home', 'experiments'] as const;
+const primaryPages = ['home', 'experiments', 'trajectory'] as const;
 const experimentPages = ['compare', 'live', 'insights', 'replay'] as const;
 const legacyPages = ['demo', 'evaluation', 'evolution', 'taskbank', 'platforms'] as const;
 function fromHash(): Page {
@@ -30,7 +31,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(fromHash);
   useEffect(() => { const change = () => setPage(fromHash()); window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
   const navigate = (next: Page) => { window.location.hash = next; };
-  if ((primaryPages as readonly Page[]).includes(page)) return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav>{primaryPages.map(key => <a key={key} href={`#${key}`} className={page === key ? 'active' : ''}>{pages[key]}</a>)}</nav><a href="#experiments" className="nav-lab">已保存运行 <BarChart3 size={14} /></a></header>{page === 'home' && <WorkspaceWorkbench />}{page === 'experiments' && <WorkpackExperimentPanel />}</div>;
+  if ((primaryPages as readonly Page[]).includes(page)) return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav>{primaryPages.map(key => <a key={key} href={`#${key}`} className={page === key ? 'active' : ''}>{pages[key]}</a>)}</nav><a href="#experiments" className="nav-lab">已保存运行 <BarChart3 size={14} /></a></header>{page === 'home' && <WorkspaceWorkbench />}{page === 'experiments' && <WorkpackExperimentPanel />}{page === 'trajectory' && <TrajectoryPanel />}</div>;
   if ((experimentPages as readonly Page[]).includes(page)) return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav><a href="#home">工作台</a><a href="#experiments" className="active">实验中心</a></nav><a href="#experiments" className="nav-lab">返回实验中心 <BarChart3 size={14} /></a></header>{page === 'compare' && <CompareExperience />}{page === 'live' && <LiveComparison />}{page === 'insights' && <RsiInsights />}{page === 'replay' && <TaskReplay />}</div>;
   if (page === 'showcase') return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav><a href="#home">工作台</a><a href="#compare">验证与对照</a></nav><a href="#demo" className="nav-lab">实验工作台 <BarChart3 size={14} /></a></header><ShowcaseHome /></div>;
   const icons: Record<(typeof legacyPages)[number], typeof Play> = { demo: Play, evaluation: ShieldCheck, evolution: GitBranch, taskbank: Database, platforms: PlugZap };
