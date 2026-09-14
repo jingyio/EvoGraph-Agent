@@ -80,7 +80,15 @@ def summarize(item):
         })
     expected = len(item.get('manifest') or [])
     protocol_complete = item.get('status') == 'completed' and len(points) == expected
-    quality = protocol_complete and all(
+    online_runs = [pair.get('online_rsi') or {} for pair in item.get('pairs') or [] if pair.get('online_rsi')]
+    graph_uses = [run for run in online_runs if (run.get('evolution') or {}).get('usedVersionId') and (
+        any(trace.get('ok') and trace.get('executor') == 'graph' for trace in run.get('toolTrace', []))
+        or any(state == 'completed' for state in (run.get('graph') or {}).get('nodeStates', {}).values())
+    )]
+    minimum_use_rate = (item.get('protocol') or {}).get('actualGraphUseMinimumRate')
+    actual_use_rate = len(graph_uses) / len(online_runs) if online_runs else None
+    use_gate = minimum_use_rate is None or (actual_use_rate is not None and actual_use_rate >= minimum_use_rate)
+    quality = protocol_complete and use_gate and all(
         arm_summary[arm]['attempts'] == expected
         and arm_summary[arm]['passed'] == expected
         and arm_summary[arm]['usageComplete']
@@ -109,6 +117,10 @@ def summarize(item):
         'costConclusionAllowed': quality,
         'netTokenSaving': (1 - arm_summary['online_rsi']['tokens'] / arm_summary['no_learning']['tokens']) if arm_summary['no_learning']['tokens'] else None,
         'netLatencySaving': (1 - arm_summary['online_rsi']['durationMs'] / arm_summary['no_learning']['durationMs']) if arm_summary['no_learning']['durationMs'] else None,
+        'actualGraphUse': {
+            'hits': len(graph_uses), 'attempts': len(online_runs), 'rate': actual_use_rate,
+            'minimumRate': minimum_use_rate, 'met': use_gate,
+        },
         'learning': {
             'created': [point for point in points if point['generatedVersionIds'] and point['generation'] in (None, 0)],
             'revisions': revisions,
@@ -178,10 +190,11 @@ class AttributionExperiment:
         if mode == 'formal':
             predecessor = next((
                 item for item in reversed(list(self.items.values()))
-                if item.get('mode') in {'smoke', 'probe'} and item.get('fingerprint') == runtime and summarize(item)['qualityGate']
+                if item.get('mode') == 'probe' and item.get('assetVersion') == VERSION
+                and item.get('fingerprint') == runtime and summarize(item)['qualityGate']
             ), None)
             if not predecessor:
-                raise ValueError('同一 runtime 的单对冒烟未通过，禁止启动正式六任务归因实验')
+                raise ValueError('同一 runtime 与资产的双任务预检未通过，禁止启动正式十二任务归因实验')
         task_limit = {'smoke': 1, 'probe': 2}.get(mode, len(asset['tasks']))
         manifest = deepcopy(asset['tasks'][:task_limit])
         key = str(uuid4())
@@ -197,7 +210,7 @@ class AttributionExperiment:
             'pairs': [],
             'predecessorId': predecessor['id'] if predecessor else None,
             'protocol': {
-                'id': 'finance-graph-rsi-learning-attribution-v4',
+                'id': 'finance-graph-rsi-learning-attribution-v5-12',
                 'model': MODEL,
                 'planner': MODEL,
                 'composition': MODEL,
@@ -213,9 +226,11 @@ class AttributionExperiment:
                 'onlineRsi': 'same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment',
                 'shared': ['model', 'prompt', 'tools', 'cold planning', 'graph compilation', 'parameter binding', 'report recovery', 'budget', 'inputs'],
                 'judge': 'not_run',
+                'actualGraphUseMinimumRate': (None if mode == 'smoke' else 0.50),
+                'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
                                 else 'cold-start plus first reuse/rebind pair; excluded from formal metrics' if mode == 'probe'
-                                else 'formal frozen six-task chain'),
+                                else 'formal frozen twelve-task finance chain'),
                 'failurePolicy': 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure',
             },
         }

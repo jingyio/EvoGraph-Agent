@@ -101,6 +101,47 @@ type ModelPricing = {
     { inputPerMillionUsd: number; outputPerMillionUsd: number }
   >;
 };
+type MaintenanceRun = {
+  runId?: string;
+  diagnosticId?: string;
+  diagnosticStatus?: string;
+  status?: string;
+  evaluationStatus?: string;
+  runtimeRevision?: string;
+  model?: string;
+  learningEnabled?: boolean | null;
+  modelRequests?: number | null;
+  tokens?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  latencyMs?: number | null;
+  toolCalls?: number | null;
+  toolErrors?: number | null;
+  usageComplete?: boolean;
+  planningPath?: string;
+  usedVersionId?: string | null;
+  usedMatchVersion?: string | number | null;
+  selectedGraphNodeCount?: number;
+  currentBindings?: Array<{ slot?: string; value?: unknown; quote?: string }>;
+  uncovered?: string[];
+  note?: string;
+  runUrl?: string;
+  reportUrl?: string;
+  artifactUrl?: string;
+  claims?: string[];
+  limitations?: string[];
+};
+type MaintenanceDiagnostics = {
+  kind: "post_release_cross_runtime";
+  sourceTaskId: string;
+  request: string;
+  excludedFromFormalMetrics: true;
+  formal: MaintenanceRun;
+  validated: MaintenanceRun;
+  failedSetup: MaintenanceRun;
+  claims?: string[];
+  limitations?: string[];
+};
 type Detail = DatasetSummary & {
   dataset?: DatasetSummary;
   experiment?: {
@@ -146,6 +187,7 @@ type Detail = DatasetSummary & {
   pricing?: ModelPricing;
   taskPlan?: unknown[];
   attribution?: Record<string, unknown>;
+  maintenanceDiagnostics?: MaintenanceDiagnostics | null;
   limitations?: string[];
 };
 type ChartPoint = Point & CumulativeMeasures;
@@ -1149,6 +1191,77 @@ export default function DataAnalysis() {
                   </div>
                 </section>
               )}
+
+          {detail?.maintenanceDiagnostics && (
+            <section className="analysis-section analysis-maintenance" aria-label="发布后维护验证">
+              <header>
+                <div>
+                  <p className="eyebrow">POST-RELEASE MAINTENANCE</p>
+                  <h2>发布后维护验证 · {detail.maintenanceDiagnostics.sourceTaskId}</h2>
+                </div>
+                <span>跨 runtime · 独立诊断</span>
+              </header>
+              <div className="analysis-maintenance-boundary">
+                <ShieldCheck size={17} />
+                <p>
+                  此诊断不进入正式六任务 KPI、累计曲线、成功率或收益。下面只对照同一业务任务在原 formal
+                  运行与修复后 runtime 的一次维护观察。
+                </p>
+              </div>
+              <article className="analysis-maintenance-request">
+                <small>同一业务请求</small>
+                <p>{detail.maintenanceDiagnostics.request}</p>
+              </article>
+              <div className="analysis-maintenance-grid">
+                {([
+                  ["原 formal FA06 · 安全回退", detail.maintenanceDiagnostics.formal, "formal"],
+                  ["修复后 diagnostic · 读取 G2/M2", detail.maintenanceDiagnostics.validated, "validated"],
+                ] as const).map(([title, run, kind]) => (
+                  <article key={kind} className={kind}>
+                    <small>{title}</small>
+                    <strong>{run.evaluationStatus === "passed" ? "结构化评测通过" : run.status || "状态未知"}</strong>
+                    <dl>
+                      <div><dt>模型请求</dt><dd>{number(run.modelRequests)}</dd></div>
+                      <div><dt>Token</dt><dd>{number(run.tokens)}</dd></div>
+                      <div><dt>串行 latency</dt><dd>{duration(run.latencyMs)}</dd></div>
+                      <div><dt>工具 / 错误</dt><dd>{number(run.toolCalls)} / {number(run.toolErrors)}</dd></div>
+                    </dl>
+                    <p>
+                      {kind === "formal"
+                        ? "正式运行未实际复用历史图，安全回退后完成；这些开销已经计入正式六任务结果。"
+                        : `实际选择 ${number(run.selectedGraphNodeCount)} 个图节点，使用 G2 / M2，并按当前任务重新绑定参数；未覆盖义务交回模型。`}
+                    </p>
+                    <code>{run.runtimeRevision}</code>
+                    <div className="analysis-run-links">
+                      {run.reportUrl && <a href={run.reportUrl} target="_blank" rel="noreferrer"><FileDown size={13} />正式报告</a>}
+                      {run.runUrl && <a href={run.runUrl} target="_blank" rel="noreferrer"><GitBranch size={13} />正式轨迹</a>}
+                      {run.artifactUrl && <a href={run.artifactUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={13} />诊断收据</a>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <p className="analysis-maintenance-note">
+                单次维护诊断观察：13 → 3 次请求，183,752 → 40,158 token，170.8 → 62.9 秒。
+                这是跨 runtime 的阻塞修复验证，不能作为正式收益率或普遍性能结论。
+              </p>
+              <details className="analysis-maintenance-audit">
+                <summary>技术审计：首个配置失败诊断与解释边界</summary>
+                <p>
+                  首次诊断错误关闭跨任务学习，无法读取 probation 经验并退化为冷启动；虽然结构化评测通过，
+                  仍记录 {number(detail.maintenanceDiagnostics.failedSetup.modelRequests)} 次请求、
+                  {number(detail.maintenanceDiagnostics.failedSetup.tokens)} token、
+                  {duration(detail.maintenanceDiagnostics.failedSetup.latencyMs)} 和
+                  {number(detail.maintenanceDiagnostics.failedSetup.toolErrors)} 次工具错误。
+                </p>
+                <ul>{detail.maintenanceDiagnostics.limitations?.map((item) => <li key={item}>{item}</li>)}</ul>
+                {detail.maintenanceDiagnostics.failedSetup.artifactUrl && (
+                  <a href={detail.maintenanceDiagnostics.failedSetup.artifactUrl} target="_blank" rel="noreferrer">
+                    查看配置失败诊断收据 <ArrowUpRight size={13} />
+                  </a>
+                )}
+              </details>
+            </section>
+          )}
 
           {points.length > 0 && (
             <section className="analysis-filters" aria-label="分析筛选">

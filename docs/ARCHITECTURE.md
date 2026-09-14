@@ -6,7 +6,12 @@
 
 `backend/workspace_compute.py` 实现 run 内映射、聚合、关联、派生、比较和缺失工具；`ToolContext` 保存仅本次运行的计算收据。执行器为成功收据记录显式上游来源；轨迹诱导把这些来源编译为 `$output` 边，从当前附件重算，不保存旧业务结果。数值转换条件保留模型边界，不阻塞其他兼容子图。工具独立步骤仍可批量调用。
 
-`backend/attribution_assets.py` 冻结六个现有 Olist 历史附件/自然问题/评分 hash；机会标签仅供审计。`backend/attribution_experiment.py` 使用独立空经验和严格串行交替臂顺序，保留失败与完整开销。共享工作树有在途数据分析修改，故真实运行从冻结源码快照导入并校验 hash，结果保存于标准归因工件目录。详见 [工具与复用设计](granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
+正式六任务资产和工件保持冻结。`backend/attribution_assets.py` 当前生成下一轮 `finance-rsi-attribution-v5-12`：
+从同一 V3-r3 来源精确复制题面、附件和私有评分，依次使用8个订单对账实例及4个支付结构健康实例，
+离线机会标签不进入Agent或匹配器。`backend/attribution_experiment.py` 用独立空经验、交替臂顺序和
+严格串行1/1/1运行；formal要求同runtime、同资产的双任务probe已通过，并要求至少50%的在线任务
+真正选择且执行保存图，只有版本加载不算命中。失败、usage和维护开销全部保存。详见
+[工具与复用设计](granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
 
 
 ## 2026-09-14 V3-r3 当前运行线

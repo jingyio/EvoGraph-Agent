@@ -1,0 +1,797 @@
+{
+  "version": "finance-rsi-attribution-v5-12",
+  "sourceAssetVersion": "trajectory-review-v3-r3",
+  "scenario": "finance",
+  "split": "train",
+  "taskCount": 12,
+  "taskOrderFrozen": true,
+  "labelsOfflineOnly": true,
+  "protocol": {
+    "comparison": "graph execution without cross-task learning vs the same graph execution with online learning",
+    "modelRunsPerArm": 12,
+    "runModelReadLimits": [
+      1,
+      1,
+      1
+    ],
+    "order": "same task order per arm; pair arm order alternates",
+    "cohorts": [
+      "finance-reconciliation:8",
+      "finance-payment-health:4"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "FX01",
+      "sourceTaskId": "F01",
+      "title": "订单财务复核 1",
+      "opportunity": "create_reconciliation",
+      "position": 1,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "a9aaaf24646d60bb635aee235c06db11",
+        "f081d9c6f03801d55a6b730962b9620b",
+        "af76a45a10524549102e010f2bd9d3cd",
+        "52da3d9903e65cea92aa96e6d890ff15",
+        "e74c8d6962373b0c0e984e97fe2fa674",
+        "7254b66719addb416bd46b5f01fbfa67",
+        "cddbe0d3e12cc6ae8effe83bd9831c81",
+        "7ac766e40565c0fcc2a226dfc3f6d89b",
+        "63b6bb683b45ebaf42d0979fae65ad35",
+        "abdd969b6261591f58d7f5fcc24c30f1",
+        "9ca192d3fd38d4aff0c137f84cf7e121",
+        "4b90a2d18610d0b0ebb42c4abda69034"
+      ],
+      "sourceInputHash": "e0a0e10b299f0dc1aae97a72f4e8c1608716a51c2b7dd0dc1770baec97a4fda3",
+      "sourceRequestHash": "e8c3e232cf2b199c9759a62148cb2c2b42e0538d38102544a0b712a91c51e783",
+      "inputHash": "e0a0e10b299f0dc1aae97a72f4e8c1608716a51c2b7dd0dc1770baec97a4fda3",
+      "requestHash": "8a28ab0b70a57de074a08d684834f807c57d7092eb0c8a3c603504125eb84eba",
+      "scoreHash": "db00f8105d14ef392d487f7ce2e018c0b286ecf7be5b46dcba634f67a5e7fd88",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4831,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX02",
+      "sourceTaskId": "F02",
+      "title": "订单财务复核 2",
+      "opportunity": "reuse_and_rebind",
+      "position": 2,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "467cebcc0da9e810f821e951c04dd59e",
+        "64e5cb1dfa641be49d6baa62b8f41b9c",
+        "acb09adeef280bd9475bbc0fed1eb8ee",
+        "4d06a731cdfaf790a65798f65ec6ccab",
+        "4726e333b8605a51b03b823f5021f3d1",
+        "54586394af32e5d816910c2bace53a0e",
+        "b172124e9aab2e37fbc87515ab36ea81",
+        "314639bc2e41647756681b0f2afdb306",
+        "76ed9741ef1e5ae8641e9c885d775c82",
+        "77b24e14e65cdeff7657a0ea3c9e9878",
+        "faa3c806c150cf6f037882a8c4db259d",
+        "0cf7571add1c69ad1e6c35589c2a8876"
+      ],
+      "sourceInputHash": "64f824fb9d46b950335bf1e2e84093fb1b8e200f6176667f7681fbdd5db2cffe",
+      "sourceRequestHash": "24d509fdcf547e551eabb0b5a41d5d5a51d72ccda3561b34e5c73c8e8512a59e",
+      "inputHash": "64f824fb9d46b950335bf1e2e84093fb1b8e200f6176667f7681fbdd5db2cffe",
+      "requestHash": "2f07af018c8bab150c4c79fe92d95361a7b847f668f61553f4486f0dc74e3eaa",
+      "scoreHash": "ce8c764c20c7053d49f434611f6bf360e7dd0992b5ab1175259f073e27d7239b",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4835,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX03",
+      "sourceTaskId": "F03",
+      "title": "订单财务复核 3",
+      "opportunity": "continued_reuse",
+      "position": 3,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "b4fc77bdadd28d0ee631208831bc0d49",
+        "99a50db34d17b1f845a8ea04de3e747d",
+        "020c2cd20d09193b79c51797a82aaa3e",
+        "eb45ff263f9e77136f626c712add7354",
+        "c4e1529b643ecfaa202d2805ee2d17fa",
+        "636cae28249d7bd12aa6fb8d96bbe735",
+        "4498a90ce01bc4d0f03ee12f1779ecbf",
+        "1fc147ecded099d8acf876cfaf66f731",
+        "a91e25d9e242b0545cddf83a2bb46954",
+        "c7740e0a4fdfedf93d82593caadc5640",
+        "9102c4cce353ccf061738fc045c2e27d",
+        "7b907821024740432d6d005caa3451ee"
+      ],
+      "sourceInputHash": "9a0a126f2003ace9c75b19f656f21d02d6b8b6dc21344817285698cdaff9a6cf",
+      "sourceRequestHash": "e7a905a5fc5fbb77d1494033e9390eaf21e83abaac8bd7940ebe0c93bd39e4da",
+      "inputHash": "9a0a126f2003ace9c75b19f656f21d02d6b8b6dc21344817285698cdaff9a6cf",
+      "requestHash": "de7b0fb2d992d3b59c9b915d78207c7aa580943b25058baff16ed6ce4b074fcc",
+      "scoreHash": "4940485448873ab9e2e38d5fee371d1df6a2e35f3af368f3a43a0918b150a17f",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4984,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX04",
+      "sourceTaskId": "F04",
+      "title": "订单财务复核 4",
+      "opportunity": "amount_threshold_rebind",
+      "position": 4,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "2eb6d51ef9ae3ae319b31ce4e4ec0097",
+        "82419d35f3c2a4d515d9bd272ecbc050",
+        "9630c641313083fe39397cfa75810e4b",
+        "e94157cd8482dadb5e152f977ac0a097",
+        "da1630ace2e5b7e69a1bbe87059a4286",
+        "25ed8cc8c43f4ebcabd60fc31840c401",
+        "12734d5805fd317dc486f3630fd82bcb",
+        "5ae255c95ad57c93f6b3a623b8b5505f",
+        "e13f9d9f79f8325d4f77d26e7384e9fd",
+        "6d983186ed41c01b43e558f2d7a68010",
+        "43f5b8a8303562c644185a6bfd2cf3dd",
+        "cff314344e536186940328c1c6ceec96"
+      ],
+      "sourceInputHash": "df1d114900f897a70ae141127b56326f35c09bd55d63a78ff49cddc88a65480d",
+      "sourceRequestHash": "74abe1d18c95f5f95e154d1ffa3896cec06f4e24a97c84e40764ef133bc19ee8",
+      "inputHash": "df1d114900f897a70ae141127b56326f35c09bd55d63a78ff49cddc88a65480d",
+      "requestHash": "d24fe02d61f4694600628fcc85af8f8ec1ad1af24bc8b0b507d4c51dcd9c8651",
+      "scoreHash": "266f1e63f46d5818b018c6ea1fc81430d6d7e478810e726230900ced0f3a4b6f",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 12
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4599,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX05",
+      "sourceTaskId": "F05",
+      "title": "订单财务复核 5",
+      "opportunity": "continued_reuse",
+      "position": 5,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "8b1999cf2912d6be6f23ce1474751748",
+        "bae1791d3987fa528b382adcc1de4db1",
+        "6e3a62e4b3150455350d30705dc23ac3",
+        "e32f30334d29fb3811f44538904a8517",
+        "0e87d2e51cc9889baf44d689d0f5827e",
+        "f398a143c0fe171d965db2096cf064cf",
+        "e7a2b8d18d8cf1501a61b55d6f154346",
+        "a8a92512496f02da00cf23fc2066121c",
+        "6b17faa4e2b485586a3bbe992eb96d0a",
+        "51bfb3720850ad59846938a017083559",
+        "844b8b73a94f61b9ff8dc1e88c081365",
+        "ef0dcf520a0a4634713a5ef4806433c2"
+      ],
+      "sourceInputHash": "0ac9a66d6d75e826b0424661876c4979cc997ec09c5567026dd003efd61e7145",
+      "sourceRequestHash": "20f032c22bc87891514bd01a98a66dc52940cd8f1981a8f5b8aa47b2f769eca7",
+      "inputHash": "0ac9a66d6d75e826b0424661876c4979cc997ec09c5567026dd003efd61e7145",
+      "requestHash": "5fd7a4f305781db203d5c3ad958edd64260b9feb416941ba103089d42d559548",
+      "scoreHash": "ea88aad25607f2c071e9d8fc87e1a69c7a347c3a4072a394fb48e92dda706b6a",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4983,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX06",
+      "sourceTaskId": "F06",
+      "title": "订单财务复核 6",
+      "opportunity": "installment_threshold_rebind",
+      "position": 6,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "3e7433883ed362df81977e1b24e3d6ec",
+        "7e85dd5c64bfd481355a0662f9f9f777",
+        "279eab1ce88064419806859e4575a10e",
+        "33fc608633261bfde6d48fc0a431f14f",
+        "b77da58943f12a6562df928e821440c9",
+        "084ac56b13107e32ab92934f70638bc9",
+        "d84d29e12f989c8237aa0f2a2213168e",
+        "2ef3dc148b9087149e2b5673eea276ac",
+        "3c860daefaca397a28e5f1909a3d6813",
+        "085505e898297808653c70305ae11f47",
+        "6ca834e14df3fb5924d4e7fe551c80d9",
+        "34be06fa6e60f24cfb03b4b2303d9861"
+      ],
+      "sourceInputHash": "4d1c4dfff3316c08d27e5d7f9aace5f60e9873d677556e7d9efbdcb3de7952de",
+      "sourceRequestHash": "68d89f207ca27d7a7ae65828489f17ca9c63914b66774494c7b7cec5ae15f37e",
+      "inputHash": "4d1c4dfff3316c08d27e5d7f9aace5f60e9873d677556e7d9efbdcb3de7952de",
+      "requestHash": "c238632590dc6138f282fad9df724a70e6710d96434f11fb79cc96e322132cf3",
+      "scoreHash": "cd1648fc19831a14d269af368e18a31d90a92c248c6f5faf8545aa0d8011c8cc",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 14,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5095,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX07",
+      "sourceTaskId": "F07",
+      "title": "订单财务复核 7",
+      "opportunity": "sustained_reuse",
+      "position": 7,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "56966791d3e19333e9cdf99782963127",
+        "c4d2f075fc3bf3a06d1e68e113c35cbd",
+        "eb5063779e537e3b04fb1f0a50774ffb",
+        "13c275bb0585b060da0d45973177dc80",
+        "942bfba61040fe93e3038099eb60fe31",
+        "87fbaf80a5baf8a4b61821115117f999",
+        "8af844e18cf7ddedd50343fcd0990863",
+        "33cf8e9da9865079f64965b83061baae",
+        "76b5cf2989344419461ec7b13b23fd3b",
+        "6066fbcebeaf378770ad9fbe8e30d1f0",
+        "9cb197309d8105d9d407533fce50ae34",
+        "1fef84eb15d7b166c3e3008a8dd48ef1"
+      ],
+      "sourceInputHash": "35de729921e5428968499f9e1b64f7b4cf5481003e64a71268345e7423846162",
+      "sourceRequestHash": "e7a905a5fc5fbb77d1494033e9390eaf21e83abaac8bd7940ebe0c93bd39e4da",
+      "inputHash": "35de729921e5428968499f9e1b64f7b4cf5481003e64a71268345e7423846162",
+      "requestHash": "de7b0fb2d992d3b59c9b915d78207c7aa580943b25058baff16ed6ce4b074fcc",
+      "scoreHash": "2b82eaaba3545e6cc4ff0112349827c87aa5fcf9c5449cb5f319d5d3a6e89736",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 13
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4732,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX08",
+      "sourceTaskId": "F08",
+      "title": "订单财务复核 8",
+      "opportunity": "mixed_threshold_rebind",
+      "position": 8,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-reconciliation",
+      "recordIds": [
+        "061f31c732cb84a989d5b62660212ecc",
+        "0ba1afba0d7716b50cd8b5f3c7e4e638",
+        "caae7bbaec61968f200bdb5a27df0d4b",
+        "c131acb8c30ee5b5d6063dac2470d95d",
+        "5e1a8017512badbdf543b509991dba6d",
+        "48a40810ca9950462e73f0796c863b88",
+        "0c29ee02f432c35cb24a70317de6457c",
+        "5a85ba245a3a3bcb21334e761e0ef1a2",
+        "81dbb577a47365babeaa44fe4f9a5666",
+        "37e96fc1d814b16ee6b763bd52e9e0de",
+        "79347dc228cde031ba95adb6a647ab6b",
+        "da1614839066b897fd837a7898bd26e0"
+      ],
+      "sourceInputHash": "a2c7d1c3a1a7c2d77d429f3849daeeb1cb5b1235a0fffc01b52a7e7cba7f362a",
+      "sourceRequestHash": "125d32facec5d415c8c5fa1241cf3955dafb0d6df7e88734cd60ee42910ae293",
+      "inputHash": "a2c7d1c3a1a7c2d77d429f3849daeeb1cb5b1235a0fffc01b52a7e7cba7f362a",
+      "requestHash": "77487c970335a0793c641ff35f2f8623d003413048565b83b3e7f561a8b72fac",
+      "scoreHash": "10f50f2e4a7481244d128a0117bdb7a87768002696efaf50a97616f75c705afd",
+      "requiredMetricKeys": [
+        "order_count",
+        "paid_cents",
+        "line_cents",
+        "difference_count",
+        "installments_count",
+        "missing_payment_count",
+        "missing_items_count"
+      ],
+      "requiredGroupNames": [
+        "difference",
+        "installments",
+        "missing_payment",
+        "missing_items"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4966,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多表关联",
+          "一对多",
+          "多原因",
+          "缺失"
+        ]
+      }
+    },
+    {
+      "id": "FX09",
+      "sourceTaskId": "F09",
+      "title": "支付结构健康复核 1",
+      "opportunity": "coverage_extension",
+      "position": 9,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-payment-health",
+      "recordIds": [
+        "5037eaa70390c5b3b4073d0aaac80c15",
+        "2a0a79550fc18171ae34cf327fc5f0e3",
+        "b62be88e52e1a504211a9b93f83cfa78",
+        "83649f5bef804caee20776fbd535d29d",
+        "0618bf2e52dc2aaefd882d186558e642",
+        "14ac73e061a88e655cc2d6b984f3c81d",
+        "3d65824e9d761678f1695afde11107ab",
+        "d1e51d46442dbad6b79b800dc7293869",
+        "2504fffc2c378bdcd1a74f47fefd3a2b",
+        "49ef8c27301b117dac497090ecd4876d",
+        "87d65accbbf482b8a87bd13bb444cf6d",
+        "366b94daa22781675a0ffffbcbd517a9"
+      ],
+      "sourceInputHash": "db3001767c2bfc4f150af93f531b4e815fb41af7f565142f12fbcaa2e17d58c0",
+      "sourceRequestHash": "48cc1262f91fef45194c181463578cb9879b95acc252640f6e641d22d81ad9c6",
+      "inputHash": "db3001767c2bfc4f150af93f531b4e815fb41af7f565142f12fbcaa2e17d58c0",
+      "requestHash": "7778cb30236cafb423720be7edb872a778b6b66d940459e902fc4ee667099fc8",
+      "scoreHash": "377b5ab8d8845fdff409c1528a98bdd67076f657dcc42d536ee804954eb2c3a8",
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 12,
+          "items": 20
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5489,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多笔支付",
+          "状态交叉",
+          "缺失",
+          "分期"
+        ]
+      }
+    },
+    {
+      "id": "FX10",
+      "sourceTaskId": "F10",
+      "title": "支付结构健康复核 2",
+      "opportunity": "use_extension",
+      "position": 10,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-payment-health",
+      "recordIds": [
+        "103333c1fad5bfda8e9b1c84615fae2f",
+        "d03665e5fcb519e311e5609b2d0d2282",
+        "25a9d190845d7c88b05484cc31ae09e6",
+        "b7261927790781e114d3a12f39ef44c0",
+        "93667ea4f04019c0c0010be42972ab42",
+        "f96344495ad4aa6c46d0b40c3b6e4424",
+        "dda7e9dc97ce2a40812663bc5e279c71",
+        "a748925874331f44c16af90066858c9e",
+        "331b367bdd766f3d1cf518777317b5d9",
+        "9d08114eba8cc347f5073bc95311a728",
+        "4c9671e28ccfc8dafb3a9479e8f51adf",
+        "0fe7e34c13cf8781647bd4cfe053099e"
+      ],
+      "sourceInputHash": "ca3a02c1ac9340d8d5abe5e42c8dc50ac528e002b8cd03e1532741ace6fae519",
+      "sourceRequestHash": "87d844a8fc85c735322b8b1109e3ba234f40e3e9183242010ff40de8d2be7128",
+      "inputHash": "ca3a02c1ac9340d8d5abe5e42c8dc50ac528e002b8cd03e1532741ace6fae519",
+      "requestHash": "d1a2d5a577034e87635c90547cab08cb0b6a1f1a588c647d90df3011b9994fd6",
+      "scoreHash": "8e4879814d080f824a8b6e471f8265a9b4f89413bc9d3ab3744151a854cf3144",
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 17
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5296,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多笔支付",
+          "状态交叉",
+          "缺失",
+          "分期"
+        ]
+      }
+    },
+    {
+      "id": "FX11",
+      "sourceTaskId": "F11",
+      "title": "支付结构健康复核 3",
+      "opportunity": "continued_extension_reuse",
+      "position": 11,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-payment-health",
+      "recordIds": [
+        "5c932e0a181410b67c77daaed30991af",
+        "9fdbbd0977c4f7330b8c2c4aecd30110",
+        "a4e62639ac0ca7429854efc494c1915f",
+        "548cef769a379d873b5a602a8bf39af6",
+        "c76a06605f09c1a1e5cf90bea47a528f",
+        "5eee79207209ec0e102581f289e2a6db",
+        "a1b4a9a7a29abaef91be9fc53831d32c",
+        "2cfc79d9582e9135c0a9b61fa60e6b21",
+        "e77eb7578799cc588feca0f6cf56a49e",
+        "c038a5b29abf034f262370c75f739875",
+        "ff2d25d8b1b734099dee10e90e23a2ab",
+        "fa94c44f1539dcab4c8b936951d319d6"
+      ],
+      "sourceInputHash": "59edeb62bd1d2095b5578682c5f0206f767d9747014f7e70fda8336bc5fe583f",
+      "sourceRequestHash": "c7f4df5b2cbe6e60776f102acca869348a0c3aa56062adf5939fd346a2affc15",
+      "inputHash": "59edeb62bd1d2095b5578682c5f0206f767d9747014f7e70fda8336bc5fe583f",
+      "requestHash": "d325f567f79da9b7a2acf8aac745a11b42bd7eb9ca7ce0513254d02f53ea5063",
+      "scoreHash": "2e8ef0cfa4c2867ffcd78378089e51be6e078c70135414012e386a5415627882",
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 15
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 5060,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多笔支付",
+          "状态交叉",
+          "缺失",
+          "分期"
+        ]
+      }
+    },
+    {
+      "id": "FX12",
+      "sourceTaskId": "F12",
+      "title": "支付结构健康复核 4",
+      "opportunity": "extension_threshold_rebind",
+      "position": 12,
+      "split": "train",
+      "scenario": "finance",
+      "cohort": "finance-payment-health",
+      "recordIds": [
+        "843ad442f1f401e52f43a4b176e211fa",
+        "14b1311682489866d9a6b5c6dbc0372f",
+        "90181a7780a0fa0a32d7449931661c2b",
+        "fa014da3aa5b1fd99b79a24c7a17d778",
+        "cd3ad05bdb70488e29c3afb5641cc178",
+        "c12921c117b48d3bdcf10d1983d3b9e1",
+        "f577c78346131418552c3d7fea582723",
+        "f23155f5fa9b826631c5b8e038b38393",
+        "13b1d703b453fd67b66850bd2846e13b",
+        "ec706e6ca42af828f8d9d2495e6c39c3",
+        "4db75bd1ea5ff7061d7e6d7e76328073",
+        "8cbb4c68b07f1ffbb2a640bcede44b4b"
+      ],
+      "sourceInputHash": "6e4ed800b3751dad0f224975aa2edaf04aa7983adcc691c0ba11772fb572c765",
+      "sourceRequestHash": "967b2f967b23a01f441ab14acc4340e8941d31bb1977a610ab4f73a6fb0ba01c",
+      "inputHash": "6e4ed800b3751dad0f224975aa2edaf04aa7983adcc691c0ba11772fb572c765",
+      "requestHash": "794116a20789b0dbc03060240a851c9a97e0f43d53af7532394f5403c03e2e8f",
+      "scoreHash": "6104183ac041cfeaddab73991bb73b5c6a9dd6f8e6467766f723e0a9f809a311",
+      "requiredMetricKeys": [
+        "order_count",
+        "payment_record_count",
+        "paid_cents",
+        "period_count",
+        "multiple_payment_count",
+        "high_installment_count",
+        "canceled_paid_count",
+        "missing_payment_count"
+      ],
+      "requiredGroupNames": [
+        "multiple_payment",
+        "high_installment",
+        "canceled_paid",
+        "missing_payment"
+      ],
+      "features": {
+        "primaryRecords": 12,
+        "rowsByTable": {
+          "orders": 12,
+          "payments": 13,
+          "items": 14
+        },
+        "tables": 3,
+        "deliveryGroups": 4,
+        "textCharacters": 4947,
+        "unit": "BRL cents",
+        "association": "one-to-many",
+        "missingCells": 0,
+        "auditFeatures": [
+          "多笔支付",
+          "状态交叉",
+          "缺失",
+          "分期"
+        ]
+      }
+    }
+  ]
+}

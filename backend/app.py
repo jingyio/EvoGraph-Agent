@@ -359,6 +359,10 @@ def create_app(service=None):
     def analysis_dataset_get(dataset_id: str):
         return analysis_read(analysis_datasets.get, dataset_id)
 
+    @app.get('/api/analysis/datasets/{dataset_id}/maintenance-diagnostics/{diagnostic_id}')
+    def analysis_maintenance_diagnostic_get(dataset_id: str, diagnostic_id: str):
+        return analysis_read(analysis_datasets.get_maintenance_diagnostic, dataset_id, diagnostic_id)
+
     @app.get('/api/releases/current')
     def current_release():
         return release_read(releases.manifest)

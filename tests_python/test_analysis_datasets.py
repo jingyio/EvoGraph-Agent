@@ -352,3 +352,96 @@ def test_numbering_only_successor_is_excluded_from_evolution_projection():
         {'spec': {'id': 'two'}, 'online_rsi': {'id': 'b', 'evolution': {'generatedVersionIds': ['g1'], 'trajectoryCompilation': compiled('t9','t8')}}, 'experienceAfter': {'onlineRsiVersions': [version]}},
     ]}
     assert AnalysisDatasets._attribution_revisions(item) == []
+
+
+def formal_attribution_with_diagnostics_fixture(root: Path):
+    repository = Path(__file__).resolve().parents[1]
+    registry = json.loads((repository / 'releases/analysis-manifest.json').read_text())
+    manifest = deepcopy(next(row for row in registry['datasets'] if row['datasetId'] == 'finance-attribution-v4-6'))
+    experiment_source = repository / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
+    experiment_target = root / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
+    experiment_target.parent.mkdir(parents=True, exist_ok=True)
+    experiment_target.write_bytes(experiment_source.read_bytes())
+    for entry in manifest['maintenanceDiagnostics']:
+        source = repository / 'artifacts/attribution-diagnostics' / entry['diagnosticId'] / 'diagnostic.json'
+        target = root / 'artifacts/attribution-diagnostics' / entry['diagnosticId'] / 'diagnostic.json'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    write_private(root / 'releases/analysis-manifest.json', {
+        'schemaVersion': 1,
+        'defaultDatasetId': manifest['datasetId'],
+        'modelPricing': MODEL_PRICING,
+        'datasets': [manifest],
+    })
+    return AnalysisDatasets(root), manifest
+
+
+def test_formal_attribution_projects_cross_runtime_maintenance_without_changing_kpis(tmp_path):
+    store, manifest = formal_attribution_with_diagnostics_fixture(tmp_path)
+    result = store.get(manifest['datasetId'])
+    diagnostic = result['maintenanceDiagnostics']
+    assert len(result['points']) == result['summary']['pairedCompleted'] == 6
+    assert result['summary']['baseline']['tokens'] == 944492
+    assert result['summary']['rsi']['tokens'] == 549900
+    assert result['points'][-1]['cumulativeBaselineTokens'] == 944492
+    assert result['points'][-1]['cumulativeRsiTokens'] == 549900
+    assert diagnostic['excludedFromFormalMetrics'] is True
+    assert diagnostic['sourceTaskId'] == 'FA06'
+    assert diagnostic['formal']['modelRequests'] == 13
+    assert diagnostic['formal']['tokens'] == 183752
+    assert diagnostic['formal']['latencyMs'] == 170786.096
+    assert diagnostic['validated']['modelRequests'] == 3
+    assert diagnostic['validated']['tokens'] == 40158
+    assert diagnostic['validated']['latencyMs'] == 62880.277
+    assert diagnostic['validated']['usedVersionId'] == '4a9f228d-4917-4afe-80a4-f2fa6f85f31f'
+    assert diagnostic['validated']['usedMatchVersion'] == 2
+    assert diagnostic['validated']['selectedGraphNodeCount'] == 15
+    assert diagnostic['failedSetup']['diagnosticStatus'] == 'configuration_failed'
+    assert diagnostic['failedSetup']['learningEnabled'] is False
+    serialized_points = json.dumps(result['points'])
+    assert diagnostic['validated']['runId'] not in serialized_points
+    assert diagnostic['failedSetup']['runId'] not in serialized_points
+
+
+def test_maintenance_diagnostic_fails_closed_on_digest_runtime_and_source_task_mismatch(tmp_path):
+    store, manifest = formal_attribution_with_diagnostics_fixture(tmp_path)
+    registry_path = tmp_path / 'releases/analysis-manifest.json'
+    validated = manifest['maintenanceDiagnostics'][0]
+    path = tmp_path / 'artifacts/attribution-diagnostics' / validated['diagnosticId'] / 'diagnostic.json'
+
+    path.write_text(path.read_text() + '\n')
+    with pytest.raises(ValueError, match='维护诊断保存工件摘要不一致'):
+        store.get(manifest['datasetId'])
+    source = Path(__file__).resolve().parents[1] / 'artifacts/attribution-diagnostics' / validated['diagnosticId'] / 'diagnostic.json'
+    path.write_bytes(source.read_bytes())
+
+    for key, value in [('runtimeRevision', 'sha256:other'), ('sourceTaskId', 'FA05')]:
+        registry = json.loads(registry_path.read_text())
+        registry['datasets'][0]['maintenanceDiagnostics'][0][key] = value
+        write_private(registry_path, registry)
+        with pytest.raises(ValueError, match='维护诊断'):
+            store.get(manifest['datasetId'])
+        write_private(registry_path, {
+            'schemaVersion': 1,
+            'defaultDatasetId': manifest['datasetId'],
+            'modelPricing': MODEL_PRICING,
+            'datasets': [manifest],
+        })
+
+
+def test_maintenance_diagnostic_api_is_read_only_and_release_scoped(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import backend.app as module
+
+    store, manifest = formal_attribution_with_diagnostics_fixture(tmp_path)
+    monkeypatch.setattr(module, 'AnalysisDatasets', lambda root: store)
+    client = TestClient(module.create_app())
+    diagnostic_id = manifest['maintenanceDiagnostics'][0]['diagnosticId']
+    response = client.get(f'/api/analysis/datasets/{manifest["datasetId"]}/maintenance-diagnostics/{diagnostic_id}')
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['datasetId'] == manifest['datasetId']
+    assert payload['experimentId'] == manifest['experimentId']
+    assert payload['excludedFromFormalMetrics'] is True
+    assert payload['diagnostic']['tokens'] == 40158
+    assert client.get(f'/api/analysis/datasets/{manifest["datasetId"]}/maintenance-diagnostics/not-registered').status_code == 404

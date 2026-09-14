@@ -99,7 +99,48 @@
         },
         "control": "每次冷规划和编译，不读写跨任务经验",
         "learning": "独立空经验，仅学习此前成功train轨迹"
-      }
+      },
+      "maintenanceDiagnostics": [
+        {
+          "role": "validated",
+          "diagnosticId": "d7dd21a0-570c-4a59-9f15-bf5d51566b2d",
+          "kind": "post_release_cross_runtime",
+          "artifactKind": "fa06-matcher-fix-diagnostic",
+          "sourceTaskId": "FA06",
+          "createdFromExperiment": "33999392-729d-4af2-8d5b-52fe7b18fcc4",
+          "artifactDigest": "sha256:8457c3905278b359793aa75f2b8f0f38e98361d00d0ed0f425bfe8b37218a2df",
+          "runtimeRevision": "sha256:8060ccf5cf76a365eae1be753958c0e77a755a405bf24fca0d9f1b970cb37bcb",
+          "model": "qwen/qwen3.5-27b",
+          "learningEnabled": true,
+          "status": "validated",
+          "claims": [
+            "修复后独立诊断实际读取正式FA06之前的经验状态，选择G2/M2并按当前10期阈值重新绑定。",
+            "该次结构化评测通过，记录3次模型请求、40,158 token、62.880秒和17次工具调用且无工具错误。"
+          ],
+          "limitations": [
+            "这是正式发布后的跨runtime维护验证，不进入正式六任务KPI、累计曲线、成功率或收益。",
+            "单次FA06诊断只能验证该阻塞修复；不能证明普遍token、latency或可靠性收益。"
+          ]
+        },
+        {
+          "role": "failed_setup",
+          "diagnosticId": "d047dea8-8dfe-4fd7-8e3c-ecfd4806a72f",
+          "kind": "post_release_cross_runtime",
+          "artifactKind": "fa06-matcher-fix-diagnostic",
+          "sourceTaskId": "FA06",
+          "createdFromExperiment": "33999392-729d-4af2-8d5b-52fe7b18fcc4",
+          "artifactDigest": "sha256:ce3977eaf8cff92b2924e79041a5f3b0b364aab1203c713f2c31d1f4dc7a2348",
+          "runtimeRevision": "sha256:8060ccf5cf76a365eae1be753958c0e77a755a405bf24fca0d9f1b970cb37bcb",
+          "model": "qwen/qwen3.5-27b",
+          "learningEnabled": false,
+          "status": "configuration_failed",
+          "claims": [],
+          "limitations": [
+            "首个诊断错误关闭跨任务学习，无法读取probation经验并退化为冷启动；它是配置失败记录，不是修复后结果。",
+            "其14次请求、216,002 token、104.149秒和5次工具错误完整保留，仅供技术审计。"
+          ]
+        }
+      ]
     },
     {
       "datasetId": "finance-attribution-2026-09-14",

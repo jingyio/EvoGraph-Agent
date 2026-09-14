@@ -134,3 +134,13 @@ test('cumulative model cost keeps a per-arm unknown value as a gap', async()=>{
  assert.equal(rows[2].rsiCumulativeCostUsd,null);
  assert.equal(rows[2].costSavingRate,null);
 });
+
+test('post-release maintenance is visibly isolated from formal KPI curves', async()=>{
+ const { readFile }=await import('node:fs/promises');
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ assert.match(source,/发布后维护验证/);
+ assert.match(source,/跨 runtime · 独立诊断/);
+ assert.match(source,/不进入正式六任务 KPI、累计曲线、成功率或收益/);
+ assert.match(source,/不能作为正式收益率或普遍性能结论/);
+ assert.match(source,/首个配置失败诊断与解释边界/);
+});

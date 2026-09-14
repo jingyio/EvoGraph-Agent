@@ -83,6 +83,7 @@ class AnalysisDatasets:
             'datasetId', 'displayName', 'status', 'experimentId', 'source',
             'runtimeRevision', 'assetVersion', 'artifactDigest', 'protocol', 'createdAt',
             'claims', 'limitations', 'taskCount', 'taskPlan', 'attribution', 'releaseId',
+            'maintenanceDiagnostics',
         ]}
 
     def _artifact(self, manifest: dict) -> dict:
@@ -520,6 +521,185 @@ class AnalysisDatasets:
             'taskPlan': task_plan,
             'revisions': revisions,
             'attribution': deepcopy(manifest.get('attribution') or {}),
+            'maintenanceDiagnostics': self._maintenance_diagnostics(manifest, item),
+        }
+
+    @staticmethod
+    def _safe_id(value: object, label: str) -> str:
+        if not isinstance(value, str) or not value or any(
+            char not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for char in value
+        ):
+            raise ValueError(f'{label}不合法')
+        return value
+
+    def _maintenance_entries(self, manifest: dict) -> list[dict]:
+        entries = manifest.get('maintenanceDiagnostics') or []
+        if not isinstance(entries, list):
+            raise ValueError('维护诊断清单格式不受支持')
+        allowed_roles = {'validated', 'failed_setup'}
+        required = {
+            'role', 'diagnosticId', 'kind', 'artifactKind', 'sourceTaskId',
+            'createdFromExperiment', 'artifactDigest', 'runtimeRevision', 'model',
+            'learningEnabled', 'status', 'claims', 'limitations',
+        }
+        rows = []
+        for entry in entries:
+            if not isinstance(entry, dict) or not required.issubset(entry):
+                raise ValueError('维护诊断清单字段不完整')
+            if entry.get('role') not in allowed_roles or entry.get('kind') != 'post_release_cross_runtime':
+                raise ValueError('维护诊断清单角色或类型不受支持')
+            self._safe_id(entry.get('diagnosticId'), '维护诊断 ID ')
+            if entry.get('createdFromExperiment') != manifest.get('experimentId'):
+                raise ValueError('维护诊断来源实验与发布不一致')
+            if entry.get('sourceTaskId') not in (manifest.get('protocol') or {}).get('taskOrder', []):
+                raise ValueError('维护诊断来源任务不在正式发布中')
+            if not isinstance(entry.get('learningEnabled'), bool):
+                raise ValueError('维护诊断学习配置不合法')
+            if not all(isinstance(entry.get(key), str) and entry[key] for key in (
+                'artifactKind', 'artifactDigest', 'runtimeRevision', 'model', 'status'
+            )):
+                raise ValueError('维护诊断身份字段不完整')
+            if not all(isinstance(entry.get(key), list) and all(isinstance(v, str) for v in entry[key])
+                       for key in ('claims', 'limitations')):
+                raise ValueError('维护诊断结论字段不合法')
+            rows.append(deepcopy(entry))
+        if entries and {row['role'] for row in rows} != allowed_roles:
+            raise ValueError('维护诊断清单必须同时保留验证结果和配置失败记录')
+        return rows
+
+    def _maintenance_artifact(self, manifest: dict, entry: dict) -> dict:
+        diagnostic_id = self._safe_id(entry.get('diagnosticId'), '维护诊断 ID ')
+        path = self.root / 'artifacts' / 'attribution-diagnostics' / diagnostic_id / 'diagnostic.json'
+        if not path.exists():
+            raise FileNotFoundError(path)
+        content = path.read_bytes()
+        if 'sha256:' + hashlib.sha256(content).hexdigest() != entry['artifactDigest']:
+            raise ValueError('维护诊断保存工件摘要不一致')
+        item = json.loads(content)
+        runtime = item.get('runtime') or {}
+        evaluation = item.get('evaluation') or {}
+        expected_evaluation = 'passed' if entry['role'] == 'validated' else 'passed'
+        checks = {
+            'diagnosticId': item.get('id') == diagnostic_id,
+            'artifactKind': item.get('kind') == entry['artifactKind'],
+            'createdFromExperiment': item.get('createdFromExperiment') == manifest['experimentId'] == entry['createdFromExperiment'],
+            'sourceTaskId': item.get('sourceTaskId') == entry['sourceTaskId'],
+            'runtimeRevision': 'sha256:' + str(runtime.get('digest') or '') == entry['runtimeRevision'],
+            'differentRuntime': entry['runtimeRevision'] != manifest['runtimeRevision'],
+            'model': item.get('model') == entry['model'],
+            'learningEnabled': item.get('learningEnabled') is entry['learningEnabled'],
+            'status': item.get('status') == 'completed',
+            'evaluation': evaluation.get('status') == expected_evaluation,
+        }
+        try:
+            self._require_checks(checks)
+        except ValueError as error:
+            raise ValueError(str(error).replace('测试组与保存实验', '维护诊断与清单')) from error
+        return item
+
+    @classmethod
+    def _maintenance_run(cls, run: dict, *, runtime_revision: str, artifact_url: str | None = None) -> dict:
+        metrics = run.get('metrics') or {}
+        evolution = run.get('evolution') or {}
+        match = run.get('trajectoryMatch') or {}
+        selections = match.get('selections') or []
+        selected_nodes = {
+            node_id for selection in selections if isinstance(selection, dict)
+            for node_id in selection.get('nodeIds') or [] if isinstance(node_id, str)
+        }
+        bindings = [
+            deepcopy(binding) for selection in selections if isinstance(selection, dict)
+            for binding in selection.get('bindings') or [] if isinstance(binding, dict)
+        ]
+        return {
+            'runId': run.get('runId') or run.get('id'),
+            'status': run.get('status'),
+            'evaluationStatus': (run.get('evaluation') or {}).get('status'),
+            'runtimeRevision': runtime_revision,
+            'model': run.get('model') or (run.get('models') or {}).get('executor'),
+            'learningEnabled': run.get('learningEnabled'),
+            'modelRequests': metrics.get('modelRequests'),
+            'tokens': cls._tokens(metrics),
+            'inputTokens': metrics.get('inputTokens'),
+            'outputTokens': metrics.get('outputTokens'),
+            'latencyMs': cls._duration(metrics),
+            'toolCalls': metrics.get('toolCalls'),
+            'toolErrors': metrics.get('toolErrors'),
+            'usageComplete': metrics.get('usageComplete') is True,
+            'planningPath': evolution.get('planningPath'),
+            'usedVersionId': evolution.get('usedVersionId'),
+            'usedMatchVersion': evolution.get('matchVersion'),
+            'selectedGraphNodeCount': len(selected_nodes),
+            'currentBindings': bindings,
+            'uncovered': deepcopy(match.get('uncovered') or []),
+            'note': evolution.get('note'),
+            'artifactUrl': artifact_url,
+        }
+
+    def _maintenance_diagnostics(self, manifest: dict, item: dict) -> dict | None:
+        entries = self._maintenance_entries(manifest)
+        if not entries:
+            return None
+        formal_pair = next((
+            pair for pair in item.get('pairs') or []
+            if (pair.get('spec') or {}).get('id') == entries[0]['sourceTaskId']
+        ), None)
+        if not formal_pair:
+            raise ValueError('维护诊断来源任务缺少正式运行')
+        request = (formal_pair.get('spec') or {}).get('request')
+        if not isinstance(request, str) or not request:
+            raise ValueError('维护诊断来源任务缺少正式业务请求')
+        formal_run = formal_pair.get('online_rsi') or {}
+        formal = self._maintenance_run(formal_run, runtime_revision=manifest['runtimeRevision'])
+        formal.update({
+            'experimentId': manifest['experimentId'],
+            'runUrl': f'/api/attribution-experiments/{manifest["experimentId"]}/runs/online_rsi/{formal_run.get("id")}',
+            'reportUrl': f'/api/attribution-experiments/{manifest["experimentId"]}/runs/online_rsi/{formal_run.get("id")}/report',
+        })
+        projected = {}
+        claims, limitations = [], []
+        for entry in entries:
+            artifact = self._maintenance_artifact(manifest, entry)
+            url = f'/api/analysis/datasets/{manifest["datasetId"]}/maintenance-diagnostics/{entry["diagnosticId"]}'
+            row = self._maintenance_run(artifact, runtime_revision=entry['runtimeRevision'], artifact_url=url)
+            row.update({
+                'diagnosticId': entry['diagnosticId'], 'role': entry['role'],
+                'diagnosticStatus': entry['status'], 'claims': deepcopy(entry['claims']),
+                'limitations': deepcopy(entry['limitations']),
+            })
+            projected[entry['role']] = row
+            claims.extend(entry['claims'])
+            limitations.extend(entry['limitations'])
+        return {
+            'kind': 'post_release_cross_runtime',
+            'sourceTaskId': entries[0]['sourceTaskId'],
+            'request': request,
+            'excludedFromFormalMetrics': True,
+            'formal': formal,
+            'validated': projected['validated'],
+            'failedSetup': projected['failed_setup'],
+            'claims': claims,
+            'limitations': limitations,
+        }
+
+    def get_maintenance_diagnostic(self, dataset_id: str, diagnostic_id: str) -> dict:
+        manifest = self._manifest(dataset_id)
+        entry = next((row for row in self._maintenance_entries(manifest)
+                      if row['diagnosticId'] == diagnostic_id), None)
+        if not entry:
+            raise KeyError(diagnostic_id)
+        artifact = self._maintenance_artifact(manifest, entry)
+        return {
+            'datasetId': dataset_id,
+            'experimentId': manifest['experimentId'],
+            'excludedFromFormalMetrics': True,
+            'diagnostic': self._maintenance_run(
+                artifact,
+                runtime_revision=entry['runtimeRevision'],
+                artifact_url=f'/api/analysis/datasets/{dataset_id}/maintenance-diagnostics/{diagnostic_id}',
+            ),
+            'claims': deepcopy(entry['claims']),
+            'limitations': deepcopy(entry['limitations']),
         }
 
     @staticmethod

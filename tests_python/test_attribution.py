@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from backend.attribution_assets import _extended_expected
+from backend.attribution_assets import TASKS, VERSION, _extended_expected
 from backend.attribution_experiment import ARMS, summarize
 from backend.task_runner import TaskRunRequest, TaskRunner
 from backend.workspace import WorkspaceBank, WorkspaceManager
@@ -48,13 +48,32 @@ def test_attribution_summary_requires_same_quality_and_records_later_use():
         {'status': 'completed', 'spec': {'id': 'FA02', 'position': 2, 'title': 'two', 'opportunity': 'reuse', 'sourceTaskId': 'F02'},
          'no_learning': _run('a2'), 'online_rsi': _run('b2', 60, evolution={'usedVersionId': 'g0', 'generatedVersionIds': [], 'generatedMatchVersions': []})},
     ]
-    result = summarize({'status': 'completed', 'manifest': manifest, 'pairs': pairs})
+    result = summarize({'status': 'completed', 'manifest': manifest, 'pairs': pairs,
+                        'protocol': {'actualGraphUseMinimumRate': .5}})
+    assert result['actualGraphUse'] == {'hits': 1, 'attempts': 2, 'rate': .5, 'minimumRate': .5, 'met': True}
     assert result['learning']['revisions'] == []
     assert not result['learning']['revisionWithLaterUse']
     assert result['qualityGate'] and result['netTokenSaving'] == pytest.approx(.3)
     assert result['learning']['laterUse'] == [{'taskId': 'FA02', 'versionIds': ['g0']}]
     assert result['points'][0]['cumulativeTokenSaving'] == pytest.approx(.2)
     assert result['points'][1]['cumulativeTokenSaving'] == pytest.approx(.3)
+
+
+def test_attribution_summary_fails_release_gate_below_actual_graph_use_minimum():
+    pair = {
+        'status': 'completed',
+        'spec': {'id': 'FX01', 'position': 1, 'title': 'one', 'opportunity': 'create', 'sourceTaskId': 'F01'},
+        'no_learning': _run('a1'),
+        'online_rsi': _run('b1', 80, evolution={'generatedVersionIds': ['g0']}),
+    }
+    result = summarize({
+        'status': 'completed', 'manifest': [{'id': 'FX01'}], 'pairs': [pair],
+        'protocol': {'actualGraphUseMinimumRate': .5},
+    })
+    assert result['actualGraphUse']['rate'] == 0
+    assert result['actualGraphUse']['met'] is False
+    assert result['qualityGate'] is False
+    assert result['costConclusionAllowed'] is False
 
 
 @pytest.mark.asyncio
@@ -133,6 +152,13 @@ async def test_group_failure_replays_current_compute_without_private_truth(tmp_p
 
 def test_no_learning_arm_names_are_explicit():
     assert ARMS == ('no_learning', 'online_rsi')
+
+
+def test_expanded_finance_asset_has_frozen_twelve_task_order():
+    assert VERSION == 'finance-rsi-attribution-v5-12'
+    assert [row['id'] for row in TASKS] == [f'FX{index:02d}' for index in range(1, 13)]
+    assert [row['sourceTaskId'] for row in TASKS] == [f'F{index:02d}' for index in range(1, 13)]
+    assert sum(row['opportunity'] == 'coverage_extension' for row in TASKS) == 1
 
 @pytest.mark.asyncio
 async def test_complete_trajectory_residual_enters_report_only_boundary(tmp_path):
