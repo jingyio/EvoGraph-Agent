@@ -125,6 +125,8 @@ def test_workspace_keeps_user_inputs_outside_hidden_runtime_directory_and_restor
     assert not (root / 'tables.json').exists()
     assert 'storageName' not in manager.public_workspace(workspace['id'])['sources'][0]
     assert 'storageKey' not in manager.public_workspace(workspace['id'])
+    assert manager.public_workspace(workspace['id'])['folderName'] == root.name
+    assert manager.public_workspace(workspace['id'])['folderPath'] == f'artifacts/workspaces/{root.name}'
     assert manager.source_path(workspace['id'], first['source']['id']).name == 'orders.csv'
     assert manager.source_path(workspace['id'], second['source']['id']).name == 'orders-2.csv'
 

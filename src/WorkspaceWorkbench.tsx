@@ -7,7 +7,7 @@ type Role = 'finance' | 'support' | 'tickets';
 type Table = { id: string; sourceId: string; sourceName: string; sheet: string; fields: string[]; types: Record<string, string>; missing: Record<string, number>; rowCount: number };
 type Source = { id: string; name: string; format: string; sizeBytes: number; tableIds: string[]; status: string; downloadPath?: string; provenance?: { kind?: string; source?: string } };
 type WorkspaceTask = { id: string; title: string; task: string; createdAt: string; split: string; scenario: Role; sourceStatus?: string; followupRunId?: string | null };
-type Workspace = { id: string; role: Role; label: string; sources: Source[]; tables: Table[]; tasks: WorkspaceTask[]; reports: ReportSummary[]; exports: ExportItem[] };
+type Workspace = { id: string; role: Role; label: string; folderName: string; folderPath: string; sources: Source[]; tables: Table[]; tasks: WorkspaceTask[]; reports: ReportSummary[]; exports: ExportItem[] };
 type Preview = { table: Table; records: Record<string, unknown>[] };
 type ReportSummary = { id: string; runId: string; taskId: string; title: string; createdAt: string; metrics: Record<string, unknown>; selectedIds: string[]; evidenceCount: number; summary: string };
 type ExportItem = { id: string; name: string; rowCount: number; createdAt: string };
@@ -224,7 +224,7 @@ export default function WorkspaceWorkbench() {
   const report = run?.submission;
   const columns = preview?.table.fields || [];
   return <main className="workspace-shell">
-    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>OPERATIONS EMPLOYEE</span><small>WORKSPACE</small></div><div className="workspace-topbar-status"><span><i />当前资料隔离</span><span>模型思考关闭</span><a href="#experiments">实验中心</a></div></header>
+    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>OPERATIONS EMPLOYEE</span><small>WORKSPACE</small></div><div className="workspace-topbar-status"><span><i />当前资料隔离</span><span title={workspace.folderPath}><FolderOpen size={12} />{workspace.folderName}</span><span>模型思考关闭</span><a href="#experiments">实验中心</a></div></header>
     <section className="workspace-header"><div><p>三岗位数字员工</p><h1>{selectedRole.label}</h1><span>{selectedRole.caption}</span></div><div className="workspace-role-picker">{ROLES.map(item => <button key={item.key} className={item.key === role ? 'selected' : ''} onClick={() => void chooseRole(item.key)} disabled={Boolean(active) || busy === 'workspace'}><small>{item.key === 'finance' ? 'FINANCE' : item.key === 'support' ? 'SUPPORT' : 'ENGINEERING'}</small>{item.label}</button>)}</div></section>
 
     {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}

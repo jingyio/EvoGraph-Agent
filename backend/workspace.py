@@ -405,7 +405,9 @@ class WorkspaceManager:
             item = self._public_source(source)
             item['downloadPath'] = f'/api/workspaces/{workspace_id}/sources/{source["id"]}/download'
             sources.append(item)
+        folder_name = self._workspace_path(workspace_id).name
         return {'id': workspace['id'], 'role': workspace['role'], 'label': workspace['label'], 'provenance': workspace['provenance'],
+                'folderName': folder_name, 'folderPath': f'artifacts/workspaces/{folder_name}',
                 'createdAt': workspace['createdAt'], 'updatedAt': workspace['updatedAt'], 'sources': sources,
                 'tables': [_public_table(table) for table in workspace['tables'].values()],
                 'tasks': [self.public_task(task['id']) for task in workspace['tasks']],
