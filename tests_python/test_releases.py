@@ -155,10 +155,10 @@ def test_v3_r2_frozen_asset_has_six_business_cohorts_without_delivery_contract_i
         assert 'selectedIds' not in request and 'evidenceIds' not in request and 'metrics' not in request
 
 
-def test_current_release_is_the_unrun_v3_r3_candidate_with_one_asset_context():
+def test_historical_unrun_v3_r3_candidate_keeps_its_asset_context():
     build_v3_r3(ROOT)
     store = ReleaseEvidence(ROOT)
-    result = store.evidence(store.manifest()['releaseId'])
+    result = store.evidence('trajectory-p05-v3-r3-candidate')
     assert result['release']['releaseId'] == 'trajectory-p05-v3-r3-candidate'
     assert result['release']['assetVersion'] == 'trajectory-review-v3-r3'
     assert result['experimentStatus'] == 'not_started'
@@ -212,3 +212,13 @@ def test_attribution_release_maps_public_arms_and_keeps_g0_out_of_revisions(tmp_
     assert evidence['pairs'][0]['runs']['rsi']['id'] == 'b'
     assert evidence['revisions'] == []
     assert store.run(key, 'FA01', 'baseline')['storedArm'] == 'no_learning'
+
+
+def test_current_release_and_default_analysis_share_one_experiment_context():
+    release = ReleaseEvidence(ROOT).manifest()
+    registry = json.loads((ROOT / 'releases/analysis-manifest.json').read_text())
+    dataset = next(row for row in registry['datasets'] if row['datasetId'] == registry['defaultDatasetId'])
+    assert dataset['releaseId'] == release['releaseId']
+    for name in ('experimentId', 'runtimeRevision', 'assetVersion', 'artifactDigest', 'status'):
+        assert dataset[name] == release[name]
+    assert dataset['protocol']['id'] == release['protocol']['id']

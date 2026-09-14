@@ -82,7 +82,7 @@ class AnalysisDatasets:
         return {key: deepcopy(row.get(key)) for key in [
             'datasetId', 'displayName', 'status', 'experimentId', 'source',
             'runtimeRevision', 'assetVersion', 'artifactDigest', 'protocol', 'createdAt',
-            'claims', 'limitations', 'taskCount', 'taskPlan', 'attribution',
+            'claims', 'limitations', 'taskCount', 'taskPlan', 'attribution', 'releaseId',
         ]}
 
     def _artifact(self, manifest: dict) -> dict:
@@ -492,6 +492,7 @@ class AnalysisDatasets:
                 baseline, rsi, evolution, baseline_tokens, rsi_tokens,
                 baseline_latency, rsi_latency, baseline_cost, rsi_cost, pricing, cumulative, cumulative_known,
                 pairId=spec.get('id'), workpackId=spec.get('id'), title=spec.get('title'),
+                detailUrl=(f'/api/releases/{manifest["releaseId"]}/pairs/{spec["id"]}' if manifest.get('releaseId') else None),
                 opportunity=spec.get('opportunity'), scenario=spec.get('scenario') or 'finance',
                 workflowType='财务复核', round=None,
                 generatedMatchVersions=deepcopy(match_versions),
@@ -548,6 +549,16 @@ class AnalysisDatasets:
         for pair in pairs:
             for version in ((pair.get('experienceAfter') or {}).get('onlineRsiVersions') or []):
                 versions[version.get('id')] = version
+        # Old artifacts may number an unchanged DAG differently after replay.
+        # Re-audit the witnessed graphs without rewriting those artifacts.
+        from .trajectory import canonical_structure
+        compiled = {}
+        for pair in pairs:
+            evolution = (pair.get('online_rsi') or {}).get('evolution') or {}
+            proposal = evolution.get('trajectoryCompilation') or {}
+            if proposal.get('nodes') and proposal.get('descriptor'):
+                for version_id in evolution.get('generatedVersionIds') or []:
+                    compiled[version_id] = proposal
         revisions = []
         for version in versions.values():
             generation = version.get('generation')
@@ -566,6 +577,14 @@ class AnalysisDatasets:
                 if patch.get('before') is not None and patch.get('before') != patch.get('after')
             ]
             matching_changed = matching_revision and bool(changed_match_patches)
+            child = compiled.get(version.get('id'))
+            parent = compiled.get(version.get('parentGraphId'))
+            if child and parent:
+                substantive = canonical_structure(child) != canonical_structure(parent)
+                graph_changed = graph_changed and substantive
+                matching_changed = matching_changed and (substantive or
+                    child['descriptor'].get('acceptedSchemas', [child['descriptor'].get('schema')]) !=
+                    parent['descriptor'].get('acceptedSchemas', [parent['descriptor'].get('schema')]))
             if not graph_changed and not matching_changed:
                 continue
             source_run_id = (

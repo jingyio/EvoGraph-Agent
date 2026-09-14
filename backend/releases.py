@@ -234,36 +234,10 @@ class ReleaseEvidence:
                     },
                 })
             metrics = attribution_summary(item)
-            revisions = []
-            for index, pair in enumerate(item['pairs']):
-                versions = (pair.get('experienceAfter') or {}).get('onlineRsiVersions') or []
-                for version in versions:
-                    graph_changed = bool(version.get('parentGraphId')) and any(
-                        patch.get('before') != patch.get('after') for patch in version.get('patches') or []
-                    )
-                    matching_changed = int(version.get('matchVersion') or 0) > 0 and any(
-                        patch.get('before') != patch.get('after') for patch in version.get('matchPatches') or []
-                    )
-                    if not graph_changed and not matching_changed:
-                        continue
-                    uses = []
-                    for later in item['pairs'][index + 1:]:
-                        run = later.get('online_rsi') or {}
-                        evolution = run.get('evolution') or {}
-                        used = set(evolution.get('usedVersionIds') or [])
-                        if evolution.get('usedVersionId'):
-                            used.add(evolution['usedVersionId'])
-                        if version['id'] in used and any(
-                            trace.get('executor') == 'graph' and trace.get('ok') is True
-                            for trace in run.get('toolTrace') or []
-                        ):
-                            uses.append({'pairId': later['spec']['id'], 'runId': run['id'],
-                                         'evaluation': run.get('evaluation')})
-                    revisions.append({'versionId': version['id'], 'sourceRunId': version.get('sourceRunId'),
-                                      'sourcePairId': pair['spec']['id'], 'parentVersionId': version.get('parentGraphId'),
-                                      'graphChanged': graph_changed, 'matchingChanged': matching_changed,
-                                      'subsequentUses': uses, 'graphDiff': version.get('patches') or [],
-                                      'matchingDiff': version.get('matchPatches') or []})
+            # The audit and analysis surfaces share one source/diff/use
+            # projection. Cumulative snapshots must not duplicate revisions.
+            from .analysis_datasets import AnalysisDatasets
+            revisions = AnalysisDatasets._attribution_revisions(item)
             task_plan = [
                 {'index': spec.get('position'), 'taskId': spec['id'], 'title': spec.get('title') or spec['id'],
                  'opportunity': spec.get('opportunity'),

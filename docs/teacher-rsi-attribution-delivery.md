@@ -1,0 +1,84 @@
+# Graph RSI 六任务学习归因交付
+
+2026-09-14；实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`；发布 `finance-attribution-v4-6` / `formal`。
+冻结 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`；资产 `finance-rsi-attribution-v4`；27B统一规划/执行/组合，thinking关闭，run=model=read=1。
+
+两臂各6项保存运行：不学习臂6/6、在线RSI臂6/6结构化事实与证据通过。
+在线RSI在4/6项任务实际执行历史子图，所有金额、业务ID和收据从当前附件重算。
+FA03正常业务扩展产生G1/M1；FA04实际执行新增筛选/排序节点，FA05复用语义等价版本，FA06安全回退。
+同一六任务正式对照净token节省41.78%、串行时长节省15.88%；包含冷启动、错误和恢复。
+
+## 逐任务结果
+
+| 任务 | 不学习 token / 请求 / 秒 | 在线RSI token / 请求 / 秒 | 评分 | 使用版本 |
+|---|---:|---:|---|---|
+| FA01 | 96,862 / 9 / 67.252 | 124,428 / 11 / 85.762 | passed / passed | GNone / M— |
+| FA02 | 97,132 / 9 / 82.935 | 34,916 / 3 / 41.918 | passed / passed | G0 / M0 |
+| FA03 | 206,758 / 15 / 118.591 | 120,546 / 8 / 101.783 | passed / passed | G0 / M0 |
+| FA04 | 236,146 / 15 / 133.053 | 51,787 / 4 / 81.559 | passed / passed | G1 / M1 |
+| FA05 | 128,585 / 11 / 96.975 | 34,471 / 3 / 66.564 | passed / passed | 原工件G2/M2，审计等价G1/M1 |
+| FA06 | 179,009 / 13 / 153.061 | 183,752 / 13 / 170.786 | passed / passed | GNone / M— |
+
+## 模型阶段账本
+
+| 臂 / 阶段 | 请求 | 输入token | 输出token |
+|---|---:|---:|---:|
+| no_learning / plan | 6 | 10,885 | 1,263 |
+| no_learning / match | 0 | 0 | 0 |
+| no_learning / execute | 66 | 915,594 | 16,750 |
+| no_learning / compile | 0 | 0 | 0 |
+| no_learning / composition | 0 | 0 | 0 |
+| online_rsi / plan | 2 | 3,652 | 705 |
+| online_rsi / match | 5 | 19,232 | 2,721 |
+| online_rsi / execute | 35 | 512,025 | 11,565 |
+| online_rsi / compile | 0 | 0 | 0 |
+| online_rsi / composition | 0 | 0 | 0 |
+
+正式总计：token 944,492→549,900；模型请求72→42；串行时长651.867→548.372秒。
+
+## 创建、复用和修订
+
+首任务从空经验创建，额外成本不称收益。后续任务实际图执行才算复用，节点数不折算模型请求。FA03的正常状态扩展新增筛选与排序执行结构，父子diff和来源run保留。M1同步更新适用描述，不称为独立匹配纠错算法。
+
+版本 `fff03947-ac8b-428b-8f58-2dfda32f7598`，父 `5de2c0bf-90fc-4d46-a6cc-ffefc1b88c05`，来源 `345ce319-fa7d-479e-aee9-4e9945dd72ec` / FA03；后续实际使用：FA04 (`e6fc5f8b-9c5f-49dc-acb6-6cb12edc8586`).
+
+## 归因系列开发开销与失败账本
+
+下列独立迭代不混入正式配对收益；usage不完整的数值仅为已知下限，不能视为完整总成本。
+
+| 实验 | 资产 / 阶段 / 状态 | 已知token | usage完整 |
+|---|---|---:|---|
+| `33999392-729d-4af2-8d5b-52fe7b18fcc4` | finance-rsi-attribution-v4 / formal / completed | 1,494,392 | True |
+| `45ff0ca8-99d2-4a18-857b-1abae8810529` | finance-rsi-attribution-v3 / probe / completed | 191,700 | True |
+| `5485d895-f313-48e5-8250-e442370c6ba8` | finance-rsi-attribution-v1 / smoke / completed | 68,506 | True |
+| `95a99f20-712f-4411-a77b-19f99265a897` | finance-rsi-attribution-v1 / formal / infrastructure_stopped | 544,717 | False |
+| `bbdbab6f-3872-4841-a005-e49e270b958f` | finance-rsi-attribution-v3 / probe / completed | 176,646 | True |
+| `c0a387c3-5272-4a24-8743-9bd6ed821c13` | finance-rsi-attribution-v2 / smoke / completed | 237,379 | True |
+| `c587a6d8-7eb6-4f0d-8ed5-4b45a5338319` | finance-rsi-attribution-v4 / probe / completed | 345,084 | True |
+
+## 计量和限制
+
+结论仅限预先冻结的六个Olist公开历史附件实例，不代表长期可靠性或普遍收益；没有独立Judge/人工全面正文质量评分。
+M1是与实际新增执行结构对应的匹配描述覆盖扩展，未证明独立的匹配纠错或检索算法优化。
+两臂工具错误分别21与12次，均保留；结构化通过不表示过程中零错误。
+金额单位转换保留当前模型边界；部分历史子图复用不冒充完整Fast命中。旧V17/V4与开发预检不进入本次总览。
+
+逐run保存phaseMetrics与本地lookup/binding/compile/learning/recovery/persist计时、实际工具trace、错误与usage。局部计时可能嵌套，不重复求和。报告恢复只使用当前成功计算收据，不读取gold补业务答案。所有旧工件保持不动。
+
+A/B共享新工具，故工具重构自身不归因于RSI；正式实验隔离的是跨任务经验。历史AutoTool/TIG不叠加，本轮借鉴历史结构/参数关联思想，不宣称完整复现论文。
+
+## 展示与验证
+
+入口 `http://127.0.0.1:5173/#analysis`，默认清单绑定本实验；数字员工 `#home`，历史 `#archive`。点击六任务时间线可查看同release的业务问题、附件、两臂成果、真实调用回放与下载。曲线包含单次/累计token、模型请求、串行时长和成功率。
+
+录制脚本：[三分钟录制](teacher-rsi-attribution-recording.md)。后端工具设计：[设计说明](granular-autotool-design-2026-09-14.md)。
+
+最终验证：217项Python测试、14项前端测试、TypeScript/Vite构建与`git diff --check`通过。浏览器确认数字员工可上传解析且费用闸门有效；数据分析只绑定本release，可下钻FA03实质diff、FA04新筛选/排序节点的实际执行、同run报告/结构化清单/轨迹；历史目录默认折叠并显示版本状态、runtime、资产与协议；390px宽度无横向溢出。
+
+未完成：48任务扩展、客服/技术工单推广、独立Judge、长期可靠性和独立匹配纠错。
+
+## 审计发现与运行后修复
+
+原始G2/M2仅来自节点顺序/编号变化，不能算实质修订；原JSON/experience不改写。展示投影按实际父子图规范化依赖复核，只认可FA03覆盖扩展及FA04使用。维护器补了相同语义图重编号不修订的协议回归；这项后续修复没有新的真实模型验证，当前发布指标仍绑定原冻结runtime。
+
+FA06没有实际复用：匹配模型错误地把已声明可变的12→10分期槽视为不兼容，并选择缺少依赖闭包的节点。硬校验拒绝后安全冷启动，最终通过，但成本明显升高。下一轮优先解决现有匹配稳定性，而非叠加完整AutoTool；本轮不追加付费重跑。

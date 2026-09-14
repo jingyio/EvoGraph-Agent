@@ -145,9 +145,9 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     root = Path(__file__).resolve().parents[1]
     store = AnalysisDatasets(root)
     listing = store.list()
-    assert listing['defaultDatasetId'] == 'finance-attribution-2026-09-14'
+    assert listing['defaultDatasetId'] == 'finance-attribution-v4-6'
     assert [row['datasetId'] for row in listing['items']] == [
-        'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
+        'finance-attribution-v4-6', 'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
     ]
     assert listing['items'][1]['status'] == 'historical'
     result = store.get('taskbank-v4-36')
@@ -186,7 +186,7 @@ def test_analysis_dataset_rejects_unregistered_source_paths(tmp_path):
 def attribution_fixture(root: Path):
     repository = Path(__file__).resolve().parents[1]
     registry = json.loads((repository / 'releases/analysis-manifest.json').read_text())
-    manifest = deepcopy(next(row for row in registry['datasets'] if row['source']['kind'] == 'attribution'))
+    manifest = deepcopy(next(row for row in registry['datasets'] if row['datasetId'] == 'finance-attribution-2026-09-14'))
     source = repository / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
     target = root / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -313,3 +313,42 @@ def test_cost_estimate_uses_role_phase_models_and_refuses_unknown_usage_or_price
     assert AnalysisDatasets._cost_usd(mixed, pricing) == .0000295
     assert AnalysisDatasets._cost_usd({**mixed, 'metrics': {**mixed['metrics'], 'usageComplete': False}}, pricing) is None
     assert AnalysisDatasets._cost_usd({**mixed, 'models': {**mixed['models'], 'executor': 'missing/model'}}, pricing) is None
+
+
+def test_cumulative_version_snapshots_do_not_duplicate_revision_or_invent_later_use():
+    version = {'id': 'g1', 'generation': 1, 'matchVersion': 1, 'parentGraphId': 'g0',
+               'sourceRunId': 'source', 'patches': [{'before': ['read'], 'after': ['read', 'filter']}],
+               'matchPatches': [{'before': {'purpose': 'old'}, 'after': {'purpose': 'new'}, 'sourceRunId': 'source'}]}
+    item = {'pairs': [
+        {'spec': {'id': 'F3'}, 'online_rsi': {'id': 'source'}, 'experienceAfter': {'onlineRsiVersions': [version]}},
+        {'spec': {'id': 'F4'}, 'online_rsi': {'id': 'loaded', 'evolution': {'usedVersionId': 'g1'}, 'toolTrace': []}, 'experienceAfter': {'onlineRsiVersions': [version]}},
+        {'spec': {'id': 'F5'}, 'online_rsi': {'id': 'executed', 'evolution': {'usedVersionId': 'g1'}, 'toolTrace': [{'executor': 'graph', 'ok': True}]}, 'experienceAfter': {'onlineRsiVersions': [version]}},
+    ]}
+    revisions = AnalysisDatasets._attribution_revisions(item)
+    assert len(revisions) == 1 and revisions[0]['sourcePairId'] == 'F3'
+    assert [use['pairId'] for use in revisions[0]['subsequentUses']] == ['F5']
+
+
+def test_attribution_detail_link_keeps_the_registered_release_context(tmp_path):
+    store, _, _, manifest = attribution_fixture(tmp_path)
+    registry = json.loads(store.path.read_text())
+    registry['datasets'][0]['releaseId'] = 'finance-attribution-v4'
+    write_private(store.path, registry)
+    result = store.get(manifest['datasetId'])
+    assert result['dataset']['releaseId'] == 'finance-attribution-v4'
+    assert result['points'][0]['detailUrl'] == '/api/releases/finance-attribution-v4/pairs/FA01'
+
+
+def test_numbering_only_successor_is_excluded_from_evolution_projection():
+    def compiled(first, second):
+        return {'descriptor': {'slots': {}, 'schema': {}}, 'nodes': [
+            {'id': first, 'tool': 'map', 'arguments': {'field': 'amount'}, 'effect': 'compute', 'dependencies': [], 'paginate': False},
+            {'id': second, 'tool': 'sum', 'arguments': {'receipt': {'$output': {'nodeId': first, 'path': ['receiptId']}}}, 'effect': 'compute', 'dependencies': [first], 'paginate': False},
+        ]}
+    version = {'id': 'g1', 'parentGraphId': 'g0', 'generation': 1, 'matchVersion': 1, 'sourceRunId': 'b',
+               'patches': [{'before': ['t0'], 'after': ['t9']}], 'matchPatches': [{'before': {'id': 't0'}, 'after': {'id': 't9'}, 'sourceRunId': 'b'}]}
+    item = {'pairs': [
+        {'spec': {'id': 'one'}, 'online_rsi': {'id': 'a', 'evolution': {'generatedVersionIds': ['g0'], 'trajectoryCompilation': compiled('t0','t1')}}},
+        {'spec': {'id': 'two'}, 'online_rsi': {'id': 'b', 'evolution': {'generatedVersionIds': ['g1'], 'trajectoryCompilation': compiled('t9','t8')}}, 'experienceAfter': {'onlineRsiVersions': [version]}},
+    ]}
+    assert AnalysisDatasets._attribution_revisions(item) == []

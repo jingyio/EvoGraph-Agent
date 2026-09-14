@@ -136,3 +136,27 @@ async def test_runner_records_real_receipt_provenance(tmp_path):
     assert traces[1]['argumentSources']['receiptId'] == {'$output': {'traceIndex': 0, 'path': ['receiptId']}}
     assert traces[2]['argumentSources']['receiptId']['$output']['traceIndex'] == 1
     assert runner.evolution.versions == []
+
+
+@pytest.mark.asyncio
+async def test_graph_renumbering_is_not_a_structural_revision(tmp_path):
+    manager, task, tools, _, traces, *_ = await pipeline(tmp_path)
+    proposal = trajectory.induce({'id': 'source', 'toolTrace': traces}, manager.task(task['id']), list(tools.values()))
+    renamed = deepcopy(proposal)
+    ids = {n['id']: 'renamed_' + str(len(renamed['nodes']) - index) for index, n in enumerate(renamed['nodes'])}
+    def remap(value):
+        if isinstance(value, dict):
+            if set(value) == {'$output'}:
+                value['$output']['nodeId'] = ids[value['$output']['nodeId']]
+            else:
+                for item in value.values(): remap(item)
+        elif isinstance(value, list):
+            for item in value: remap(item)
+    for node in renamed['nodes']:
+        node['id'] = ids[node['id']]
+        node['dependencies'] = [ids[d] for d in node['dependencies']]
+        remap(node['arguments'])
+    renamed['nodes'].reverse()
+    assert trajectory.canonical_structure(renamed) == trajectory.canonical_structure(proposal)
+    next(n for n in renamed['nodes'] if n['tool'] == 'workspace_select_missing')['arguments']['aliases'] = [{'$literal': 'line'}]
+    assert trajectory.canonical_structure(renamed) != trajectory.canonical_structure(proposal)

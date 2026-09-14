@@ -1,11 +1,76 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "trajectory-p05-v3-r3-candidate",
+  "currentReleaseId": "finance-attribution-v4-6",
   "releases": [
+    {
+      "displayName": "财务复核 · 六任务图执行学习归因",
+      "status": "formal",
+      "experimentId": "33999392-729d-4af2-8d5b-52fe7b18fcc4",
+      "runtimeRevision": "sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207",
+      "assetVersion": "finance-rsi-attribution-v4",
+      "artifactDigest": "sha256:9186dd73ee91c6e0474a0f353e46e36fb4bd65e335dcbe808a339fe10c42b636",
+      "createdAt": "2026-09-14T13:10:31.036Z",
+      "claims": [
+        "两臂各6项保存运行：不学习臂6/6、在线RSI臂6/6结构化事实与证据通过。",
+        "在线RSI在4/6项任务实际执行历史子图，所有金额、业务ID和收据从当前附件重算。",
+        "FA03正常业务扩展产生G1/M1；FA04实际执行新增筛选/排序节点，FA05复用语义等价版本，FA06安全回退。",
+        "同一六任务正式对照净token节省41.78%、串行时长节省15.88%；包含冷启动、错误和恢复。"
+      ],
+      "limitations": [
+        "结论仅限预先冻结的六个Olist公开历史附件实例，不代表长期可靠性或普遍收益；没有独立Judge/人工全面正文质量评分。",
+        "M1是与实际新增执行结构对应的匹配描述覆盖扩展，未证明独立的匹配纠错或检索算法优化。",
+        "两臂工具错误分别21与12次，均保留；结构化通过不表示过程中零错误。",
+        "金额单位转换保留当前模型边界；部分历史子图复用不冒充完整Fast命中。旧V17/V4与开发预检不进入本次总览。"
+      ],
+      "releaseId": "finance-attribution-v4-6",
+      "source": "attribution",
+      "protocol": {
+        "id": "finance-graph-rsi-learning-attribution-v4",
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "composition": "qwen/qwen3.5-27b",
+        "thinking": false,
+        "computeInterface": "granular-compute-v1",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "taskCountPerArm": 6,
+        "taskOrder": [
+          "FA01",
+          "FA02",
+          "FA03",
+          "FA04",
+          "FA05",
+          "FA06"
+        ],
+        "armOrder": "alternating per pair; same task order in each arm",
+        "noLearning": "graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task",
+        "onlineRsi": "same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment",
+        "shared": [
+          "model",
+          "prompt",
+          "tools",
+          "cold planning",
+          "graph compilation",
+          "parameter binding",
+          "report recovery",
+          "budget",
+          "inputs"
+        ],
+        "judge": "not_run",
+        "smokePolicy": "formal frozen six-task chain",
+        "failurePolicy": "retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure"
+      },
+      "assetManifest": "benchmarks/finance-rsi-attribution-v4.json"
+    },
     {
       "releaseId": "trajectory-p05-v3-r3-candidate",
       "displayName": "轨迹驱动数字员工 · P0.5 V3-r3",
-      "status": "candidate",
+      "status": "historical",
       "experimentId": "not-started",
       "runtimeRevision": "pending:recorded-at-experiment-start",
       "assetVersion": "trajectory-review-v3-r3",

@@ -27,6 +27,7 @@ import "./data-analysis.css";
 type Scenario = "finance" | "support" | "tickets" | string;
 type DatasetSummary = {
   datasetId: string;
+  releaseId?: string;
   displayName: string;
   status: string;
   experimentId: string;
@@ -61,6 +62,7 @@ type Arm = {
   error?: string;
 };
 type Point = {
+  detailUrl?: string;
   index: number;
   pairId?: string;
   workpackId: string;
@@ -475,6 +477,7 @@ export function analysisPoints(detail: Detail): Point[] {
       return {
         index,
         pairId: asString(row.pairId),
+        detailUrl: asString(row.detailUrl),
         workpackId:
           asString(row.workpackId) ||
           asString(row.taskId) ||
@@ -780,6 +783,13 @@ export default function DataAnalysis() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const [taskDetail, setTaskDetail] = useState<{
+    experimentId: string; releaseId: string;
+    task: { task: string };
+    inputs: { id: string; name: string; download: string }[];
+    runs: Record<string, { submission?: { summary?: string }; toolTrace?: { tool: string; executor: string; ok: boolean }[] }>;
+  } | null>(null);
+  const [taskError, setTaskError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -872,6 +882,21 @@ export default function DataAnalysis() {
     curve.find((point) => point.index === selectedIndex) ||
     curve.at(-1) ||
     null;
+  useEffect(() => {
+    let active = true;
+    setTaskDetail(null);
+    setTaskError("");
+    if (selected?.detailUrl) {
+      void api<NonNullable<typeof taskDetail>>(selected.detailUrl)
+        .then((payload) => {
+          if (payload.experimentId !== metadata?.experimentId || payload.releaseId !== metadata?.releaseId)
+            throw new Error("任务详情与当前发布上下文不一致");
+          if (active) setTaskDetail(payload);
+        })
+        .catch((reason) => active && setTaskError(reason.message));
+    }
+    return () => { active = false; };
+  }, [selected?.detailUrl, metadata?.experimentId, metadata?.releaseId]);
   const selectedTokenSaving =
     selected?.baseline.tokens && selected.rsi.tokens != null
       ? (selected.baseline.tokens - selected.rsi.tokens) /
@@ -1239,7 +1264,7 @@ export default function DataAnalysis() {
                 </strong>
                 <span>
                   {isAttribution
-                    ? `${graphRevisions.length + matchingRevisions.length} 项实质修订`
+                    ? `${graphRevisions.length} 次图修订 · ${matchingRevisions.length} 次描述修订`
                     : "当前筛选范围"}
                 </span>
               </article>
@@ -1289,10 +1314,10 @@ export default function DataAnalysis() {
                     : null;
                   const evidence = signals
                     ? ([
-                        signals.createdGraph && "创建 G",
-                        signals.createdMatching && "创建 M",
-                        signals.graphRevision && "G 覆盖扩展/纠错",
-                        signals.matchingRevision && "M 匹配修订",
+                        signals.createdGraph && "保存 G 版本",
+                        signals.createdMatching && "保存 M 版本",
+                        signals.graphRevision && "G 覆盖扩展",
+                        signals.matchingRevision && "M 描述扩展",
                         signals.usedGraphRevision && "后续实际使用修订 G",
                         signals.usedMatchingRevision && "后续实际使用修订 M",
                         !signals.usedGraphRevision &&
@@ -1307,6 +1332,13 @@ export default function DataAnalysis() {
                     <li
                       key={entry.index}
                       className={point ? "recorded" : "pending"}
+                      role={point ? "button" : undefined}
+                      tabIndex={point ? 0 : undefined}
+                      onKeyDown={(event) => {
+                        if (point && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault(); setSelectedIndex(point.index);
+                        }
+                      }}
                       onClick={() => point && setSelectedIndex(point.index)}
                     >
                       <span className="analysis-timeline-index">
@@ -1542,6 +1574,25 @@ export default function DataAnalysis() {
                   {selected.opportunity || `R${selected.round || "—"}`}
                 </span>
               </header>
+              {taskError && <p role="alert">{taskError}</p>}
+              {taskDetail && <div className="analysis-task-business">
+                <h3>本次业务问题与附件</h3>
+                <p>{taskDetail.task.task}</p>
+                <div className="analysis-run-links">{taskDetail.inputs.map((input) =>
+                  <a key={input.id} href={input.download}>{input.name} · 下载附件</a>
+                )}</div>
+                {(["baseline", "rsi"] as const).map((arm) => <article key={arm}>
+                  <h3>{labels[arm]} · 保存成果</h3>
+                  <p>{taskDetail.runs[arm]?.submission?.summary || "未交付业务报告"}</p>
+                  <details>
+                    <summary>执行过程回放 · 已保存的真实工具调用</summary>
+                    <ol>{taskDetail.runs[arm]?.toolTrace?.map((trace, index) => <li key={index}>
+                      {({ workspace_preview_rows: "读取资料", workspace_map_fields: "选择数据字段", workspace_aggregate_keyed: "按业务对象汇总", workspace_align_keyed: "关联当前资料", workspace_derive_values: "计算派生金额", workspace_compare_values: "检查业务条件", workspace_select_missing: "检查资料完整性", workspace_filter_rows: "筛选业务记录", workspace_sort_rows: "排序业务记录", workspace_publish_report: "提交报告" } as Record<string, string>)[trace.tool] || trace.tool}
+                      {trace.executor === "graph" ? " · 图执行" : " · 模型决策"} · {trace.ok ? "完成" : "失败，已计入开销"}
+                    </li>)}</ol>
+                  </details>
+                </article>)}
+              </div>}
               <div className="analysis-focus-grid">
                 {(["baseline", "rsi"] as const).map((arm) => {
                   const run = selected[arm];
@@ -1568,6 +1619,7 @@ export default function DataAnalysis() {
                             业务报告
                           </a>
                         )}
+                        {selected.detailUrl && <a href={`${selected.detailUrl}/runs/${arm}/selection`}>结构化清单</a>}
                         {trace && (
                           <a href={trace} target="_blank" rel="noreferrer">
                             <GitBranch size={13} />

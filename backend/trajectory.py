@@ -710,6 +710,42 @@ def bind_selection(choice, rows, task, tools):
             'nodes':combined,'currentBindings':bindings,'plan':{'steps':[{'id':n['id'],'intent':n['tool'],'dependencies':n['dependencies']} for n in combined]}}
 
 
+def canonical_structure(proposal):
+    """Compare executable semantics independently of node IDs and ordering."""
+    nodes = {node['id']: node for node in proposal['nodes']}
+    slots = proposal['descriptor'].get('slots', {})
+    cache, records, visiting = {}, {}, set()
+    def semantic(value):
+        if isinstance(value, dict):
+            if set(value) == {'$output'}:
+                ref = value['$output']
+                return {'$output': {'source': node_signature(ref['nodeId']), 'path': ref['path']}}
+            if set(value) == {'$slot'}:
+                slot = slots[value['$slot']]
+                return {'$slot': slot['meaning'], 'type': slot['type'],
+                        **{key: slot[key] for key in ('bindingPolicy', 'sourceUnit', 'targetUnit', 'scale') if key in slot}}
+            return {key: semantic(item) for key, item in value.items()}
+        if isinstance(value, list): return [semantic(item) for item in value]
+        return value
+    def node_signature(node_id):
+        if node_id in cache: return cache[node_id]
+        if node_id in visiting or node_id not in nodes:
+            raise ValueError('结构比较缺少有效依赖闭包')
+        visiting.add(node_id)
+        node = nodes[node_id]
+        result = {'tool': node['tool'], 'arguments': semantic(node['arguments']),
+                  'reconcileCore': semantic(node.get('reconcileCore')),
+                  'fragmentType': node.get('fragmentType'), 'effect': node['effect'],
+                  'paginate': bool(node.get('paginate')),
+                  'dependencies': sorted(node_signature(dep) for dep in node.get('dependencies', []))}
+        records[node_id] = result
+        cache[node_id] = digest(result)
+        visiting.remove(node_id)
+        return cache[node_id]
+    for node_id in nodes: node_signature(node_id)
+    return sorted(records.values(), key=lambda record: json.dumps(record, sort_keys=True))
+
+
 def maintain(evolution, run, task, tools):
     info = run.setdefault('evolution', {})
     info.update(generatedVersionIds=[], generatedMatchVersions=[], extraModelRequests=0, extraToolCalls=0, shadowRollouts=0)
@@ -724,19 +760,7 @@ def maintain(evolution, run, task, tools):
         info['note'] = '成功轨迹没有可验证的参数化片段'
         return
     parent = next((v for v in evolution.versions if v['id'] == info.get('usedVersionId') and v.get('protocol') == PROTOCOL), None)
-    def structure(p):
-        def semantic(value):
-            if isinstance(value, dict):
-                if '$slot' in value:
-                    slot = p['descriptor']['slots'][value['$slot']]
-                    return {'$slot': slot['meaning'], 'type': slot['type']}
-                return {k: semantic(v) for k, v in value.items()}
-            if isinstance(value, list): return [semantic(v) for v in value]
-            return value
-        return sorted([{'tool': n['tool'], 'arguments': semantic(n['arguments']),
-                        'reconcileCore': semantic(n.get('reconcileCore')) if n.get('reconcileCore') else None,
-                        'fragmentType': n.get('fragmentType'), 'effect': n['effect'], 'paginate': n['paginate']}
-                       for n in p['nodes']], key=lambda n: json.dumps(n, sort_keys=True))
+    structure = canonical_structure
     if not parent:
         parent = next((v for v in reversed(evolution.versions) if v.get('protocol') == PROTOCOL
                        and not v.get('supersededBy') and v['contractHash'] == proposal['contractHash']

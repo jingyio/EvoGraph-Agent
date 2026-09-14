@@ -1,5 +1,17 @@
 # 项目状态快照
 
+## 2026-09-14 六任务学习归因正式交付（最新）
+
+- 当前发布/默认分析同为 `finance-attribution-v4-6`，精确绑定实验 `33999392-729d-4af2-8d5b-52fe7b18fcc4`、资产 `finance-rsi-attribution-v4`、协议 `finance-graph-rsi-learning-attribution-v4` 和 runtime `sha256:0a97c2949a483492485bd414a7d7b7cebeeef306e625af6dc4990bcbea015207`。状态 formal；不复用旧V17/V4指标。旧V3-r3候选与V1停止实验转历史审计，原工件不改写。
+- 同一图执行Agent，不学习与在线RSI各6/6结构化事实/证据通过，usage完整。token 944,492→549,900（节省41.7782%），模型请求72→42，串行耗时651.867→548.372秒（节省15.8767%）；工具错误21→12均保留，正文没有独立Judge/全面人工质量评分。
+- 4/6任务实际部分历史子图复用；FA06匹配错误拒绝可变槽并缺依赖闭包，安全回退后通过，13请求/183,752token/170.786秒全部计入。此处不冒充完整Fast命中或满足旧48任务Fast发布门槛。
+- FA03正常反馈产生状态覆盖扩展G1/M1，FA04实际执行新增筛选节点。原始G2/M2为图重编号/顺序变化，展示审计排除其进化主张，原工件保留。M1是覆盖描述扩展，不证明独立匹配纠错算法。
+- 新计算接口、run内收据与来源依赖已实现；不添加完整AutoTool/TIG。正式运行源码快照保持不变；后续维护器已补充与节点ID/顺序无关的结构比较及协议回归，未在修复后再跑付费模型，正式发布仍指向冻结运行的原runtime。
+- 交付文档 `docs/teacher-rsi-attribution-delivery.md`，三分钟脚本 `docs/teacher-rsi-attribution-recording.md`。前端支持六任务点击、同release问题/附件/两臂成果、真实调用回放与报告下载，曲线只读取本实验。
+- 最终验证：217项Python测试、14项前端测试、TypeScript/Vite构建和`git diff --check`通过。浏览器检查`#home`上传/解析/费用闸门、`#analysis`六任务与FA03 diff/FA04回放和下载、`#archive` 47个上下文的版本/状态/runtime/资产/协议；`#home`与`#analysis`在390px均无横向溢出。
+- 剩余：48任务、其他两场景推广、独立Judge、长期可靠性及匹配器稳定性；不得由本次六实例主张普遍收益。共享.env仍9B，真实实验进程统一27B/thinking关闭。
+
+
 ## 2026-09-14 reconciliation clause IR（已实现，未运行付费模型）
 
 - 对冻结 V2 smoke `c0a387c3-5272-4a24-8743-9bd6ed821c13` 的 RSI run
