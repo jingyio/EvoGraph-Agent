@@ -817,28 +817,33 @@ class TaskRunner:
                 if not selected:
                     return False
                 info = run['evolution']
-                info.update(usedVersionId=selected['id'], generation=selected['generation'], matchVersion=selected['matchVersion'],
-                            planningPath='partial', execution='trajectory', currentBindings=choice['bindings'])
+                source_ids = selected.get('sourceVersionIds') or [selected['id']]
+                info.update(usedVersionId=selected['id'] if len(source_ids) == 1 else None,
+                            usedVersionIds=source_ids, generation=selected['generation'], matchVersion=selected['matchVersion'],
+                            planningPath='composition' if len(source_ids) > 1 else 'partial', execution='trajectory',
+                            currentBindings=choice.get('bindings') or choice.get('selections') or [])
                 run['plan'] = deepcopy(selected['plan'])
                 nodes = selected['nodes']
                 run['graph'] = dict(status='running', nodes=nodes, nodeStates={n['id']: 'pending' for n in nodes})
                 event('graph_created', '已验证轨迹片段与当前绑定', dict(nodes=nodes, evolution=info))
-                start = len(ledger)
+                start = len(ledger); node_outputs = {}
                 try:
                     for node in nodes:
-                        args = deepcopy(node['arguments'])
+                        binding_start = time.perf_counter()
+                        args = trajectory.resolve_arguments(node['arguments'], task, selected.get('currentBindings'), node_outputs)
+                        known[node['tool']].validator.validate(args)
+                        binding_ms = (time.perf_counter() - binding_start) * 1000
+                        metrics['bindingMs'] += binding_ms
+                        metrics['deterministicBindings'] += 1
                         run['graph']['nodeStates'][node['id']] = 'running'
                         while True:
-                            binding_start = time.perf_counter()
                             call = dict(id='trajectory_' + str(uuid4()), type='function', function=dict(name=node['tool'], arguments=json.dumps(args, ensure_ascii=False)))
-                            binding_ms = (time.perf_counter() - binding_start) * 1000
-                            metrics['bindingMs'] += binding_ms
-                            metrics['deterministicBindings'] += 1
                             event('binding', '当前轨迹参数', dict(nodeId=node['id'], arguments=args, bindingMs=binding_ms))
                             obs = await invoke(call, 'graph', node_id=node['id'])
                             if not obs['ok']:
                                 run['graph']['nodeStates'][node['id']] = 'failed'
                                 raise ValueError(obs['error'])
+                            node_outputs[node['id']] = obs['result']
                             if not node['paginate'] or not obs['result'].get('mayHaveMore'):
                                 break
                             args['page'] += 1

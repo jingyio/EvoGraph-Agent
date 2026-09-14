@@ -10,7 +10,7 @@ from .domain import now
 from .graph_store import write_private
 from .task_runner import TaskRunner, TaskRunRequest
 from .workspace import WorkspaceManager, WorkspaceBank
-from .trajectory_assets import VERSION, install
+from .trajectory_assets_v3 import VERSION, install
 
 
 def fingerprint(root):
@@ -99,8 +99,8 @@ class TrajectoryExperiment:
                           'maxToolCallsPerRun':80,'judge':'not_run','qualityPolicy':'stop expansion on first failing pair; retain all attempts',
                           'learning':'RSI empty library; prior successful normal train only; labels excluded from matching',
                           'windowSize':4,'targetTokenSaving':0.30,
-                          'size':'48 train = three scenarios × two business contracts × eight arrivals; 6 validation + 6 test reserved',
-                          'precheckSize':'9 train = each scenario primary contract × three arrivals'}}
+                          'size':'48 train = three scenarios × sixteen heterogeneous business requests; 6 validation + 6 test reserved',
+                          'precheckSize':'12 train = each scenario four fixed coverage requests'}}
         self.items[key]=item;self.save(item)
         for relative in fp['files']:write_private(directory/'sources'/relative,(self.root/relative).read_text())
         write_private(directory/'frozen-assets-manifest.json',assets)

@@ -120,44 +120,41 @@ class ReleaseEvidence:
             if assets['version'] != release['assetVersion'] or counts != expected:
                 raise ValueError('候选任务资产与发布清单不一致；拒绝显示旧证据')
             table_fields = {
-                'finance': {
-                    'orders': ['order_id', 'status', 'purchased_at', 'purchased_month'],
-                    'payments': ['order_id', 'sequence', 'method', 'installments', 'amount_cents'],
-                    'items': ['order_id', 'sequence', 'price_cents', 'freight_cents'],
-                },
-                'support': {
-                    'complaints': ['complaint_id', 'company', 'product', 'issue', 'timely', 'submitted_via'],
-                    'responses': ['complaint_id', 'company_public_response', 'company_response', 'date_received', 'date_sent_to_company'],
-                    'narratives': ['complaint_id', 'narrative_excerpt', 'excerpt_truncated'],
-                },
-                'tickets': {
-                    'issues': ['issue_id', 'title', 'state', 'milestone', 'url'],
-                    'activity': ['issue_id', 'comments', 'assignee_count', 'updated_at', 'labels'],
-                },
+                'finance': {'orders': ['order_id', 'status', 'purchased_at', 'purchased_month'], 'payments': ['order_id', 'sequence', 'method', 'installments', 'amount_cents'], 'items': ['order_id', 'sequence', 'price_cents', 'freight_cents']},
+                'support': {'complaints': ['complaint_id', 'company', 'product', 'issue', 'timely', 'submitted_via'], 'responses': ['complaint_id', 'company_public_response', 'company_response', 'date_received', 'date_sent_to_company'], 'narratives': ['complaint_id', 'narrative_excerpt', 'excerpt_truncated']},
+                'tickets': {'issues': ['issue_id', 'title', 'state', 'milestone', 'url'], 'activity': ['issue_id', 'comments', 'assignee_count', 'updated_at', 'labels']},
             }
             reviews = []
-            for role, groups in GROUPS.items():
-                for group, label in groups:
-                    members = [task for task in assets['tasks']
-                               if task.get('scenario') == role and task.get('group') == group]
-                    if len(members) != 10:
-                        raise ValueError('候选任务契约数量不一致；拒绝显示不完整审阅清单')
+            if assets['version'] == 'trajectory-review-v2':
+                # Historical V2 display preserves its six-contract grouping.
+                for role, groups in GROUPS.items():
+                    for group, label in groups:
+                        members = [task for task in assets['tasks'] if task.get('scenario') == role and task.get('group') == group]
+                        if len(members) != 10: raise ValueError('候选任务契约数量不一致；拒绝显示不完整审阅清单')
+                        variants = []
+                        for position in range(1, 9):
+                            request = request_for(role, group, position); digest = hashlib.sha256(request.encode()).hexdigest()
+                            matching = [task for task in members if task.get('position') == position]
+                            if not matching or any(task.get('requestHash') != digest for task in matching): raise ValueError('候选任务题面与冻结哈希不一致；拒绝显示或运行')
+                            variants.append({'position': position, 'request': request, 'requestHash': digest})
+                        reviews.append({'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': group, 'title': label,
+                                        'counts': {split: sum(task['split'] == split for task in members) for split in ('train', 'validation', 'test')},
+                                        'precheckPositions': [task['position'] for task in members if task.get('precheck')], 'inputTables': table_fields[role], 'variants': variants, 'source': assets.get('sources', {}).get(role, {})})
+            else:
+                # V3 has 16 intentionally heterogeneous requests per scenario. Read each frozen request
+                # from its asset and verify hash; never recreate a prompt from a controller label.
+                for role in ROLE_LABELS:
+                    members = [task for task in assets['tasks'] if task.get('scenario') == role]
+                    if sum(task.get('split') == 'train' for task in members) != 16: raise ValueError('V3候选任务数量不一致；拒绝显示')
                     variants = []
-                    for position in range(1, 9):
-                        request = request_for(role, group, position)
-                        digest = hashlib.sha256(request.encode()).hexdigest()
-                        matching = [task for task in members if task.get('position') == position]
-                        if not matching or any(task.get('requestHash') != digest for task in matching):
-                            raise ValueError('候选任务题面与冻结哈希不一致；拒绝显示或运行')
-                        variants.append({'position': position, 'request': request, 'requestHash': digest})
-                    reviews.append({
-                        'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': group,
-                        'title': label, 'counts': {split: sum(task['split'] == split for task in members)
-                                                for split in ('train', 'validation', 'test')},
-                        'precheckPositions': [task['position'] for task in members if task.get('precheck')],
-                        'inputTables': table_fields[role], 'variants': variants,
-                        'source': assets.get('sources', {}).get(role, {}),
-                    })
+                    for task in sorted((task for task in members if task.get('split') == 'train'), key=lambda item: item['position']):
+                        path = self.root / 'artifacts' / assets['version'] / task['id'] / 'request.txt'
+                        request = path.read_text(); digest = hashlib.sha256(request.encode()).hexdigest()
+                        if task.get('requestHash') != digest: raise ValueError('候选任务题面与冻结哈希不一致；拒绝显示或运行')
+                        variants.append({'position': task['position'], 'taskId': task['id'], 'title': task['title'], 'request': request, 'requestHash': digest})
+                    reviews.append({'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': 'heterogeneous-v3', 'title': ROLE_LABELS[role] + '运营 · 16项异构训练任务',
+                                    'counts': {split: sum(task['split'] == split for task in members) for split in ('train', 'validation', 'test')},
+                                    'precheckPositions': [task['position'] for task in members if task.get('precheck')], 'inputTables': table_fields[role], 'variants': variants, 'source': assets.get('sources', {}).get(role, {})})
             empty = {'attempts': 0, 'passed': 0, 'modelRequests': 0, 'modelProviderAttempts': 0,
                      'modelTransportRetries': 0, 'toolCalls': 0, 'toolErrors': 0, 'inputTokens': 0,
                      'outputTokens': 0, 'durationMs': 0, 'runtimeOverheadMs': 0,

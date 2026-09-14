@@ -213,3 +213,45 @@ async def test_report_idempotency_respects_new_evidence_and_current_call_result(
     assert good_cached==second and ctx.run['evaluation']['status']=='user_review_required'
     bad_cached=await tools['workspace_publish_report'].execute(bad,ctx)
     assert bad_cached==failed and ctx.run['evaluation']['status']=='failed'
+
+async def test_induction_records_explicit_nested_output_binding_and_replays_current_output(tmp_path):
+    m=WorkspaceManager(tmp_path);task,tools,_=setup(m)
+    ctx=ToolContext({'id':'source'})
+    preview_args={'tableId':task['tableBindings']['orders'],'page':1,'pageSize':50}
+    preview=await tools['workspace_preview_rows'].execute(preview_args,ctx)
+    row_args={'tableId':task['tableBindings']['orders'],'rowId':preview['records'][0]['rowId']}
+    row=await tools['workspace_get_row'].execute(row_args,ctx)
+    run={'id':'nested','status':'completed','evaluation':{'status':'passed'},'toolTrace':[
+        {'ok':True,'tool':'workspace_preview_rows','arguments':preview_args,'result':preview},
+        {'ok':True,'tool':'workspace_get_row','arguments':row_args,'result':row,
+         'argumentSources':{'rowId':{'$output':{'traceIndex':0,'path':['records',0,'rowId']}}}},
+    ]}
+    proposal=trajectory.induce(run,task,list(tools.values()))
+    assert proposal['nodes'][1]['dependencies']==['t0']
+    assert proposal['nodes'][1]['arguments']['rowId']=={'$output':{'nodeId':'t0','path':['records',0,'rowId']}}
+    version=dict(proposal,id='nested-g',generation=0,matchVersion=0)
+    choice={'graphId':'nested-g','decision':'partial','nodeIds':['t0','t1'],'bindings':[], 'reason':'nested protocol', 'uncovered':['report']}
+    selected=trajectory.bind_selection(choice,[version],task,list(tools.values()))
+    first=trajectory.resolve_arguments(selected['nodes'][0]['arguments'],task,selected['currentBindings'],{})
+    second=trajectory.resolve_arguments(selected['nodes'][1]['arguments'],task,selected['currentBindings'],{'t0':preview})
+    assert first==preview_args and second==row_args
+
+
+def test_multi_fragment_selection_rejects_duplicate_and_accepts_independent_dag(tmp_path):
+    m=WorkspaceManager(tmp_path);task,tools,_=setup(m)
+    contract=trajectory.api_hash(list(tools.values()))
+    def graph(key,tool,args):
+        return {'id':key,'protocol':trajectory.PROTOCOL,'generation':0,'matchVersion':0,'contractHash':contract,
+                'descriptor':{'schema':task['schemaContract'],'slots':{},'purpose':'当前附件复核'},
+                'nodes':[{'id':'t0','tool':tool,'arguments':args,'dependencies':[],'effect':'read','paginate':False}],
+                'plan':{'steps':[]}}
+    one=graph('one','workspace_preview_rows',{'tableId':{'$table':'orders'},'page':1,'pageSize':50})
+    two=graph('two','workspace_get_schema',{})
+    choice={'decision':'partial','reason':'independent fragments','uncovered':['report'],'selections':[
+        {'graphId':'one','nodeIds':['t0'],'bindings':[]}, {'graphId':'two','nodeIds':['t0'],'bindings':[]},
+    ]}
+    selected=trajectory.bind_selection(choice,[one,two],task,list(tools.values()))
+    assert selected['sourceVersionIds']==['one','two']
+    assert [node['id'] for node in selected['nodes']]==['c0_t0','c1_t0']
+    with pytest.raises(ValueError,match='重复'):
+        trajectory.bind_selection(choice,[one,dict(one,id='two')],task,list(tools.values()))
