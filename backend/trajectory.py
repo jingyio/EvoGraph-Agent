@@ -99,7 +99,8 @@ def resolve_arguments(value, task, bindings=None, outputs=None, record=None):
 
 
 def public_input(task):
-    return {k: deepcopy(task[k]) for k in ('task', 'schemaContract', 'deliveryContract', 'clarifications') if k in task}
+    # Evaluation formatting is not business semantics and must not steer matching.
+    return {k: deepcopy(task[k]) for k in ('task', 'schemaContract', 'clarifications') if k in task}
 
 
 def walk(value, path=()):

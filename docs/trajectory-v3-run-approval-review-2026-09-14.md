@@ -1,69 +1,91 @@
-# P0.5 V3 正式运行前任务审阅
+# P0.5 V3-r2 正式运行前任务审阅
 
-日期：2026-09-14。当前发布为 `trajectory-p05-v3-candidate`，实验 ID 为
-`not-started`。本文件和 `/#evidence` 只展示冻结题面与输入契约，不启动 Agent、Judge 或
-任何付费模型请求。
+日期：2026-09-14。当前发布为 `trajectory-p05-v3-r2-candidate`，实验 ID 为
+`not-started`。本文件和 `/#evidence` 只读取已经冻结的题面、附件结构和发布清单；不启动
+Agent、Judge 或任何付费模型请求。
 
-## 审阅范围
+## 这次审阅的对象
 
-- 任务资产：`trajectory-review-v2`
-- 规模：48 train、6 validation、6 test；这里的“48”指正式训练对照，不是48个 test。
-- 组织：财务、客服、技术工单三个场景；每场景两个业务契约；每契约8个不同 train 实例、
-  1个 validation、1个 test。
-- 首轮预检：财务订单复核1–3 → 客服时效复核1–3 → 技术活动分诊1–3，共9对。控制器严格
-  串行，任一 pair 的两臂质量、usage 或维护门槛失败即停止，因此财务三对未通过时不会进入客服。
-- 正式 full：只能在同一 runtime 的9对预检全部通过后启动48对 train。validation/test 本轮不运行，
-  也不写入经验。
+- 任务资产：`trajectory-review-v3-r2`。
+- 规模：48 个 train、6 个 validation、6 个 test；“48”是训练对照规模，不是 48 个 test。
+- 来源：与 V3/V3-r1 相同的 60 组公开记录选择、切分和顺序；Olist 财务、CFPB 投诉、GitHub
+  Issues 技术工单的原始公开字段保持不改写。
+- 组织：三种岗位各有两个连续业务 cohort，每个 cohort 8 个真实记录实例。cohort 名称只用于
+  实验顺序与离线审计，绝不传给 Agent、匹配器或模型。
+- 用户题面：只描述业务目标、业务口径和阈值、缺失资料语义、所需业务成果以及禁止动作。
+  不含工具名、调用顺序、图节点、`metrics`、`groups`、`selectedIds`、`evidenceIds` 或任务编号。
 
-## 六个业务契约
+## 六个业务目标与预检顺序
 
-| 场景 | 契约 | 输入表 | 变化参数 | 输出分组 |
-|---|---|---|---|---|
-| 财务 | 订单金额与分期复核 | orders / payments / items | 差额阈值5或10分；分期阈值8/10/12期 | difference / installments / missing_payment / missing_items |
-| 财务 | 支付结构与期间复核 | orders / payments / items | 分期阈值8/10/12期 | multiple_payment / high_installment / canceled_paid / missing_payment / missing_items |
-| 客服 | 投诉时效与转交复核 | complaints / responses / narratives | 转交阈值48/72/96小时 | late / delayed_transfer / date_review |
-| 客服 | 投诉响应完整性复核 | complaints / responses / narratives | 无数值参数变化 | missing_public_response / missing_company_response / narrative_followup / missing_link |
-| 技术工单 | 问题活动分诊 | issues / activity | 评论阈值3/5/8条 | focus / unassigned_focus / missing_activity |
-| 技术工单 | 问题排期与指派复核 | issues / activity | 无数值参数变化 | no_milestone / unassigned / bug_label / missing_activity |
+| 场景 | 连续 cohort | 用户可见目标 | 预检任务 |
+|---|---|---|---|
+| 财务 | 订单财务复核 | 金额差异、分期和资料不完整的订单复核 | F01、F05 |
+| 财务 | 支付结构健康复核 | 多笔支付、高分期、取消后仍支付与支付资料不完整 | F10、F11 |
+| 客服 | 投诉时效复核 | 未及时处理、过长转交与异常日期 | C01、C04 |
+| 客服 | 投诉响应资料复核 | 回复资料、叙述跟进和资料对应关系 | C10、C11 |
+| 技术工单 | 活动分诊 | 活跃开放事项、负责人和活动资料 | T01、T04 |
+| 技术工单 | 交接准备度复核 | 排期、负责人、Bug 标记和活动资料 | T10、T11 |
 
-每个题面都要求：范围只限附件；按业务ID关联；原因独立且允许重叠；给出精确 metrics、各组
-`reason/condition/count/selectedIds/evidenceIds`；空组也提交；不执行退款、消息、指派、排期或
-状态修改。题面不包含工具名、调用顺序、私有答案或预设图结构。
+预检严格串行运行这 12 对。每个 cohort 的第一个任务是合法冷启动机会，第二个任务才可能
+使用已通过的真实轨迹；任一 pair 的质量、usage、维护错误或 Fast 门槛不通过都会停止扩大。
 
-完整48个 train 题面在 `/#evidence` 的六张“正式运行前审阅”卡片中逐项展开。API 会用
-`backend/trajectory_assets.py::request_for()` 重新生成题面并核对
-`benchmarks/trajectory-review-v2.json` 中的 `requestHash`；任一哈希漂移会失败关闭。
-根目录 `test/` 的六个手工问题由同一函数生成，对应每个契约的位置1。
+## Fast 复用的可核验目标
 
-## 数据真实性与字段
+完整 48 项按六个 cohort 连续排列，因此如果每个 cohort 的首项正常通过并形成可复用轨迹，
+其余 7 项才有真实 Fast 匹配机会：最多为 42/48。预检中每个 cohort 只有两个任务，最多为
+6/12。这个设计提供机会，绝不预设命中。
 
-- 财务：Olist 匿名真实历史订单。金额仅由公开小数金额确定性转换为分；`purchased_month`
-  是真实 `purchased_at` 的前7个字符。
-- 客服：CFPB 公开投诉。`company_public_response`、`company_response`、日期和叙述来自缓存的
-  源记录；`narrative_excerpt` 是源叙述前1200字符，并记录是否截断。
-- 技术工单：Zammad 公开 GitHub Issues，排除 PR；保留状态、里程碑、评论数、更新时间、
-  指派人数和标签，不保留作者或负责人身份。
+`fastReuseMinimumRate = 50%` 已写入实验协议和发布清单。实际 RSI 保存 run 中只有
+`planningPath == "fast"` 才计入分子；冷启动、partial、composition 和 fallback 都不计入。
+即使两臂质量通过，实际 Fast 低于 50% 也不能通过当前候选的发布门槛。
 
-记录按固定哈希划分和排序，场景内任务业务ID不重复；没有改金额、状态、日期、文本或ID，
-也没有根据模型输出挑选记录。来源哈希与源字段/派生字段见 `test/.rsi/provenance.json`。
+## 三个完整题面样例
 
-## 内容审计中需要用户明确接受的限制
+### 财务 F01
 
-当前固定哈希 cohort 保持自然数据分布，没有人为注入异常，因此部分输出组是负向控制：
+> 请基于本次附件完成财务运营复核，范围只限本次提供的资料。
+>
+> 重点关注支付金额与订单应收金额明显不一致、分期较高，以及支付或商品资料不完整的订单。金额差异严格超过 0.05 BRL、最大分期达到 8 期及以上时需要重点标记。缺少支付或商品资料的订单应标记为待核查，不能直接按金额为零认定已完成对账。
+>
+> 请汇总整体情况，列出需要关注的记录、对应原因和资料依据，并给出简短的内部跟进建议。
+>
+> 仅分析本次附件，不执行退款、改账或其他外部操作。
 
-- 48个 train 中有8个任务的 `selectedIds` 为空；模型仍必须提交全部空组和正确总量。
-- 财务前三个预检任务的入选项数为0、1、0，财务预检偏重正确汇总和空组处理。
-- 当前 train 中 `multiple_payment`、`canceled_paid`、`missing_company_response` 没有正例。
-- `missing_link` 和 `missing_activity` 由当前一对一投影保证为空，测试的是“不伪造缺失”，
-  不能作为真实缺关联恢复能力的正例证据。
-- 客服响应完整性和技术排期任务有较多自然正例；客服时效与技术活动分诊的正例较少但非零。
+### 客服 C01
 
-这不会制造收益或进化，但会限制“多原因正例覆盖”的展示强度。若接受，预检可以按当前资产
-开始；若希望每个主要分组都有自然正例，应另建 `trajectory-review-v3`，用预先声明的分层抽样
-从同一真实记录池重新冻结，不能修改当前V2或在运行后挑结果。
+> 请基于本次附件完成客服运营复核，范围只限本次提供的资料。
+>
+> 重点关注未及时处理、从受理到转交企业严格超过 48 小时，以及日期缺失或前后矛盾的投诉。日期资料不完整时应列为待核查，不能直接认定已经按时转交。
+>
+> 请汇总整体情况，列出需要关注的记录、对应原因和资料依据，并给出简短的内部跟进建议。
+>
+> 只生成内部复核结论，不联系消费者或企业，也不修改任何投诉记录。
 
-## 审批后动作
+### 技术工单 T01
 
-用户明确批准当前题面和自然 cohort 后，只启动9对严格串行预检。预检结束先报告全部成功、
-失败、usage、token、模型请求、工具调用、串行延迟、G/M修订与后续使用，再决定是否满足
-48对 full 的自动门槛。不会直接跳过预检启动full。
+> 请基于本次附件完成技术工单运营复核，范围只限本次提供的资料。
+>
+> 请识别仍处于开放状态且讨论较活跃的事项。评论达到 3 条及以上的开放事项需要重点关注，尤其是尚未指派负责人或缺少活动资料的情况。不要因为讨论数量直接推断故障严重程度。
+>
+> 请汇总整体情况，列出需要关注的记录、对应原因和资料依据，并给出简短的内部跟进建议。
+>
+> 只生成内部优先队列和交接建议，不修改工单、指派或里程碑。
+
+完整 48 个题面与冻结 hash 在 `/#evidence` 的六张审阅卡中可逐项展开。读取 API 从
+`artifacts/trajectory-review-v3-r2/<task>/request.txt` 取题面并与
+`benchmarks/trajectory-review-v3-r2.json` 的 `requestHash` 核对；漂移即失败关闭。
+
+## 机器评分与用户题面的边界
+
+用户只要求业务简报、需关注清单、原因、资料依据和建议。报告工具的动态 JSON Schema 才承载
+机器评分所需的整数统计、原因集合、业务记录 ID 和当前观察行引用；它不会规定读取、关联、
+计算或推理步骤。私有真值、预期业务记录和证据范围均不进入模型上下文。
+
+工作区图的匹配描述只使用当前业务题面、当前 schema 与实际执行轨迹。`deliveryContract`
+不会写入模型消息或图匹配输入，因此不会把评测输出格式误当成可复用业务结构。
+
+## 审批后的动作
+
+用户审核并明确同意后，才从新的空 RSI 经验库运行一次 V3-r2 的 12 对严格串行预检。预检
+结束先报告所有成功、失败、usage、token、模型请求、工具调用、串行延迟、实际 Fast 复用、
+G/M 修订与后续使用，再按上述质量和 Fast 门槛决定是否运行 48 对 full。

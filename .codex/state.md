@@ -1,57 +1,26 @@
 # 项目状态快照
 
-## 2026-09-14 当前接力：V3-r1 运行前修复
+## 2026-09-14 当前接力：V3-r2 任务审阅（未运行）
 
 - 当前模型配置为 `qwen/qwen3.5-9b`（执行、规划、组合），thinking 关闭；`.env` 为本地未提交配置。
 - 已结束并保留 V3 9B 预检 `350cd048-9b15-4ead-bae5-073b03ca63ad`：F01 Baseline 超时未报告，RSI 的
   `selectedIds/groups` 用了 rowId 而非业务 ID，整体 `quality_stopped`。不得重写、删除或合并其成本。
-- 当前 Release Manifest 指向 `trajectory-p05-v3-r1-candidate` / `trajectory-review-v3-r1`，尚未运行。
-  V3-r1 与 V3 的 60 个公开记录、任务排序、split 和私有评分一致；只冻结了业务 ID / evidence ID
-  的公开交付语义。
-- 本次实现：`backend/trajectory_assets_v3_r1.py`、报告工具的 ID 描述、报告恢复约束，以及 live provider
-  的执行阶段 `tool_choice=required`。相关测试 71 项通过；直接系统 Python 缺少 pytest-asyncio，必须用
-  `.venv/bin/python -m pytest` 或 `npm test`。
-- 下一步：重启后端确认 `/api/releases/current` 读取 V3-r1 任务审阅，提交这次修复；随后用全新空库启动
-  一次且仅一次 V3-r1 的 12 对严格预检。预检不全通过不得启动 48 对。
+- 已将未运行的 V3-r1 降为历史：它只修复业务 ID / evidence ID 契约，但题面仍含机器交付字段。
+- 当前 Release Manifest 指向 `trajectory-p05-v3-r2-candidate` / `trajectory-review-v3-r2`，尚未运行。
+  V3-r2 保留 V3 的 60 个公开记录选择、split 和私有评分边界，但重写所有用户题面为自然业务请求；
+  `metrics/groups/selectedIds/evidenceIds` 不出现在题面，且 `deliveryContract` 不进模型消息或轨迹匹配输入。
+- 48 个 train 固定为六个连续 cohort × 8 项。首项是合法冷启动，后七项才有 Fast 机会；完整最多 42/48、
+  预检最多 6/12。实际 RSI `planningPath=fast` 必须达到 `>=50%` 才能通过候选的发布门槛，机会/G0/partial
+  都不能代替实际命中。
+- 已新建 `backend/trajectory_assets_v3_r2.py`、冻结 `benchmarks/trajectory-review-v3-r2.json`，并让运行器使用 r2。
+  报告 ID 契约仍由动态工具 schema 执行；未启动付费实验。
+- 下一步：等待用户审核 F01/C01/T01 题面和工具表；明确同意后才从新的空 RSI 经验库启动一次 12 对严格预检。
 
 
-- 2026-09-14 正式运行前审阅已就绪：`/#evidence` 现在展示6个业务契约、输入字段、48个
-  train题面及冻结hash；题面hash漂移会由Release API失败关闭。当前仍为`not-started`，等待
-  用户审核，不启动付费模型。自然cohort审计发现48个train中8个为空清单，且若干缺失类分组
-  在当前投影中恒为空；完整限制与审批后9对预检顺序见
-  `docs/trajectory-v3-run-approval-review-2026-09-14.md`。
-- 正式工具审阅：两臂共享20个当前工作区工具（14 read、3 compute、3本地artifact），无
-  网络搜索或外部业务写入。轨迹可保存实际成功的read/compute节点，报告保持本次模型边界。
-  六类实验任务的`workspace_publish_report`现前置强制精确metrics键、groups必填及合法组名，
-  避免把可预防的格式缺失留到后置恢复。69项相关Python测试、7项前端测试及构建通过。详见
-  `docs/trajectory-v3-task-and-tool-review-2026-09-14.md`。
-- 2026-09-14 最新状态：当前Release Manifest已切到尚未运行的
-  `trajectory-p05-v3-candidate` / `trajectory-review-v2`。新资产为48 train、6 validation、
-  6 test，三场景各两个公开业务问题、每组8个不同实例；固定预检为每场景主问题前三次，
-  共9对。当前证据因此显示计划48、运行0、无曲线/质量/G/M结论。旧V2失败预检改为
-  historical，原4对运行、失败和开销不改写。
-- 根目录 `test/` 六个问题与V3资产共用同一公开定义；六份XLSX仍来自Olist/CFPB/Zammad
-  公开缓存，只补充原始字段投影与明确派生列，已通过真实上传解析器逐值校验和临时任务
-  创建，0模型调用。公开冻结清单为 `benchmarks/trajectory-review-v2.json`。
-- 当前证据恢复单任务/累计token与串行latency节省率曲线，并保留绝对用量/成功率曲线。
-  失败且usage完整保留在累计分母；usage不完整显示缺口。新候选未运行，因此当前没有点，
-  不从V17/V4/V2补数。实现边界见 `docs/trajectory-v3-asset-and-curves-2026-09-14.md`。
 
-- 2026-09-14 最新前端交付：主导航仅 `#home` 数字员工 / `#evidence` 当前证据，一套App壳。
-  `#archive` 由页尾默认折叠入口访问；旧所有实验/调试hash保留query并重定向历史上下文。
-  该阶段的发布清单曾指向V2；当前已由本页首条记录所述的V3待运行候选取代。
-  当前没有新的formal；页面显示“当前候选版本尚未完成正式对照”，不拼V17/V4。
-- 发布证据API仅从同发布成员run派生效果、修订/来源/后续使用、成本、失败、报告和回放。
-  artifact/runtime/asset/protocol不一致失败关闭。历史V4页面移除showcase硬编码，经Archive
-  上下文注入；V3独立审计。历史选择更新URL与元数据，不按创建时间猜当前结果。
-- 数字员工保留上传、澄清、费用确认、运行、报告和追问；新增保存工作区恢复及同run
-  结构化CSV清单下载，技术细节默认折叠。浏览器已验证首传→准备任务、保存报告/追问
-  恢复、当前报告/CSV下载、旧V17/V4深链，以及1280/390px主要页面。没有新增模型调用。
-- 本轮验证：7项前端测试、39项相关Python API/工作区/报告测试、TypeScript/Vite构建及
-  git diff --check通过；结束前所有已核查队列空闲。
-- 本轮只重构前端/读取DTO，不改变学习和执行协议，不改写实验artifacts。38份实验/经验
-  文件hash只读核验一致。实现与验证见 `docs/frontend-release-isolation-2026-09-14.md`。
-  下方旧快照描述保留历史含义，旧“主展示/最终主证据”不再表示当前发布上下文。
+- 下方关于 V2/V3-r1 的审阅、9 对预检和旧 current release 的文字是当时的历史快照；当前
+  执行基线以本文件顶部 V3-r2 条目、Release Manifest 与 `docs/trajectory-v3-run-approval-review-2026-09-14.md` 为准。
+
 
 - 2026-09-14 执行阶段已推进P0.5，**未完成整体验收**。工作区现在从通过评分的真实
   toolTrace收据诱导读取/compute片段，绑定当前嵌套表/语义槽；不再按family/template选图。
@@ -210,3 +179,8 @@ runtime 的前提下执行。详见 `docs/workspace-workpack-v8-reconciliation-p
 本轮恢复后 `npm run platforms` 检查 ERPNext/Zammad 均 reachable（只读端点），没有重新部署或重置远端数据库。
 
 2026-09-14 阶段末验证：163项Python协议测试、4项前端回放测试、TypeScript/Vite构建、git diff --check通过。三岗位浏览器首传/解析/请求准备与同run报告下载已检查；这些不是额外模型实证。
+
+
+## 2026-09-14 V3-r2 真实 API 预检结果
+
+已按用户授权启动 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 的 12 对预检，但 F01 首对两臂均质量失败后严格停止；未启动其余任务。Baseline `limited`（24 请求、31 工具、609,579 token、144.346s、metrics 失败）；RSI `limited`（13 请求、20 工具、185,288 token、111.181s、metrics/selectedIds/groups 失败、Fast 0/1）。这是已保存的真实 API 失败工件，不能主张 69.60% token 差或任何效率/进化收益。下一步先修一对多金额/单位与报告交付契约，再以新空经验库重新预检。

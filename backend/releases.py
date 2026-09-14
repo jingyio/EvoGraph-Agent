@@ -140,9 +140,35 @@ class ReleaseEvidence:
                         reviews.append({'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': group, 'title': label,
                                         'counts': {split: sum(task['split'] == split for task in members) for split in ('train', 'validation', 'test')},
                                         'precheckPositions': [task['position'] for task in members if task.get('precheck')], 'inputTables': table_fields[role], 'variants': variants, 'source': assets.get('sources', {}).get(role, {})})
+            elif assets['version'] == 'trajectory-review-v3-r2':
+                # R2 presents its six sequential business cohorts as six review cards. Cohort
+                # labels are release/audit metadata only; request text remains the model input.
+                for role in ROLE_LABELS:
+                    role_members = [task for task in assets['tasks'] if task.get('scenario') == role]
+                    cohorts = []
+                    for task in role_members:
+                        cohort = task.get('cohort')
+                        if not isinstance(cohort, str): raise ValueError('V3-r2候选缺少冻结 cohort；拒绝显示')
+                        if cohort not in cohorts: cohorts.append(cohort)
+                    if len(cohorts) != 2: raise ValueError('V3-r2每场景必须有两个 cohort；拒绝显示')
+                    for cohort in cohorts:
+                        members = [task for task in role_members if task.get('cohort') == cohort]
+                        train = sorted((task for task in members if task.get('split') == 'train'), key=lambda item: item['position'])
+                        if len(train) != 8: raise ValueError('V3-r2 cohort 训练任务数量不一致；拒绝显示')
+                        variants = []
+                        for task in train:
+                            path = self.root / 'artifacts' / assets['version'] / task['id'] / 'request.txt'
+                            request = path.read_text(); digest = hashlib.sha256(request.encode()).hexdigest()
+                            if task.get('requestHash') != digest: raise ValueError('候选任务题面与冻结哈希不一致；拒绝显示或运行')
+                            variants.append({'position': task['position'], 'taskId': task['id'], 'title': task['title'], 'request': request, 'requestHash': digest})
+                        reviews.append({'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': cohort,
+                                        'title': train[0]['title'],
+                                        'counts': {split: sum(task['split'] == split for task in members) for split in ('train', 'validation', 'test')},
+                                        'precheckPositions': [task['position'] for task in members if task.get('precheck')],
+                                        'inputTables': table_fields[role], 'variants': variants,
+                                        'source': assets.get('sources', {}).get(role, {})})
             else:
-                # V3 has 16 intentionally heterogeneous requests per scenario. Read each frozen request
-                # from its asset and verify hash; never recreate a prompt from a controller label.
+                # Earlier V3 versions have 16 intentionally heterogeneous requests per scenario.
                 for role in ROLE_LABELS:
                     members = [task for task in assets['tasks'] if task.get('scenario') == role]
                     if sum(task.get('split') == 'train' for task in members) != 16: raise ValueError('V3候选任务数量不一致；拒绝显示')

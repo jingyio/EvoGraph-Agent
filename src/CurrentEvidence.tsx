@@ -304,6 +304,10 @@ export default function CurrentEvidence() {
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
   const hasRuns = Boolean(data?.pairs.length),
+    candidateNotStarted =
+      release?.status === "candidate" && data?.experimentStatus === "not_started",
+    candidateStopped =
+      release?.status === "candidate" && data?.experimentStatus === "quality_stopped",
     run = detail?.runs[arm],
     events = run?.events || [],
     event = events[step],
@@ -398,6 +402,63 @@ export default function CurrentEvidence() {
       {!data && !error && <p>正在读取指定发布的保存证据…</p>}
       {data && (
         <>
+          {candidateNotStarted && (
+            <section className="candidate-readiness" aria-label="候选版本启动状态">
+              <div>
+                <p className="eyebrow">候选状态</p>
+                <h2>任务已冻结，等待首轮严格预检</h2>
+                <p>
+                  这里暂时没有效果、成本或可靠性结论。空白曲线和空回放表示尚未产生运行，
+                  不是用历史数据补出的占位结果。
+                </p>
+              </div>
+              <dl>
+                <div>
+                  <dt>已冻结范围</dt>
+                  <dd>{data.plannedPairs} 项 train 任务 · 6 个业务契约</dd>
+                </div>
+                <div>
+                  <dt>下一项执行</dt>
+                  <dd>{String(release.protocol.precheckPairs || "—")} 对严格串行预检</dd>
+                </div>
+                <div>
+                  <dt>通过后</dt>
+                  <dd>再启动 {String(release.protocol.fullPairs || data.plannedPairs)} 对正式对照</dd>
+                </div>
+                <div>
+                  <dt>候选门槛</dt>
+                  <dd>质量、usage 与实际 Fast 复用率均需通过；Fast ≥ 50%</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                onClick={() =>
+                  document
+                    .getElementById("evidence-business")
+                    ?.scrollIntoView({ block: "start", behavior: "smooth" })
+                }
+              >
+                审阅已冻结任务与资料范围 ↓
+              </button>
+            </section>
+          )}
+          {candidateStopped && (
+            <section className="candidate-readiness candidate-stopped" aria-label="候选版本预检结果">
+              <div>
+                <p className="eyebrow">候选预检已停止</p>
+                <h2>首对真实执行未通过质量门槛</h2>
+                <p>
+                  F01 的 Baseline 与 RSI 都保留为失败回放。后续 11 对没有启动，当前页只展示这次真实失败与开销，不绘制收益曲线。
+                </p>
+              </div>
+              <dl>
+                <div><dt>已执行</dt><dd>1 / {data.plannedPairs} 对严格预检</dd></div>
+                <div><dt>质量结果</dt><dd>Baseline 0/1 · RSI 0/1</dd></div>
+                <div><dt>Fast 复用</dt><dd>0 / 1，未达到 50% 门槛</dd></div>
+                <div><dt>下一步</dt><dd>修复报告交付契约后，以新的空经验库重新预检</dd></div>
+              </dl>
+            </section>
+          )}
           <section id="evidence-business" className="evidence-section">
             <header>
               <p className="eyebrow">01 · 任务与业务成果</p>
@@ -408,11 +469,14 @@ export default function CurrentEvidence() {
               </p>
             </header>
             {data.taskReview?.length ? (
-              <div className="task-review">
-                <div className="task-review-intro">
+              <details className="task-review">
+                <summary className="task-review-intro">
                   <strong>正式运行前审阅 · 6 个业务契约</strong>
-                  <span>48 train · 6 validation · 6 test；本轮正式对照只运行 train，validation/test 保持冻结。</span>
-                </div>
+                  <span>展开查看冻结题面、资料字段与预检位置</span>
+                </summary>
+                <p className="task-review-note">
+                  48 train · 6 validation · 6 test；本轮正式对照只运行 train，validation/test 保持冻结。
+                </p>
                 <div className="task-review-grid">
                   {data.taskReview.map((contract) => (
                     <article key={`${contract.scenario}-${contract.group}`}>
@@ -433,7 +497,7 @@ export default function CurrentEvidence() {
                         ))}
                       </dl>
                       <details>
-                        <summary>审阅 8 个 train 题面与输出契约</summary>
+                        <summary>审阅 8 个 train 业务题面</summary>
                         <ol>
                           {contract.variants.map((variant) => (
                             <li key={variant.position}>
@@ -451,8 +515,18 @@ export default function CurrentEvidence() {
                     </article>
                   ))}
                 </div>
-              </div>
+              </details>
             ) : null}
+            {!data.pairs.length ? (
+              <div className="no-evidence no-evidence-primary">
+                <strong>当前没有可展示的业务成果</strong>
+                <p>
+                  问题、附件、任务顺序和评分边界已冻结。Baseline 与 RSI 都尚未启动，
+                  因此没有报告、执行轨迹、token、LLM 请求、工具调用或串行延迟记录。
+                </p>
+                <p>运行产生后，每项记录会在本页按同一发布上下文出现，并可回到输入资料、报告和运行回放。</p>
+              </div>
+            ) : (
             <div className="evidence-business-layout">
               <aside aria-label="同发布任务">
                 <div className="evidence-task-list">
@@ -561,6 +635,7 @@ export default function CurrentEvidence() {
                 )}
               </article>
             </div>
+            )}
           </section>
           <section className="evidence-section">
             <p className="eyebrow">02 · 为什么结果可信</p>
@@ -679,36 +754,26 @@ export default function CurrentEvidence() {
             <p>
               包括冷启动、匹配、学习、失败和恢复。每条曲线使用上述同一组任务；串行延迟为保存观察值。
             </p>
-            <h3>离线保存工件的相对与累计变化</h3>
-            <p>
-              这是对已保存成对运行的离线复核，不会调用模型，也不是实时评测。失败只要 usage
-              完整就进入累计分母；usage 不完整时保留曲线缺口。
-            </p>
-            <div className="measure-tabs" role="group" aria-label="选择离线节省率曲线">
-              {(Object.keys(savingLabels) as SavingMeasure[]).map((key) => (
-                <button
-                  key={key}
-                  className={savingKind === key ? "selected" : ""}
-                  onClick={() => setSavingKind(key)}
-                >
-                  {savingLabels[key]}
-                </button>
-              ))}
-            </div>
-            <SavingsChart
-              rows={data.summary.curves}
-              kind={savingKind}
-              revisions={data.revisions}
-              onSelect={select}
-            />
-            <p>
-              当前累计净 token 节省率：{rate(data.summary.netTokenSaving)}。
-              {hasRuns && !data.summary.qualityGate
-                ? "质量门槛失败，此数仅为诊断。"
-                : !hasRuns
-                  ? "严格对照运行后才会计算。"
-                  : ""}
-            </p>
+            {data.summary.qualityGate ? (
+              <>
+                <h3>离线保存工件的相对与累计变化</h3>
+                <p>这是对已保存成对运行的离线复核，不会调用模型，也不是实时评测。</p>
+                <div className="measure-tabs" role="group" aria-label="选择离线节省率曲线">
+                  {(Object.keys(savingLabels) as SavingMeasure[]).map((key) => (
+                    <button key={key} className={savingKind === key ? "selected" : ""} onClick={() => setSavingKind(key)}>
+                      {savingLabels[key]}
+                    </button>
+                  ))}
+                </div>
+                <SavingsChart rows={data.summary.curves} kind={savingKind} revisions={data.revisions} onSelect={select} />
+                <p>当前累计净 token 节省率：{rate(data.summary.netTokenSaving)}。</p>
+              </>
+            ) : (
+              <div className="no-evidence no-evidence-primary">
+                <strong>质量门槛未通过，不展示节省率或累计收益曲线</strong>
+                <p>下方保留两臂真实 token、LLM 请求、工具调用和串行延迟，供定位失败与开销；这些数字不构成效率结论。</p>
+              </div>
+            )}
             <details className="absolute-curves">
               <summary>查看两臂绝对用量与成功率</summary>
             <div
@@ -762,6 +827,7 @@ export default function CurrentEvidence() {
           <section id="evidence-replay" className="evidence-section">
             <p className="eyebrow">05 · 逐任务真实轨迹与报告回放</p>
             <h2>每个数字都能回到同一次工作</h2>
+            {data.pairs.length ? (
             <div className="evidence-table-scroll">
               <table>
                 <thead>
@@ -816,6 +882,9 @@ export default function CurrentEvidence() {
                 </tbody>
               </table>
             </div>
+            ) : (
+              <p className="no-evidence">尚无保存运行，因此没有可追溯的报告、指标或执行轨迹。</p>
+            )}
             <h3>
               {detail ? `${detail.task.title} · ${armLabel[arm]}` : "尚无可回放的保存运行"}
             </h3>

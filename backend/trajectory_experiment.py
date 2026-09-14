@@ -10,7 +10,7 @@ from .domain import now
 from .graph_store import write_private
 from .task_runner import TaskRunner, TaskRunRequest
 from .workspace import WorkspaceManager, WorkspaceBank
-from .trajectory_assets_v3_r1 import VERSION, install
+from .trajectory_assets_v3_r2 import VERSION, install
 
 
 def fingerprint(root):
@@ -49,8 +49,17 @@ def summary(item):
                        'cumulativeTokenSaving':1-acc['rsi']/acc['baseline'] if token_chain_complete and acc['baseline'] else None,
                        'cumulativeLatencySaving':1-lat['rsi']/lat['baseline'] if lat['baseline'] else None,
                        'G':info.get('generation'),'M':info.get('matchVersion'),'generatedG':info.get('generatedVersionIds',[]),'generatedM':info.get('generatedMatchVersions',[])})
-    gate=item['status']=='completed' and len(item['pairs'])==len(item['manifest']) and all(a['passed']==len(item['manifest']) and a['usageComplete'] for a in arms.values())
+    fast_runs = [pair['rsi'] for pair in item['pairs'] if pair.get('rsi')]
+    fast_hits = [run for run in fast_runs if (run.get('evolution') or {}).get('planningPath') == 'fast']
+    fast_rate = len(fast_hits) / len(fast_runs) if fast_runs else None
+    fast_minimum = (item.get('protocol') or {}).get('fastReuseMinimumRate')
+    fast_gate = fast_minimum is None or (fast_rate is not None and fast_rate >= fast_minimum)
+    gate=(item['status']=='completed' and len(item['pairs'])==len(item['manifest'])
+          and all(a['passed']==len(item['manifest']) and a['usageComplete'] for a in arms.values())
+          and fast_gate)
     return {'arms':arms,'curves':curves,'qualityGate':gate,'costConclusionAllowed':gate,
+            'fastReuse': {'hits': len(fast_hits), 'attempts': len(fast_runs), 'rate': fast_rate,
+                          'minimumRate': fast_minimum, 'met': fast_gate},
             'netTokenSaving':1-arms['rsi']['tokens']/arms['baseline']['tokens'] if arms['baseline']['tokens'] else None}
 
 
@@ -99,8 +108,10 @@ class TrajectoryExperiment:
                           'maxToolCallsPerRun':80,'judge':'not_run','qualityPolicy':'stop expansion on first failing pair; retain all attempts',
                           'learning':'RSI empty library; prior successful normal train only; labels excluded from matching',
                           'windowSize':4,'targetTokenSaving':0.30,
-                          'size':'48 train = three scenarios × sixteen heterogeneous business requests; 6 validation + 6 test reserved',
-                          'precheckSize':'12 train = each scenario four fixed coverage requests'}}
+                          'fastReuseMinimumRate':0.50,
+                          'size':'48 train = three scenarios × two sequential business cohorts × eight requests; 6 validation + 6 test reserved',
+                          'precheckSize':'12 train = each scenario two fixed requests from each cohort',
+                          'fastReusePolicy':'actual RSI Fast reuse must be at least 50% of completed RSI runs; otherwise this candidate cannot pass its release gate'}}
         self.items[key]=item;self.save(item)
         for relative in fp['files']:write_private(directory/'sources'/relative,(self.root/relative).read_text())
         write_private(directory/'frozen-assets-manifest.json',assets)

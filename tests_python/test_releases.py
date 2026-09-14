@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import pytest
 from backend.releases import ReleaseEvidence, selection_csv
+from backend.config import ROOT
+from backend.trajectory_assets_v3_r2 import build as build_v3_r2
 from backend.graph_store import write_private
 from backend.workspace import WorkspaceManager
 from backend.trajectory_assets import request_for, task_plan
@@ -133,3 +135,20 @@ def test_pending_candidate_exposes_zero_evidence_and_validates_asset_counts(tmp_
     with pytest.raises(ValueError,match='题面'):ReleaseEvidence(root).evidence('pending')
     tasks.pop();write_private(asset,{'version':'trajectory-review-v2','tasks':tasks,'sources':{}})
     with pytest.raises(ValueError,match='不一致'):ReleaseEvidence(root).evidence('pending')
+
+
+def test_v3_r2_frozen_asset_has_six_business_cohorts_without_delivery_contract_in_requests():
+    build_v3_r2(ROOT)
+    asset = json.loads((ROOT / 'benchmarks/trajectory-review-v3-r2.json').read_text())
+    train = [row for row in asset['tasks'] if row['split'] == 'train']
+    cohorts = {row['cohort'] for row in train}
+    assert len(train) == 48 and len(cohorts) == 6
+    assert cohorts == {
+        'finance-reconciliation', 'finance-payment-health',
+        'support-service-timing', 'support-response-coverage',
+        'tickets-activity-triage', 'tickets-delivery-readiness',
+    }
+    for row in train:
+        request = (ROOT / 'artifacts/trajectory-review-v3-r2' / row['id'] / 'request.txt').read_text()
+        assert hashlib.sha256(request.encode()).hexdigest() == row['requestHash']
+        assert 'selectedIds' not in request and 'evidenceIds' not in request and 'metrics' not in request

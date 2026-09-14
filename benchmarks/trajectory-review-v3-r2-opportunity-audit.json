@@ -1,0 +1,1084 @@
+{
+  "version": "trajectory-review-v3-r2",
+  "generatedFromManifest": true,
+  "offlineOnly": true,
+  "rows": [
+    {
+      "taskId": "F01",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [],
+      "opportunity": "cold",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F02",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F03",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F04",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F05",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F06",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F07",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F08",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多表关联",
+        "一对多",
+        "多原因",
+        "缺失"
+      ]
+    },
+    {
+      "taskId": "F09",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F10",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F11",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F12",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F13",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11",
+        "F12"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F14",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F15",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "F16",
+      "scenario": "finance",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "多笔支付",
+        "状态交叉",
+        "缺失",
+        "分期"
+      ]
+    },
+    {
+      "taskId": "C01",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [],
+      "opportunity": "cold",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C02",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C03",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C04",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02",
+        "C03"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C05",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02",
+        "C03",
+        "C04"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C06",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C07",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C08",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "时间",
+        "多来源",
+        "日期完整性"
+      ]
+    },
+    {
+      "taskId": "C09",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [],
+      "opportunity": "cold",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C10",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C11",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C12",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10",
+        "C11"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C13",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C14",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C15",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "C16",
+      "scenario": "support",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "响应资料",
+        "文本",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T01",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [],
+      "opportunity": "cold",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T02",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T03",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T04",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02",
+        "T03"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T05",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02",
+        "T03",
+        "T04"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T06",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T07",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T08",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "活动",
+        "指派",
+        "状态"
+      ]
+    },
+    {
+      "taskId": "T09",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [],
+      "opportunity": "cold",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T10",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T11",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T12",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10",
+        "T11"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T13",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10",
+        "T11",
+        "T12"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T14",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T15",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    },
+    {
+      "taskId": "T16",
+      "scenario": "tickets",
+      "offlineAuditOnly": true,
+      "priorSources": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15"
+      ],
+      "opportunity": "full_or_partial_opportunity",
+      "auditFeatures": [
+        "排期",
+        "标签",
+        "关联完整性"
+      ]
+    }
+  ],
+  "capabilityRecurrenceMatrix": {
+    "finance": {
+      "多表关联": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "一对多": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "多原因": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "缺失": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15",
+        "F16"
+      ],
+      "多笔支付": [
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15",
+        "F16"
+      ],
+      "状态交叉": [
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15",
+        "F16"
+      ],
+      "分期": [
+        "F09",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15",
+        "F16"
+      ]
+    },
+    "support": {
+      "时间": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07",
+        "C08"
+      ],
+      "多来源": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07",
+        "C08"
+      ],
+      "日期完整性": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07",
+        "C08"
+      ],
+      "响应资料": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15",
+        "C16"
+      ],
+      "文本": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15",
+        "C16"
+      ],
+      "关联完整性": [
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15",
+        "C16"
+      ]
+    },
+    "tickets": {
+      "活动": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08"
+      ],
+      "指派": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08"
+      ],
+      "状态": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08"
+      ],
+      "排期": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16"
+      ],
+      "标签": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16"
+      ],
+      "关联完整性": [
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16"
+      ]
+    }
+  },
+  "limitations": [
+    "机会来自冻结任务的公开能力标签，不是运行命中、质量、效率或进化结论。",
+    "标签绝不传给Agent、匹配器、编译器或模型。"
+  ]
+}

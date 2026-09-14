@@ -734,7 +734,7 @@ async def test_workspace_train_induces_receipts_and_matches_current_table_slots(
     await runner.shutdown()
 
 
-async def test_workspace_delivery_contract_is_public_trace_context_not_private_validation(tmp_path):
+async def test_workspace_delivery_contract_stays_out_of_model_prompt_and_private_validation(tmp_path):
     bank = TaskBank()
     bank.load()
     manager = WorkspaceManager(tmp_path)
@@ -769,9 +769,12 @@ async def test_workspace_delivery_contract_is_public_trace_context_not_private_v
     trace_contract = next(event for event in run['events'] if event['type'] == 'delivery_contract')
     assert trace_contract['detail'] == public_task['deliveryContract']
     model_text = json.dumps(captured, ensure_ascii=False)
-    assert '本次公开交付口径' in model_text
+    assert '本次公开交付口径' not in model_text
     assert 'privateValidation' not in model_text
     assert 'requiredEvidenceIds' not in model_text
+    contract_json = json.dumps(public_task['deliveryContract'], ensure_ascii=False, sort_keys=True)
+    assert contract_json not in model_text
+    assert 'requiredTableSlots' not in model_text
     assert run['evaluation']['status'] == 'passed'
     await runner.shutdown()
 

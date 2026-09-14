@@ -1,21 +1,27 @@
 # 当前架构
 
-## 2026-09-14 V3-r1 当前运行线
+## 2026-09-14 V3-r2 当前运行线
 
-`releases/manifest.json` 当前唯一发布候选是
-`trajectory-p05-v3-r1-candidate` / `trajectory-review-v3-r1`。它冻结 48 个 train、6 个
-validation、6 个 test 任务，固定 12 对预检和 `run=model=read=1`；此刻尚未启动 V3-r1
-预检，因此当前证据页只能展示任务审阅与“尚未完成正式对照”。
+`releases/manifest.json` 当前唯一候选是
+`trajectory-p05-v3-r2-candidate` / `trajectory-review-v3-r2`。它冻结 48 个 train、6 个
+validation、6 个 test 任务，固定 12 对预检和 `run=model=read=1`；当前尚未启动，因此当前
+证据页只展示任务审阅与“尚未完成正式对照”。
 
-原 V3 的 9B 预检 `350cd048-9b15-4ead-bae5-073b03ca63ad` 已移入历史发布：首对 F01 的
-Baseline 在 180 秒总时限前未发布报告；RSI 在 175.136 秒发布了报告，但把工作区 `rowId`
-填入业务 `selectedIds`，而私有结构化验收要求 `order_id`，所以 `selectedIds/groups` 失败。
-它不提供效果、效率、可靠性或进化结论，也不会与任何其他运行拼接。
+V3-r2 继承 V3 的公开记录选择、切分和来源，但重新冻结了题面与期望交付：用户题面仅保留
+真实业务目标、业务阈值/口径、缺失资料语义、业务成果和禁止动作。`metrics`、`groups`、
+`selectedIds`、`evidenceIds`、任务编号、工具名和执行顺序不出现在用户题面。动态报告工具
+Schema 承载机器可检查的交付格式；私有真值不进入模型。任务运行时也不再把
+`deliveryContract` 写入模型消息或图匹配输入。
 
-V3-r1 复用相同任务顺序和同一批公开记录，只新冻结了公开 ID 契约：顶层和分组
-`selectedIds` 使用 `order_id` / `complaint_id` / `issue_id`，`evidenceIds` 才使用本次观察的
-工作区 `rowId`。运行时把此契约写进报告工具描述和恢复提示；Live provider 在执行阶段要求
-工具调用，避免无工具的逐行长推理消耗时限。两臂共享该修订。
+三个场景各有两个连续 cohort、每个 cohort 8 项：首项是合法冷启动，随后七项才有 Fast
+复用机会。完整实验最多有 42/48 的真实机会，预检最多 6/12。`fastReuseMinimumRate=50%`
+是候选的硬发布门槛：只计实际 RSI run 的 `planningPath=fast`，未达到时即使其他质量门槛
+通过也不得晋升或主张 Fast 收益。
+
+V3-r1 仍保留为 historical / not-started：它没有运行记录，但其用户题面混入机器交付字段，
+因此不能作为这次正式候选。V3 的 9B 失败预检
+`350cd048-9b15-4ead-bae5-073b03ca63ad` 也保留为历史：Baseline 超时未报告；RSI 业务
+ID/工作区行 ID 契约不符。两者均不提供效果、效率、可靠性或进化结论。
 
 
 核对日期：2026-09-14。当前前端采用单一发布上下文；业务runtime的既有边界及历史实验保持原义。
@@ -29,10 +35,9 @@ V3-r1 复用相同任务顺序和同一批公开记录，只新冻结了公开 I
 自己的保存工作区/run。这里不展示实验选择器或benchmark总览。
 
 `releases/manifest.json` 是唯一当前选择源。当前指向尚未运行的
-`trajectory-p05-v3-candidate`，任务资产为 `trajectory-review-v2`：48 train、6 validation、
-6 test，严格预检只取每场景主问题前三次，共9对。页面显示计划48、已运行0和“尚未获得
-证据”，不再把使用旧问题资产的V2失败预检作为当前系统。V2仍保留历史审计；不自动补入
-V17、V4或其效率数字。
+`trajectory-p05-v3-r2-candidate`，任务资产为 `trajectory-review-v3-r2`：48 train、6 validation、
+6 test，严格预检固定为六个 cohort 各两项，共12对。页面显示计划48、已运行0和“尚未获得
+证据”；不自动补入 V17、V4、V2 或任何历史效率数字。
 
 `backend/releases.py:ReleaseEvidence` 提供 `/api/releases/current`、发布专属evidence、
 pair、run、input、report和selection。每次核对experiment/runtime/asset/protocol以及
@@ -71,12 +76,10 @@ validation/test不写工作区经验。真实G1已有，但后续使用未观察
 name/reason/condition/count/selectedIds/evidenceIds；组内缩写只从本次唯一观察引用绑定。
 所有能力两臂共享，私有真值仅评分；P0.5公开证据范围单独生成，不读取gold补报告。
 
-`trajectory_assets.py` 现生成 `trajectory-review-v2` 的六个公开业务问题契约，三场景各两组、
-每组8个train到达。组标签只在实验控制器统计，不进入任务匹配。根目录 `test/` 的六份手工
-问题由同一函数生成；Excel仅投影真实公开记录已有字段，并明确记录确定性派生列。
-`trajectory_experiment.py` 冻结并串行执行，首次失败pair后停止扩大。旧V2结果见
-[轨迹V2结果](trajectory-v2-results-2026-09-14.md)，新资产与曲线改动见
-[V3资产记录](trajectory-v3-asset-and-curves-2026-09-14.md)。
+`trajectory_assets_v3_r2.py` 生成 `trajectory-review-v3-r2` 的六个连续业务 cohort；每项的
+自然题面从同一冻结资产生成，离线 cohort 标签不进入 Agent 或匹配器。报告交付字段只存在于
+动态工具 Schema，图描述也不再带 delivery contract。`trajectory_experiment.py` 冻结并严格串行
+执行，首个质量/usage/维护错误或 Fast 门槛失败都会阻止扩大。旧 V2/V3 结果均为历史审计。
 
 ## 目标与边界
 
@@ -169,3 +172,8 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 该读取路径不创建实验、不加载私有答案、不调用模型。内容审计见
 [正式运行前任务审阅](trajectory-v3-run-approval-review-2026-09-14.md)，两臂实际工具面与报告
 Schema见[任务与工具契约审阅](trajectory-v3-task-and-tool-review-2026-09-14.md)。
+
+
+### V3-r2 失败预检的发布投影
+
+`ReleaseEvidence` 对 candidate 的已保存 trajectory experiment 执行 runtime、资产、协议和 pair/run 身份校验。若预检 `quality_stopped`，当前证据页只保留同一 release 的失败报告、输入、轨迹和绝对开销；节省率/累计收益曲线关闭，直到完整质量门槛通过。

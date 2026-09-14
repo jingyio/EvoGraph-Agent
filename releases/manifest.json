@@ -1,11 +1,56 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "trajectory-p05-v3-r1-candidate",
+  "currentReleaseId": "trajectory-p05-v3-r2-candidate",
   "releases": [
+    {
+      "releaseId": "trajectory-p05-v3-r2-candidate",
+      "displayName": "轨迹驱动数字员工 · P0.5 V3-r2",
+      "status": "candidate",
+      "experimentId": "94620ba7-efd1-4fb9-b323-2bde8b22f78d",
+      "runtimeRevision": "sha256:483fe0f70bea78bee638b4b5ea43bb163b395962cbaf2cdf663e841dc048f5f1",
+      "assetVersion": "trajectory-review-v3-r2",
+      "assetManifest": "benchmarks/trajectory-review-v3-r2.json",
+      "protocol": {
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "model": "qwen/qwen3.5-9b",
+        "planner": "qwen/qwen3.5-9b",
+        "runtimeProtocol": "trajectory-v3",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "maxToolCallsPerRun": 80,
+        "judge": "not_run",
+        "qualityPolicy": "stop expansion on first failing pair; retain all attempts",
+        "learning": "RSI empty library; prior successful normal train only; labels excluded from matching",
+        "windowSize": 4,
+        "targetTokenSaving": 0.3,
+        "fastReuseMinimumRate": 0.5,
+        "size": "48 train = three scenarios × two sequential business cohorts × eight requests; 6 validation + 6 test reserved",
+        "precheckSize": "12 train = each scenario two fixed requests from each cohort",
+        "fastReusePolicy": "actual RSI Fast reuse must be at least 50% of completed RSI runs; otherwise this candidate cannot pass its release gate"
+      },
+      "createdAt": "2026-09-14T09:39:14.052Z",
+      "source": "trajectory",
+      "claims": [
+        "已完成一条 F01 财务样例的真实 API 成对执行；两臂完整 usage、工具轨迹与失败报告均已保存。",
+        "预检按首对质量门槛停止，未继续消耗其余 11 对；本次记录可回放、下载和审计。",
+        "候选任务仍使用冻结的自然业务题面；机器检查字段未写入用户题面或匹配输入。"
+      ],
+      "limitations": [
+        "当前候选版本尚未完成正式对照，也未通过 12 对预检。",
+        "F01 Baseline 在 24 步上限后因 metrics 校验失败；RSI 在报告恢复后仍因 metrics、业务 ID 清单和原因分组校验失败。",
+        "两臂均未通过质量门槛；69.60% 的诊断性 token 差不构成同质量收益结论。",
+        "RSI 为冷启动 fallback，实际 Fast 命中 0/1，未达到 50% 门槛；没有 G/M 修订或后续使用证据。",
+        "其余 11 对预检、48 对正式对照、validation 和 test 均未运行。"
+      ]
+    },
     {
       "releaseId": "trajectory-p05-v3-r1-candidate",
       "displayName": "轨迹驱动数字员工 · P0.5 V3-r1",
-      "status": "candidate",
+      "status": "historical",
       "experimentId": "not-started",
       "runtimeRevision": "pending:recorded-at-experiment-start",
       "assetVersion": "trajectory-review-v3-r1",
@@ -30,14 +75,11 @@
       "createdAt": "2026-09-14",
       "source": "trajectory-plan",
       "claims": [
-        "冻结48项异构公开业务任务、独立validation/test和离线机会审计。",
-        "V3-r1只澄清 selectedIds 的公开业务字段与 evidenceIds 的工作区行证据边界；保留V3原始失败预检。"
+        "保留 V3-r1 的公开业务 ID 与工作区证据 ID 契约修订，未运行。"
       ],
       "limitations": [
-        "当前候选版本尚未完成正式对照",
-        "尚未产生可主张的 token、延迟、质量、可靠性或 G/M 修订收益。",
-        "12对严格预检需从新的空 RSI 经验库开始；正式48对只在预检全部通过后启动。",
-        "runtime revision将在实验启动时按实际源码快照记录。"
+        "未启动。V3-r1 的公开题面仍含交付字段和分组名称，已被 V3-r2 的自然业务题面候选替代。",
+        "保留用于审计其业务 ID / 工作区证据 ID 契约修订；没有运行、质量、效率、可靠性或进化结论。"
       ]
     },
     {
