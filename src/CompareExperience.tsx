@@ -1,7 +1,8 @@
+import { useArchiveExperiment } from './archiveContext';
 import { ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Minus, Pause, Play, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { PairDetail, ScenarioGroup, SHOWCASE_EXPERIMENT, Showcase, ShowcasePair, TimelineEvent, duration, number, percent, total } from './showcase';
+import { PairDetail, ScenarioGroup, Showcase, ShowcasePair, TimelineEvent, duration, number, percent, total } from './showcase';
 import './showcase.css';
 
 function Curve({ points }: { points: { baselineCumulativeTokens: number; rsiCumulativeTokens: number; position: number }[] }) {
@@ -62,12 +63,13 @@ function FocusedLane({ label, event, timeline, step, onStep, rsi = false }: { la
 }
 
 export default function CompareExperience() {
+  const experimentId = useArchiveExperiment();
   const [data, setData] = useState<Showcase | null>(null); const [groupId, setGroupId] = useState('all'); const [error, setError] = useState(''); const [details, setDetails] = useState<Record<string, PairDetail>>({});
-  useEffect(() => { api<Showcase>(`/api/showcase/${SHOWCASE_EXPERIMENT}`).then(setData).catch(error => setError(error.message)); }, []);
+  useEffect(() => { api<Showcase>(`/api/showcase/${experimentId}`).then(setData).catch(error => setError(error.message)); }, []);
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
-    Promise.all(data.categories.map(category => api<PairDetail>(`/api/showcase/${SHOWCASE_EXPERIMENT}/pairs/${encodeURIComponent(category.featuredTaskId)}`))).then(values => {
+    Promise.all(data.categories.map(category => api<PairDetail>(`/api/showcase/${experimentId}/pairs/${encodeURIComponent(category.featuredTaskId)}`))).then(values => {
       if (!cancelled) setDetails(Object.fromEntries(values.map(value => [value.taskId, value])));
     }).catch(error => { if (!cancelled) setError(error.message); });
     return () => { cancelled = true; };

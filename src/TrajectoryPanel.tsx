@@ -1,3 +1,4 @@
+import { archiveExperiment } from './navigation';
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, GitBranch, RefreshCw } from 'lucide-react';
 import './workspace.css';
@@ -18,8 +19,9 @@ function Curve({rows,field,onSelect}:{rows:Point[];field:'tokenSaving'|'cumulati
   return <svg viewBox="0 0 600 180" role="img" aria-label="保存任务的实际节省率曲线"><line x1="36" x2="565" y1={y(0)} y2={y(0)} stroke="#becdc9" strokeDasharray="4 4"/><text x="0" y={y(0)+4} fontSize="10">0%</text><polyline fill="none" stroke="#267963" strokeWidth="2" points={rows.flatMap((r,i)=>r[field]==null?[]:[`${x(i)},${y(r[field]!)}`]).join(' ')}/>{rows.map((r,i)=>r[field]!=null&&<g key={r.task} onClick={()=>onSelect(r.task)} className="trajectory-point"><circle cx={x(i)} cy={y(r[field]!)} r="5" fill={r.generatedG.length?'#c7824a':'#267963'}/><title>{r.task}: {percent(r[field])}; 新建图 {r.generatedG.length}，描述事件 {r.generatedM.length}（G0/M0不是进化）</title><text x={x(i)} y="171" textAnchor="middle" fontSize="9">{r.position}</text></g>)}</svg>;
 }
 export default function TrajectoryPanel(){
- const [list,setList]=useState<{id:string;status:string;mode:string}[]>([]),[key,setKey]=useState(''),[data,setData]=useState<Experiment|null>(null),[pairId,setPairId]=useState(''),[arm,setArm]=useState<'baseline'|'rsi'>('rsi'),[run,setRun]=useState<Run|null>(null),[error,setError]=useState('');
- useEffect(()=>{void get<typeof list>('/api/trajectory-experiments').then(x=>{setList(x);if(x.length)setKey(x[x.length-1].id)}).catch(e=>setError(String(e)))},[]);
+ const [list,setList]=useState<{id:string;status:string;mode:string}[]>([]),[key,setKey]=useState(archiveExperiment()),[data,setData]=useState<Experiment|null>(null),[pairId,setPairId]=useState(''),[arm,setArm]=useState<'baseline'|'rsi'>('rsi'),[run,setRun]=useState<Run|null>(null),[error,setError]=useState('');
+ useEffect(() => { if (!key || key === archiveExperiment()) return; const q=new URLSearchParams(window.location.hash.split('?')[1] || ''); q.set('experiment',key); window.location.hash='archive?'+q.toString(); }, [key]);
+ useEffect(()=>{void get<typeof list>('/api/trajectory-experiments').then(x=>{setList(x);if(archiveExperiment())setKey(archiveExperiment())}).catch(e=>setError(String(e)))},[]);
  useEffect(()=>{if(!key)return;let stopped=false;const load=()=>void get<Experiment>(`/api/trajectory-experiments/${key}`).then(x=>{if(!stopped){setData(x);setPairId(old=>old||x.pairs[0]?.spec.id||'')}}).catch(e=>setError(String(e)));load();const timer=setInterval(load,4000);return()=>{stopped=true;clearInterval(timer)}},[key]);
  const pair=data?.pairs.find(p=>p.spec.id===pairId),selected=pair?.[arm];
  useEffect(()=>{setRun(null);if(!key||!selected)return;let stopped=false;void get<Run>(`/api/trajectory-experiments/${key}/runs/${arm}/${selected.id}`).then(x=>{if(!stopped)setRun(x)}).catch(e=>setError(String(e)));return()=>{stopped=true}},[key,arm,selected?.id,selected?.status]);

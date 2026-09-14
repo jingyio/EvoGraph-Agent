@@ -1,34 +1,18 @@
+import { useArchiveExperiment } from './archiveContext';
 import { AlertTriangle, ArrowDown, CheckCircle2, Clock3, DatabaseZap, Gauge, GitBranch, MessageSquareText, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api';
-import { SHOWCASE_EXPERIMENT, Showcase, duration, number, percent } from './showcase';
+import { Showcase, duration, number, percent } from './showcase';
 import './showcase.css';
-import './cold-start.css';
-
-type ColdStartDiagnostic = {
-  summary: {
-    arms: {
-      baseline: { attempts: number; passed: number; totalTokens: number; modelRequests: number; toolCalls: number; durationMs: number };
-      rsi: { attempts: number; passed: number; totalTokens: number; modelRequests: number; toolCalls: number; durationMs: number };
-    };
-    tokenSavingRate: number;
-    modelRequestSavingRate: number;
-    observedLatencySavingRate: number;
-    toolCallDelta: number;
-  };
-  protocol: { manifestProfile?: string; comparisonMode?: string };
-};
 
 function Measure({ icon, label, baseline, rsi, unit, footnote }: { icon: React.ReactNode; label: string; baseline: number; rsi: number; unit: string; footnote: string }) {
   const saving = 1 - rsi / baseline;
   return <article className="measure"><div>{icon}<span>{label}</span></div><strong>{percent(saving)}</strong><p>{number(baseline)} <ArrowDown size={14} /> {number(rsi)} {unit}</p><small>{footnote}</small></article>;
 }
 export default function RsiInsights() {
-  const [data, setData] = useState<Showcase | null>(null); const [error, setError] = useState(''); const [v3, setV3] = useState<ColdStartDiagnostic | null>(null);
-  useEffect(() => { api<Showcase>(`/api/showcase/${SHOWCASE_EXPERIMENT}`).then(setData).catch(error => setError(error.message)); }, []);
-  useEffect(() => {
-    api<ColdStartDiagnostic>('/api/online-e2e/online-rsi-all-train-saturation-v3').then(setV3).catch(() => setV3(null));
-  }, []);
+  const experimentId = useArchiveExperiment();
+  const [data, setData] = useState<Showcase | null>(null); const [error, setError] = useState('');
+  useEffect(() => { api<Showcase>(`/api/showcase/${experimentId}`).then(setData).catch(error => setError(error.message)); }, []);
   if (error) return <main className="showcase-page"><p className="showcase-error">读取 RSI 分析失败：{error}</p></main>;
   if (!data) return <main className="showcase-page showcase-loading">正在读取 RSI 运行时证据…</main>;
   const b = data.overview.baseline, r = data.overview.rsi, audit = data.audit.arms;
@@ -37,7 +21,7 @@ export default function RsiInsights() {
   return <main className="showcase-page insight-page">
     <section className="showcase-title"><p className="showcase-kicker">RSI EFFECT ANALYSIS / RECORDED SERIAL EXPERIMENT</p><h1>把节省拆开看。</h1><p>Token 和调用数是严格可比的主指标。延迟是同一 session 交替串行的观测值，避免把分时服务差异说成系统吞吐优势。</p></section>
     <section className="measure-grid"><Measure icon={<Gauge size={18} />} label="Agent token" baseline={b.totalTokens} rsi={r.totalTokens} unit="token" footnote="包含冷启动、规划、执行、恢复与学习相关模型请求。" /><Measure icon={<MessageSquareText size={18} />} label="LLM 请求" baseline={b.modelRequests} rsi={r.modelRequests} unit="次" footnote="RSI 少 24 次完整 Plan；其他差异来自实际执行和恢复轮数。" /><Measure icon={<Clock3 size={18} />} label="累计时长" baseline={b.durationMs} rsi={r.durationMs} unit="ms" footnote="交替串行观察值；供应商负载与缓存仍可能影响。" /></section>
-    {v3 && <ColdStartCard diagnostic={v3} />}
+    <p>V3冷启动诊断已单列在开发与历史，不与此V4指标合并。</p>
     <section className="domain-effect"><header><p className="showcase-kicker">THREE BUSINESS DOMAINS / ALL 36 FIXED TASKS</p><span>每领域 12 个任务，未删除低收益工单。</span></header><div>{data.categories.map(category => { const base = category.metrics.baseline, rsi = category.metrics.rsi; return <article key={category.scenario}><small>{category.label}</small><strong>{percent(category.finalSavingRate)}</strong><p>{number(base.totalTokens)} <ArrowDown size={12} /> {number(rsi.totalTokens)} token</p><span>{base.modelRequests} → {rsi.modelRequests} LLM · {duration(base.durationMs)} → {duration(rsi.durationMs)}</span></article>; })}</div></section>
     <section className="insight-split"><div className="insight-copy"><p className="showcase-kicker">ONLINE EXPERIENCE</p><h2>经验不是提示词参考。<br />它改变了后续执行路径。</h2><p>第一批同族任务保存 G0 Workflow；后续同族任务直接选择同一历史工作流并将当前任务参数绑定进去。Fast 命中后，完整 Plan 请求为零。</p><div className="experience-stats"><div><strong>{r.diagnostics.initialWorkflowVersions}</strong><span>G0 初始 Workflow</span></div><div><strong>{r.diagnostics.fastSucceeded}/{r.diagnostics.fastRuns}</strong><span>Fast 实际完成</span></div><div><strong>{r.diagnostics.maintenanceRecorded}/{r.diagnostics.maintenanceAttempts}</strong><span>经验写入 recorded</span></div></div></div><div className="experience-rail"><div className="rail-origin"><GitBranch size={18} /><span>来源任务<br /><b>形成 G0</b></span></div><i /><div className="rail-use"><DatabaseZap size={18} /><span>后续新记录任务<br /><b>当前参数绑定</b></span></div><i /><div className="rail-result"><CheckCircle2 size={18} /><span>Fast 执行<br /><b>24 次完成</b></span></div><small>未观察到 G1/G2，也没有 Composition 实际执行。</small></div></section>
     <section className="strict-audit"><header><div><p className="showcase-kicker">STRICT RESULT AUDIT</p><h2>准确率不只看“通过”。</h2></div><span><ShieldCheck size={17} />只读派生评估</span></header><div className="audit-grid"><AuditColumn label="Baseline" value={audit.baseline} /><AuditColumn label="RSI" value={audit.rsi} /></div><p className="audit-caption">结构化验收严格比对 metrics、入选记录、证据集合和“证据确实来自本次观察”。报告摘要再额外检查已知 ID、可追溯数字与金额单位表述。后者是覆盖有限的确定性审计，不冒充全面语义判定。</p></section>
@@ -46,15 +30,6 @@ export default function RsiInsights() {
   </main>;
 }
 
-function ColdStartCard({ diagnostic }: { diagnostic: ColdStartDiagnostic }) {
-  const baseline = diagnostic.summary.arms.baseline;
-  const rsi = diagnostic.summary.arms.rsi;
-  return <section className="cold-start-diagnostic">
-    <header><div><p className="showcase-kicker">V3 COLD-START DIAGNOSTIC / LIMITED EVIDENCE</p><h2>首到达任务的有效信号，和不可用的 overhead 分开。</h2></div><span><AlertTriangle size={16} />不能并入最终 V4</span></header>
-    <div className="cold-start-grid"><article><small>任务范围</small><strong>{baseline.attempts} 对</strong><p>30 个 family 的第一个 train 实例；按设计均未触发 Fast 复用。</p></article><article><small>Agent token</small><strong>{percent(diagnostic.summary.tokenSavingRate)}</strong><p>{number(baseline.totalTokens)} <ArrowDown size={12} /> {number(rsi.totalTokens)}</p></article><article><small>LLM 请求</small><strong>{percent(diagnostic.summary.modelRequestSavingRate)}</strong><p>{baseline.modelRequests} <ArrowDown size={12} /> {rsi.modelRequests}</p></article><article><small>结构化通过</small><strong>{baseline.passed}/{baseline.attempts} → {rsi.passed}/{rsi.attempts}</strong><p>Baseline 一次 provider timeout；RSI 有 5 次错误工具调用后恢复完成。</p></article></div>
-    <p className="cold-start-caption">端到端时长的保存观测为 {percent(diagnostic.summary.observedLatencySavingRate)}，但仍受分时 provider 负载影响。RSI 本地 overhead 数字 <b>不可用</b>：三次 Composition 尝试把约 14.3s 的模型等待误归为本地时间；这不影响 token、模型请求、工具调用、任务输出或总时长，但禁止以 V3 支持本地 overhead 结论。工具调用由 {baseline.toolCalls} 增至 {rsi.toolCalls}（+{diagnostic.summary.toolCallDelta}），因此它也不是“少做业务工作”的证据。</p>
-  </section>;
-}
 
 function AuditColumn({ label, value }: { label: string; value: Record<string, any> }) {
   const tests = [['结构化精确通过', 'strictStructuredPass'], ['指标精确', 'metricExact'], ['证据集合精确', 'evidenceExact'], ['本次观察证据', 'evidenceObserved'], ['严格报告审计', 'strictReportAuditPass'], ['数字主张可追溯', 'summaryNumbersGrounded'], ['金额单位明确', 'currencyNotationClear']];

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "currentReleaseId": "trajectory-p05-v2-candidate",
+  "releases": [
+    {
+      "releaseId": "trajectory-p05-v2-candidate",
+      "displayName": "轨迹驱动数字员工 · P0.5 V2",
+      "status": "candidate",
+      "experimentId": "96c69be0-fc62-494a-b05d-2267d0925c03",
+      "runtimeRevision": "sha256:545d744e92b7654dcf8826f4928a1f939e1f9ac34bc409d8fb7bb43a6c740656",
+      "assetVersion": "trajectory-review-v1",
+      "protocol": {
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "runtimeProtocol": "trajectory-v2",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "maxToolCallsPerRun": 80,
+        "judge": "not_run",
+        "qualityPolicy": "stop expansion on first failing pair; retain all attempts",
+        "learning": "RSI empty library; prior successful normal train only; labels excluded from matching",
+        "windowSize": 4,
+        "targetTokenSaving": 0.3,
+        "size": "24 train = three workflow groups × eight arrivals; six validation/test reserved"
+      },
+      "createdAt": "2026-09-14T05:56:23.609Z",
+      "source": "trajectory",
+      "claims": [
+        "财务三对任务完成结构化事实、独立分组和当前证据校验。",
+        "已验证当前阈值重新绑定及读取、计算片段的实际复用。",
+        "已形成一次图结构与覆盖描述修订，尚未有修订后使用证据。"
+      ],
+      "limitations": [
+        "当前候选版本尚未完成正式对照",
+        "客服基线最终清单使用内部行号，预检因质量门槛停止；不能主张全量同质量效率收益。",
+        "图和匹配修订后的实际使用尚未获得证据；初次建图或复用次数不代表递归进化。",
+        "技术工单尚未运行，报告正文未获得独立完整质量评审。",
+        "runtime以运行时源码SHA-256快照为准；不是当前HEAD，运行时未记录精确Git提交。"
+      ]
+    },
+    {
+      "releaseId": "workpack-v17-historical",
+      "displayName": "Workpack V17 · 历史正式实验",
+      "status": "historical",
+      "experimentId": "005ffeb9-964e-42ac-86e9-fb9e8f2212fe",
+      "runtimeRevision": "sha256:58a05bb656b493b013c825ab3180bab1de9a3fbe7c67e813e3af532325e87bc2",
+      "assetVersion": "workpacks-v1",
+      "protocol": {
+        "id": "workspace-workpack-online-full-train-v15",
+        "runtimeLine": "V17",
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        }
+      },
+      "createdAt": "2026-09-13T12:12:12.693Z",
+      "source": "workpack",
+      "claims": [
+        "仅保留其原协议内的历史正式对照结论。"
+      ],
+      "limitations": [
+        "不代表当前P0.5 runtime。不得补入当前总览。"
+      ]
+    },
+    {
+      "releaseId": "taskbank-v4-historical",
+      "displayName": "36-task V4 · 历史串行对照",
+      "status": "historical",
+      "experimentId": "online-rsi-serial-final-v4",
+      "runtimeRevision": "git:1c32ff2ac2706fb351bf6b6b2bb5b1d8a3fa8090",
+      "assetVersion": "taskbank-v1 / frozen 36 train",
+      "protocol": {
+        "id": "online-rsi-serial-final-v4",
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        }
+      },
+      "createdAt": "2026-09-11",
+      "source": "online-e2e",
+      "claims": [
+        "只读回放原36-task历史对照。"
+      ],
+      "limitations": [
+        "非工作区轨迹runtime，不计入当前发布。"
+      ]
+    }
+  ],
+  "legacyRoutes": {
+    "experiments": "workpack-v17-historical",
+    "trajectory": "trajectory-p05-v2-candidate",
+    "compare": "taskbank-v4-historical",
+    "insights": "taskbank-v4-historical",
+    "replay": "taskbank-v4-historical",
+    "showcase": "taskbank-v4-historical"
+  }
+}

@@ -17,6 +17,7 @@ from .task_runner import TaskRunner, TaskRunRequest
 from .paired_evaluation import PairedEvaluation, EvaluationRequest
 from .business_report import render_report
 from .trajectory_experiment import TrajectoryExperiment
+from .releases import ReleaseEvidence, selection_csv
 from .llm_judge import LLMJudge, JudgeRequest, JUDGE_PROMPT
 from .autotool import digest
 from .showcase import SHOWCASE_EXPERIMENT, build_pair_detail, build_showcase
@@ -102,6 +103,7 @@ def create_app(service=None):
                                   run_directory=taskbank.root / 'artifacts' / 'workspace-runs',
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
+    releases = ReleaseEvidence(taskbank.root)
     trajectory_experiment = TrajectoryExperiment(taskbank.root)
     workpack_experiment = WorkpackExperiment(taskbank, taskbank.root)
     workpack_judge = WorkpackJudge(workpack_experiment, taskbank.root)
@@ -326,6 +328,54 @@ def create_app(service=None):
         rows = list_workpacks(taskbank)
         return [row for row in rows if not scenario or row['scenario'] == scenario]
 
+    def release_read(operation, *args):
+        try:
+            return operation(*args)
+        except (KeyError, FileNotFoundError):
+            raise HTTPException(404, '该发布没有对应的保存证据；未使用其他实验替代')
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get('/api/releases/current')
+    def current_release():
+        return release_read(releases.manifest)
+
+    @app.get('/api/releases/archive')
+    def archive_releases():
+        return release_read(releases.archive)
+
+    @app.get('/api/releases/{release_id}')
+    def release_manifest(release_id: str):
+        return release_read(releases.manifest, release_id)
+
+    @app.get('/api/releases/{release_id}/evidence')
+    def release_evidence(release_id: str):
+        return release_read(releases.evidence, release_id)
+
+    @app.get('/api/releases/{release_id}/pairs/{pair_id}')
+    def release_pair(release_id: str, pair_id: str):
+        return release_read(releases.pair, release_id, pair_id)
+
+    @app.get('/api/releases/{release_id}/pairs/{pair_id}/inputs/{source_id}')
+    def release_input(release_id: str, pair_id: str, source_id: str):
+        path, name = release_read(releases.input_file, release_id, pair_id, source_id)
+        return FileResponse(path, filename=name)
+
+    @app.get('/api/releases/{release_id}/pairs/{pair_id}/runs/{arm}')
+    def release_run(release_id: str, pair_id: str, arm: str):
+        return release_read(releases.run, release_id, pair_id, arm)
+
+    @app.get('/api/releases/{release_id}/pairs/{pair_id}/runs/{arm}/report', response_class=HTMLResponse)
+    def release_report(release_id: str, pair_id: str, arm: str):
+        body = release_read(releases.report, release_id, pair_id, arm)
+        return HTMLResponse(body, headers={'Content-Disposition': 'attachment; filename="business-report.html"'})
+
+    @app.get('/api/releases/{release_id}/pairs/{pair_id}/runs/{arm}/selection')
+    def release_selection(release_id: str, pair_id: str, arm: str):
+        data = release_read(releases.run, release_id, pair_id, arm)
+        return Response(selection_csv(data['run'].get('submission') or {}), media_type='text/csv',
+                        headers={'Content-Disposition': 'attachment; filename="business-selection.csv"'})
+
     @app.get('/api/trajectory-experiments')
     def trajectory_list():
         return [{'id':i['id'], 'createdAt':i['createdAt'], 'mode':i['mode'], 'status':i['status'], 'summary':trajectory_experiment.get(i['id'])['summary']} for i in sorted(trajectory_experiment.items.values(), key=lambda item: item['createdAt'])]
@@ -515,6 +565,13 @@ def create_app(service=None):
             'Content-Disposition': f'attachment; filename="operations-report-{run_id}.html"',
             'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'",
         })
+
+    @app.get('/api/workspaces/runs/{run_id}/selection/download')
+    def workspace_selection_download(run_id: str):
+        if run_id not in workspace_runner.runs:
+            raise HTTPException(404, '工作记录不存在')
+        return Response(selection_csv(workspace_runner.runs[run_id].get('submission') or {}), media_type='text/csv',
+                        headers={'Content-Disposition': 'attachment; filename="business-selection.csv"'})
 
     @app.post('/api/workspaces/runs/{run_id}/cancel')
     async def workspace_run_cancel(run_id: str):

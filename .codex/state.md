@@ -1,5 +1,23 @@
 # 项目状态快照
 
+- 2026-09-14 最新前端交付：主导航仅 `#home` 数字员工 / `#evidence` 当前证据，一套App壳。
+  `#archive` 由页尾默认折叠入口访问；旧所有实验/调试hash保留query并重定向历史上下文。
+  单一发布清单 `releases/manifest.json` 明确currentReleaseId=trajectory-p05-v2-candidate，
+  experiment=96c69be0-fc62-494a-b05d-2267d0925c03，asset=trajectory-review-v1，protocol=trajectory-v2，
+  runtime=sha256:545d744e92b7654dcf8826f4928a1f939e1f9ac34bc409d8fb7bb43a6c740656。
+  当前没有新的formal；页面显示“当前候选版本尚未完成正式对照”，不拼V17/V4。
+- 发布证据API仅从同发布成员run派生效果、修订/来源/后续使用、成本、失败、报告和回放。
+  artifact/runtime/asset/protocol不一致失败关闭。历史V4页面移除showcase硬编码，经Archive
+  上下文注入；V3独立审计。历史选择更新URL与元数据，不按创建时间猜当前结果。
+- 数字员工保留上传、澄清、费用确认、运行、报告和追问；新增保存工作区恢复及同run
+  结构化CSV清单下载，技术细节默认折叠。浏览器已验证首传→准备任务、保存报告/追问
+  恢复、当前报告/CSV下载、旧V17/V4深链，以及1280/390px主要页面。没有新增模型调用。
+- 本轮验证：7项前端测试、39项相关Python API/工作区/报告测试、TypeScript/Vite构建及
+  git diff --check通过；结束前所有已核查队列空闲。
+- 本轮只重构前端/读取DTO，不改变学习和执行协议，不改写实验artifacts。38份实验/经验
+  文件hash只读核验一致。实现与验证见 `docs/frontend-release-isolation-2026-09-14.md`。
+  下方旧快照描述保留历史含义，旧“主展示/最终主证据”不再表示当前发布上下文。
+
 - 2026-09-14 执行阶段已推进P0.5，**未完成整体验收**。工作区现在从通过评分的真实
   toolTrace收据诱导读取/compute片段，绑定当前嵌套表/语义槽；不再按family/template选图。
   多原因groups、缺失null排除比较、sum/max/min、BRL报告、artifact运行内幂等已实现。

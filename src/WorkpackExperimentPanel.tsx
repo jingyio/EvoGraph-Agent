@@ -1,3 +1,4 @@
+import { archiveExperiment } from './navigation';
 import { Activity, ArrowRight, CheckCircle2, Circle, ClipboardList, FlaskConical, Gauge, Layers3, LoaderCircle, ShieldCheck, Square, Waypoints } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
@@ -59,17 +60,6 @@ function isFormalV17(item: Experiment | ExperimentListItem) {
     && item.summary?.qualityGate?.status === 'passed';
 }
 
-function defaultExperiment(items: ExperimentListItem[]) {
-  const formal = [...items].filter(isFormalV17)
-    .sort((left, right) => String(right.finishedAt || right.createdAt || '').localeCompare(String(left.finishedAt || left.createdAt || '')))[0];
-  if (formal) return formal;
-  return [...items].sort((left, right) => {
-    const leftActive = ['queued', 'running'].includes(left.status) ? 1 : 0;
-    const rightActive = ['queued', 'running'].includes(right.status) ? 1 : 0;
-    if (leftActive !== rightActive) return rightActive - leftActive;
-    return String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
-  })[0] || null;
-}
 
 function evolutionText(pair: Pair) {
   const evolution = pair.runs.rsi?.evolution;
@@ -133,7 +123,7 @@ export default function WorkpackExperimentPanel() {
   const [mode, setMode] = useState<Mode>('smoke_v17');
   const [protocol, setProtocol] = useState<Protocol | null>(null);
   const [items, setItems] = useState<ExperimentListItem[]>([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(archiveExperiment());
   const [selected, setSelected] = useState<Experiment | null>(null);
   const [scenario, setScenario] = useState<'all' | Scenario>('all');
   const [workflow, setWorkflow] = useState('all');
@@ -144,7 +134,7 @@ export default function WorkpackExperimentPanel() {
   const [error, setError] = useState('');
   const [listLoading, setListLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const selectedSummary = useMemo(() => items.find(item => item.id === selectedId) || defaultExperiment(items), [items, selectedId]);
+  const selectedSummary = useMemo(() => items.find(item => item.id === selectedId), [items, selectedId]);
   const activeStatus = selected?.status || selectedSummary?.status;
   const running = activeStatus === 'queued' || activeStatus === 'running';
   const latestJudge = judgeData?.items.at(-1) || null;
@@ -152,7 +142,7 @@ export default function WorkpackExperimentPanel() {
   const refresh = async () => {
     const next = await api<ExperimentListItem[]>('/api/workpack-experiments');
     setItems(next);
-    setSelectedId(current => current && next.some(item => item.id === current) ? current : defaultExperiment(next)?.id || '');
+    setSelectedId(current => current && next.some(item => item.id === current) ? current : archiveExperiment() || '');
   };
   const refreshDetail = async (experimentId: string) => {
     const next = await api<Experiment>(`/api/workpack-experiments/${experimentId}`);
@@ -163,6 +153,7 @@ export default function WorkpackExperimentPanel() {
     const next = await api<JudgeResponse>(`/api/workpack-experiments/${experimentId}/judgements`);
     setJudgeData(next);
   };
+ useEffect(() => { if (!selectedId || selectedId === archiveExperiment()) return; const q=new URLSearchParams(window.location.hash.split('?')[1] || ''); q.set('experiment',selectedId); window.location.hash='archive?'+q.toString(); }, [selectedId]);
   useEffect(() => {
     void refresh().catch(reason => setError(reason.message)).finally(() => setListLoading(false));
   }, []);
@@ -234,14 +225,14 @@ export default function WorkpackExperimentPanel() {
   return <main className="workpack-experiment-shell">
     <header className="workpack-experiment-head"><div><p>EXPERIMENT CENTER / ISOLATED WORKPACKS</p><h1>在线经验积累与复用</h1><span>固定工作包经相同的文件解析、工作请求与 Agent runtime 执行。新工作区实验与历史 V4 任务库结果相互独立。</span></div><a href="#home">返回工作台 <ArrowRight size={14} /></a></header>
     {error && <p className="workpack-error">{error}</p>}
-    <section className="workpack-mode-picker" aria-label="实验范围">{(Object.keys(modeCopy) as Mode[]).map(item => <button key={item} className={mode === item ? 'selected' : ''} onClick={() => setMode(item)} disabled={busy || running}><small>{item === 'smoke_v17' ? 'SMOKE' : item === 'precheck_v17' ? 'STAGED' : 'FORMAL'}</small><strong>{modeCopy[item].title}</strong><span>{modeCopy[item].detail}</span></button>)}</section>
+    <details className="archive-catalog"><summary>开发操作 · 新实验配置与费用确认（不是下方历史运行协议）</summary><section className="workpack-mode-picker" aria-label="实验范围">{(Object.keys(modeCopy) as Mode[]).map(item => <button key={item} className={mode === item ? 'selected' : ''} onClick={() => setMode(item)} disabled={busy || running}><small>{item === 'smoke_v17' ? 'SMOKE' : item === 'precheck_v17' ? 'STAGED' : 'FORMAL'}</small><strong>{modeCopy[item].title}</strong><span>{modeCopy[item].detail}</span></button>)}</section>
     {protocol && <section className="workpack-protocol"><div><ClipboardList size={18} /><small>冻结范围</small><strong>{protocol.taskCountPerArm} 项 / 臂</strong><span>{protocol.agentRuns} 次真实 Agent</span></div><div><Gauge size={18} /><small>串行限制</small><strong>{protocol.limits.run} / {protocol.limits.model} / {protocol.limits.read}</strong><span>run / model / read</span></div><div><Layers3 size={18} /><small>预估 Agent token</small><strong>{number(protocol.estimatedAgentTokens)}</strong><span>{protocol.estimateBasis || '执行前估算'}</span></div><div><Waypoints size={18} /><small>Judge</small><strong>不运行</strong><span>性能稳定后另行确认</span></div></section>}
     <section className="workpack-controls"><div><p>冻结任务清单</p><span>{protocol?.order}。Baseline 不跨任务学习；RSI 从新的空经验库起步，train 才更新经验。</span></div><label><input type="checkbox" checked={costConfirmed} disabled={busy || running} onChange={event => setCostConfirmed(event.target.checked)} />我确认启动 {protocol?.agentRuns || 0} 次真实 Agent 运行</label><button disabled={!costConfirmed || busy || running} onClick={() => void start()}>{busy ? <LoaderCircle size={15} /> : <FlaskConical size={15} />}{modeCopy[mode].action}</button>{running && <button className="stop" onClick={() => void cancel()}><Square size={14} />停止</button>}</section>
-    <section className="workpack-filter"><label>展示场景<select aria-label="筛选场景" value={scenario} onChange={event => { setScenario(event.target.value as 'all' | Scenario); setWorkflow('all'); }}><option value="all">全部场景</option>{(Object.keys(groupName) as Scenario[]).map(key => <option key={key} value={key}>{groupName[key]}</option>)}</select></label><label>任务族<select aria-label="筛选任务族" value={workflow} onChange={event => setWorkflow(event.target.value)}><option value="all">全部任务族</option>{workflowOptions.map(item => <option key={item} value={item}>{item}</option>)}</select></label><span>{visibleManifest.length} 个冻结任务 · 图表只来自保存的实际运行</span></section>
+    </details><section className="workpack-filter"><label>展示场景<select aria-label="筛选场景" value={scenario} onChange={event => { setScenario(event.target.value as 'all' | Scenario); setWorkflow('all'); }}><option value="all">全部场景</option>{(Object.keys(groupName) as Scenario[]).map(key => <option key={key} value={key}>{groupName[key]}</option>)}</select></label><label>任务族<select aria-label="筛选任务族" value={workflow} onChange={event => setWorkflow(event.target.value)}><option value="all">全部任务族</option>{workflowOptions.map(item => <option key={item} value={item}>{item}</option>)}</select></label><span>{visibleManifest.length} 个冻结任务 · 图表只来自保存的实际运行</span></section>
     <section className="workpack-manifest">{visibleManifest.map(item => <div key={item.workpackId}><small>{groupName[item.scenario]} · R{item.round}</small><strong>{item.workflowType.replaceAll('-', ' ')}</strong><span>{item.workpackId} · {item.recordCount} 条 · {item.difficulty}</span></div>)}</section>
       <section className="workpack-result-head"><div><p>已保存实验</p><h2>{listLoading || detailLoading ? '正在载入保存的实验账本…' : selected ? `${selected.id.slice(0, 8)} · ${storedModeTitle[selectedMode]} · ${selected.status}` : '尚未启动新的工作包在线实验'}</h2></div>{items.length > 1 && <select aria-label="选择已保存实验" value={selectedId} onChange={event => setSelectedId(event.target.value)}>{items.map(item => <option key={item.id} value={item.id}>{isFormalV17(item) ? '正式 V17 · ' : ''}{item.id.slice(0, 8)} · {item.protocol.taskCountPerArm} 项/臂 · {item.status}</option>)}</select>}</section>
     {detailLoading ? <section className="workpack-loading"><LoaderCircle size={20} /><h2>正在载入实验摘要</h2><p>首屏只读取冻结任务、聚合计量和压缩逐任务账本；原始图、观察和报告会在点击对应运行时单独读取。</p></section> : selected ? <>
-      {isFormalEvidence && <section className="workpack-formal-evidence"><CheckCircle2 size={17} /><div><small>FORMAL V17 EVIDENCE</small><strong>当前展示的是已完成、质量门槛通过的 48 项正式 train 结果。</strong><span>全部指标由该实验保存的两臂 run、经验快照和报告派生；不是历史结果拼接。</span></div></section>}
+      {isFormalEvidence && <section className="workpack-formal-evidence"><CheckCircle2 size={17} /><div><small>FORMAL V17 EVIDENCE</small><strong>此历史上下文展示原协议下完成的 48 项 train 结果。</strong><span>全部指标由该实验保存的两臂 run、经验快照和报告派生；不是历史结果拼接。</span></div></section>}
       <section className="workpack-kpis"><div><small>结构化通过</small><strong>{selected.summary.baseline.passed}/{selected.summary.baseline.attempts} · {selected.summary.rsi.passed}/{selected.summary.rsi.attempts}</strong><span>Baseline · RSI</span></div><div><small>累计 token</small><strong>{number(selected.summary.baseline.totalTokens)} → {number(selected.summary.rsi.totalTokens)}</strong><span>完成配对 {selected.summary.pairedCompleted}</span></div><div><small>累计节省率</small><strong>{percent(selected.summary.tokenSavingRate)}</strong><span>{qualityGate?.sameQualityCostClaim ? '质量门槛通过' : '不作为同质量经济性结论'}</span></div><div><small>RSI Fast</small><strong>{selected.summary.learning.fastReuse}</strong><span>G0 创建 {selected.summary.learning.workflowCreated}</span></div></section>
       {qualityGate && <section className={`workpack-quality-gate ${qualityGate.status}`}><ShieldCheck size={17} /><div><small>QUALITY GATE / FULL ATTEMPT ACCOUNTING</small><strong>{qualityGate.status === 'passed' ? '两臂均完成且每项通过' : qualityGate.status === 'incomplete' ? '冻结范围未完成' : '存在结构化质量回归'}</strong><span>{qualityGate.reason}</span></div></section>}
       <Breakdown groups={visibleScenarioGroups} />

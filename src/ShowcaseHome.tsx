@@ -1,7 +1,8 @@
+import { useArchiveExperiment } from './archiveContext';
 import { ArrowRight, ArrowUpRight, Bot, CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, FileText, Headphones, Landmark, Pause, Play, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { PairDetail, SHOWCASE_EXPERIMENT, Showcase, TimelineEvent, number, percent, total } from './showcase';
+import { PairDetail, Showcase, TimelineEvent, number, percent, total } from './showcase';
 import './showcase.css';
 import './employee-console.css';
 
@@ -62,17 +63,18 @@ function channelLabel(event: TimelineEvent | undefined, fast: boolean): string {
 }
 
 export default function ShowcaseHome() {
+  const experimentId = useArchiveExperiment();
   const [data, setData] = useState<Showcase | null>(null);
   const [details, setDetails] = useState<Record<string, PairDetail>>({});
   const [scenario, setScenario] = useState<Scenario>('finance');
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { api<Showcase>(`/api/showcase/${SHOWCASE_EXPERIMENT}`).then(setData).catch(reason => setError(reason.message)); }, []);
+  useEffect(() => { api<Showcase>(`/api/showcase/${experimentId}`).then(setData).catch(reason => setError(reason.message)); }, []);
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
-    Promise.all(data.sources.map(source => api<PairDetail>(`/api/showcase/${SHOWCASE_EXPERIMENT}/pairs/${encodeURIComponent(source.featuredTaskId)}`)))
+    Promise.all(data.sources.map(source => api<PairDetail>(`/api/showcase/${experimentId}/pairs/${encodeURIComponent(source.featuredTaskId)}`)))
       .then(items => { if (!cancelled) setDetails(Object.fromEntries(items.map(item => [item.taskId, item]))); })
       .catch(reason => { if (!cancelled) setError(reason.message); });
     return () => { cancelled = true; };

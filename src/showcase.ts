@@ -1,4 +1,3 @@
-export const SHOWCASE_EXPERIMENT = 'online-rsi-serial-final-v4';
 
 export type Metrics = Record<string, number | boolean | undefined>;
 export type Audit = {

@@ -1,39 +1,63 @@
-import { useEffect, useState } from 'react';
-import { BarChart3, Database, GitBranch, Layers3, Play, PlugZap, ShieldCheck } from 'lucide-react';
-import CompareExperience from './CompareExperience';
-import ExecutionDemo from './ExecutionDemo';
-import EvaluationPanel from './EvaluationPanel';
-import OnlineEvolutionPanel from './OnlineEvolutionPanel';
-import TaskBankPanel from './TaskBankPanel';
-import PlatformPanel from './PlatformPanel';
-import RsiInsights from './RsiInsights';
-import ShowcaseHome from './ShowcaseHome';
-import TaskReplay from './TaskReplay';
-import LiveComparison from './LiveComparison';
-import WorkspaceWorkbench from './WorkspaceWorkbench';
-import WorkpackExperimentPanel from './WorkpackExperimentPanel';
-import TrajectoryPanel from './TrajectoryPanel';
-
-const pages = { trajectory: '轨迹重构预检', home: '工作台', compare: '成本与对比', live: '现场演示', insights: 'RSI 运行时', replay: '执行记录', experiments: '实验中心', showcase: '已保存展示', demo: '历史执行工作台', evaluation: '成对评测与成果', evolution: '随任务进化', taskbank: '真实数据任务库', platforms: '平台只读工作台' };
-type Page = keyof typeof pages;
-const primaryPages = ['home', 'experiments', 'trajectory'] as const;
-const experimentPages = ['compare', 'live', 'insights', 'replay'] as const;
-const legacyPages = ['demo', 'evaluation', 'evolution', 'taskbank', 'platforms'] as const;
-function fromHash(): Page {
-  const key = window.location.hash.slice(1).split('?')[0];
-  if (key === 'employees') {
-    window.history.replaceState(null, '', '#home');
-    return 'home';
-  }
-  return key in pages ? key as Page : 'home';
+import { useEffect, useState } from "react";
+import { Layers3 } from "lucide-react";
+import WorkspaceWorkbench from "./WorkspaceWorkbench";
+import CurrentEvidence from "./CurrentEvidence";
+import Archive from "./Archive";
+import { canonicalHash } from "./navigation";
+import "./release.css";
+function locationHash() {
+  const hash = canonicalHash(window.location.hash);
+  if (hash !== window.location.hash)
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search + hash,
+    );
+  return hash;
 }
 export default function App() {
-  const [page, setPage] = useState<Page>(fromHash);
-  useEffect(() => { const change = () => setPage(fromHash()); window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
-  const navigate = (next: Page) => { window.location.hash = next; };
-  if ((primaryPages as readonly Page[]).includes(page)) return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav>{primaryPages.map(key => <a key={key} href={`#${key}`} className={page === key ? 'active' : ''}>{pages[key]}</a>)}</nav><a href="#experiments" className="nav-lab">已保存运行 <BarChart3 size={14} /></a></header>{page === 'home' && <WorkspaceWorkbench />}{page === 'experiments' && <WorkpackExperimentPanel />}{page === 'trajectory' && <TrajectoryPanel />}</div>;
-  if ((experimentPages as readonly Page[]).includes(page)) return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav><a href="#home">工作台</a><a href="#experiments" className="active">实验中心</a></nav><a href="#experiments" className="nav-lab">返回实验中心 <BarChart3 size={14} /></a></header>{page === 'compare' && <CompareExperience />}{page === 'live' && <LiveComparison />}{page === 'insights' && <RsiInsights />}{page === 'replay' && <TaskReplay />}</div>;
-  if (page === 'showcase') return <div className="showcase-shell"><header className="showcase-nav"><a href="#home" className="showcase-brand"><Layers3 size={18} /><span>OPERATIONS</span><small>EMPLOYEE</small></a><nav><a href="#home">工作台</a><a href="#compare">验证与对照</a></nav><a href="#demo" className="nav-lab">实验工作台 <BarChart3 size={14} /></a></header><ShowcaseHome /></div>;
-  const icons: Record<(typeof legacyPages)[number], typeof Play> = { demo: Play, evaluation: ShieldCheck, evolution: GitBranch, taskbank: Database, platforms: PlugZap };
-  return <div className="app-shell legacy-shell"><aside className="sidebar"><a className="brand" href="#home"><span className="brand-icon"><Layers3 size={22} /></span><span>数字员工<span className="brand-sub">OPERATIONS LAB</span></span></a><div className="workspace-label">工作空间 <span>GRAPH RSI</span></div><div className="nav-label">实验工作台</div>{legacyPages.map(key => { const Icon = icons[key]; return <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => navigate(key)}><Icon size={18} />{pages[key]}</button>; })}<div className="sidebar-bottom"><div className="small-logo">R</div><div>Python 执行器<small>真实数据 · 可追溯执行</small></div></div></aside><div className="main-shell"><header className="topbar"><div>工作空间 / {pages[page]}</div><a href="#home">返回主展示</a></header><main>{page === 'demo' && <ExecutionDemo />}{page === 'evaluation' && <EvaluationPanel />}{page === 'evolution' && <OnlineEvolutionPanel />}{page === 'taskbank' && <TaskBankPanel />}{page === 'platforms' && <PlatformPanel />}</main></div></div>;
+  const [hash, setHash] = useState(locationHash);
+  useEffect(() => {
+    const changed = () => setHash(locationHash());
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
+  const page = hash.slice(1).split("?")[0];
+  return (
+    <div className="release-shell">
+      <header className="release-nav">
+        <a className="release-brand" href="#home">
+          <Layers3 size={22} />
+          <span>
+            数字员工<span>企业运营工作台</span>
+          </span>
+        </a>
+        <nav aria-label="主导航">
+          <a href="#home" aria-current={page === "home" ? "page" : undefined}>
+            数字员工
+          </a>
+          <a
+            href="#evidence"
+            aria-current={page === "evidence" ? "page" : undefined}
+          >
+            当前证据
+          </a>
+        </nav>
+      </header>
+      {page === "home" ? (
+        <WorkspaceWorkbench />
+      ) : page === "evidence" ? (
+        <CurrentEvidence />
+      ) : (
+        <Archive key={hash} />
+      )}
+      <footer className="release-footer">
+        <span>业务成果与每次实际执行关联保存</span>
+        <details>
+          <summary>开发与历史</summary>
+          <a href="#archive">打开历史实验与技术审计 →</a>
+        </details>
+      </footer>
+    </div>
+  );
 }
