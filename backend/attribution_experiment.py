@@ -30,6 +30,14 @@ def summarize(item):
     for arm in ARMS:
         runs = [pair[arm] for pair in item.get('pairs') or [] if pair.get(arm)]
         metrics = [run.get('metrics') or {} for run in runs]
+        execution_stages = {}
+        for run in runs:
+            for stage, values in (run.get('executionStageMetrics') or {}).items():
+                target = execution_stages.setdefault(stage, {'requests': 0, 'inputTokens': 0, 'outputTokens': 0, 'usageComplete': True})
+                target['requests'] += int(values.get('requests') or 0)
+                target['inputTokens'] += int(values.get('inputTokens') or 0)
+                target['outputTokens'] += int(values.get('outputTokens') or 0)
+                target['usageComplete'] = target['usageComplete'] and values.get('usageComplete') is True
         arm_summary[arm] = {
             'attempts': len(runs),
             'passed': sum(run.get('status') == 'completed' and (run.get('evaluation') or {}).get('status') == 'passed' for run in runs),
@@ -41,6 +49,7 @@ def summarize(item):
             'toolErrors': sum(int(metric.get('toolErrors') or 0) for metric in metrics),
             'durationMs': round(sum(float(metric.get('durationMs') or 0) for metric in metrics), 3),
             'failedReportAttempts': sum(int(metric.get('failedReportAttempts') or 0) for metric in metrics),
+            'executionStages': execution_stages,
         }
         arm_summary[arm]['tokens'] = arm_summary[arm]['inputTokens'] + arm_summary[arm]['outputTokens']
     points = []
@@ -179,7 +188,7 @@ class AttributionExperiment:
             raise ValueError(f'归因实验要求执行、规划和组合统一使用 {MODEL}')
 
     async def start(self, mode='smoke'):
-        if mode not in {'smoke', 'probe', 'formal'}:
+        if mode not in {'smoke', 'probe', 'repair_probe', 'formal'}:
             raise ValueError('unknown attribution stage')
         if self.tasks:
             raise ValueError('已有归因实验在途')
@@ -195,8 +204,13 @@ class AttributionExperiment:
             ), None)
             if not predecessor:
                 raise ValueError('同一 runtime 与资产的双任务预检未通过，禁止启动正式十二任务归因实验')
-        task_limit = {'smoke': 1, 'probe': 2}.get(mode, len(asset['tasks']))
-        manifest = deepcopy(asset['tasks'][:task_limit])
+        if mode == 'repair_probe':
+            # Minimal natural chain: create the order-review parent, recover the
+            # payment-period coverage extension, then test its later use.
+            manifest = deepcopy([asset['tasks'][index] for index in (0, 8, 9)])
+        else:
+            task_limit = {'smoke': 1, 'probe': 2}.get(mode, len(asset['tasks']))
+            manifest = deepcopy(asset['tasks'][:task_limit])
         key = str(uuid4())
         directory = self.directory / key
         item = {
@@ -210,7 +224,8 @@ class AttributionExperiment:
             'pairs': [],
             'predecessorId': predecessor['id'] if predecessor else None,
             'protocol': {
-                'id': 'finance-graph-rsi-learning-attribution-v5-12',
+                'id': ('finance-graph-rsi-error-recovery-probe-v1' if mode == 'repair_probe'
+                       else 'finance-graph-rsi-learning-attribution-v5-12'),
                 'model': MODEL,
                 'planner': MODEL,
                 'composition': MODEL,
@@ -230,6 +245,7 @@ class AttributionExperiment:
                 'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
                                 else 'cold-start plus first reuse/rebind pair; excluded from formal metrics' if mode == 'probe'
+                                else 'FX01 creates the parent; FX09 exercises the coverage extension and bounded report recovery; FX10 tests later use; excluded from formal metrics' if mode == 'repair_probe'
                                 else 'formal frozen twelve-task finance chain'),
                 'failurePolicy': 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure',
             },
@@ -287,7 +303,7 @@ class AttributionExperiment:
                         or (pair[arm].get('evolution') or {}).get('maintenanceError')
                         for arm in ARMS
                     )
-                    if mode in {'smoke', 'probe'} and any(
+                    if mode in {'smoke', 'probe', 'repair_probe'} and any(
                         pair[arm].get('status') != 'completed' or (pair[arm].get('evaluation') or {}).get('status') != 'passed'
                         for arm in ARMS
                     ):

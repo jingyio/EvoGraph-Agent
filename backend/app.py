@@ -444,7 +444,7 @@ def create_app(service=None):
         ]
 
     @app.post('/api/attribution-experiments', status_code=202)
-    async def attribution_start(request: WorkspaceRunRequest, mode: Literal['smoke', 'probe', 'formal'] = 'smoke'):
+    async def attribution_start(request: WorkspaceRunRequest, mode: Literal['smoke', 'probe', 'repair_probe', 'formal'] = 'smoke'):
         if not request.confirmCost:
             raise HTTPException(400, '需要确认真实模型费用')
         if workspace_runner.tasks or workpack_experiment.tasks or trajectory_experiment.tasks:

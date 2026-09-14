@@ -113,9 +113,27 @@ async def test_train_only_readonly_load_and_actual_child_use(tmp_path):
         other=dict(task,split=split)
         trajectory.maintain(restored,dict(run,id=split),other,list(tools.values()))
         assert len(restored.versions)==1
-    failed=dict(run,id='failure',status='limited',evolution={'usedVersionId':restored.versions[0]['id']})
+    negative = {'kind':'business_fact_failure_after_reuse','graphIds':[restored.versions[0]['id']],
+                'request':task['task'],'stage':'report_validation','issues':['metrics'],
+                'decision':{'graphId':restored.versions[0]['id'],'nodeIds':['reconcile_0_aggregate_0'],
+                            'reason':'旧图只覆盖订单聚合','uncovered':['不同月份去重计数']},
+                'successfulGraphTools':['workspace_reconcile_keyed_sums']}
+    failed=dict(run,id='failure',status='limited',evaluation={'status':'failed','issues':['metrics']},
+                evolution={'usedVersionId':restored.versions[0]['id']},
+                trajectoryMatch=negative['decision'],
+                trajectoryRecovery={'status':'failed','negativeMatch':negative},
+                reportRecovery={'termination':'max_failed_publish_attempts'},
+                metrics={'usageComplete':True},
+                toolTrace=[dict(trace,executor='graph')])
     trajectory.maintain(restored,failed,task,list(tools.values()))
     assert len(restored.versions)==1
+    negative=restored.versions[0]['negativeMatchEvidence'][0]
+    assert negative['runId']=='failure' and negative['issues']==['metrics']
+    assert negative['decision']['uncovered']==['不同月份去重计数']
+    assert failed['evolution']['generatedVersionIds']==[]
+    assert '负证据' in failed['evolution']['note']
+    prompt=json.dumps(trajectory.selection_prompt(task,restored.versions),ensure_ascii=False)
+    assert '不同月份去重计数' in prompt and 'negativeMatchEvidence' in prompt
     # A successfully observed new compute is a real protocol-level extension.
     second=deepcopy(run);second['id']='two';second['evolution']={'usedVersionId':restored.versions[0]['id']}
     second['toolTrace'].append({'ok':True,'tool':'workspace_aggregate_rows','arguments':{'tableId':task['tableBindings']['orders'],'operation':'count'},'result':{'rowCount':5}})

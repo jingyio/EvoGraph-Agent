@@ -10,7 +10,7 @@ from backend.attribution_experiment import AttributionExperiment
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=('smoke', 'probe', 'formal'))
+    parser.add_argument('mode', choices=('smoke', 'probe', 'repair_probe', 'formal'))
     parser.add_argument('--root', default=str(Path(__file__).resolve().parents[1]))
     args = parser.parse_args()
     experiment = AttributionExperiment(Path(args.root))

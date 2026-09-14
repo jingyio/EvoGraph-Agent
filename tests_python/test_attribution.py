@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from backend.attribution_assets import TASKS, VERSION, _extended_expected
+from backend.attribution_assets import METRIC_DESCRIPTIONS, TASKS, VERSION, _extended_expected
 from backend.attribution_experiment import ARMS, summarize
 from backend.task_runner import TaskRunRequest, TaskRunner
 from backend.workspace import WorkspaceBank, WorkspaceManager
@@ -26,6 +26,44 @@ def test_status_extension_uses_current_rows_and_updates_union():
     assert result['groups']['status_review'] == ['o2']
     assert result['selectedIds'] == ['o1', 'o2']
     assert expected == {'metrics': {'order_count': 2}, 'groups': {'difference': ['o1']}, 'selectedIds': ['o1']}
+
+
+
+
+def test_public_metric_descriptions_define_period_without_expected_values(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'input.json', json.dumps({
+        'orders': [{'order_id': 'a', 'purchased_month': '2018-01'}],
+    }).encode())
+    public, _ = manager.create_task(workspace['id'], '汇总订单覆盖期间。', split='train')
+    task = manager.tasks[public['id']]
+    task['deliveryContract'] = {
+        'requiredMetricKeys': ['period_count'],
+        'metricDescriptions': {'period_count': METRIC_DESCRIPTIONS['period_count']},
+    }
+    report = next(tool for tool in manager.tools(task['id']) if tool.name == 'workspace_publish_report')
+    schema = report.parameters['properties']['metrics']['properties']['period_count']
+    assert schema['description'] == '当前订单表 purchased_month 的不同非空值数量。'
+    assert 'expected' not in json.dumps(report.parameters)
+
+
+def test_summary_aggregates_fine_grained_execution_stages():
+    left = _run('a1')
+    right = _run('b1', 80)
+    left['executionStageMetrics'] = {
+        'compute_selection_and_binding': {'requests': 3, 'inputTokens': 30, 'outputTokens': 6, 'usageComplete': True},
+        'report_composition': {'requests': 1, 'inputTokens': 10, 'outputTokens': 2, 'usageComplete': True},
+    }
+    right['executionStageMetrics'] = {
+        'report_composition': {'requests': 1, 'inputTokens': 8, 'outputTokens': 2, 'usageComplete': True},
+    }
+    result = summarize({'status': 'completed', 'manifest': [{'id': 'FX01'}], 'pairs': [{
+        'status': 'completed', 'spec': {'id': 'FX01', 'position': 1, 'title': 'one', 'opportunity': 'create', 'sourceTaskId': 'F01'},
+        'no_learning': left, 'online_rsi': right,
+    }], 'protocol': {'actualGraphUseMinimumRate': None}})
+    assert result['arms']['no_learning']['executionStages']['compute_selection_and_binding']['requests'] == 3
+    assert 'compute_selection_and_binding' not in result['arms']['online_rsi']['executionStages']
 
 
 def _run(run_id, tokens=100, passed=True, evolution=None):
@@ -150,6 +188,86 @@ async def test_group_failure_replays_current_compute_without_private_truth(tmp_p
     assert 'missing_payment' in serialized and 'privateValidation' not in serialized
 
 
+
+@pytest.mark.asyncio
+async def test_business_fact_recovery_can_compute_before_resubmitting_report(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'input.json', json.dumps({
+        'orders': [
+            {'order_id': 'o1', 'purchased_month': '2018-01'},
+            {'order_id': 'o2', 'purchased_month': '2018-02'},
+        ],
+    }).encode())
+    public, questions = manager.create_task(workspace['id'], '汇总当前订单覆盖月份数并保存报告。', split='train')
+    assert not questions
+    task = manager.tasks[public['id']]
+    task['computeInterface'] = 'granular-compute-v1'
+    task['deliveryContract'] = {
+        'requiredMetricKeys': ['period_count'],
+        'requiredGroupNames': [],
+        'selectedIdField': 'order_id',
+        'metricDescriptions': {'period_count': METRIC_DESCRIPTIONS['period_count']},
+    }
+    task['privateValidation'] = {
+        'metrics': {'period_count': 2},
+        'groups': {},
+        'selectedIds': [],
+    }
+    manager._persist(manager.workspace(workspace['id']))
+    orders = task['tableBindings']['orders']
+    seen_available = []
+
+    class Model:
+        model = 'injected'
+        settings = {}
+
+        async def complete(self, messages, tools):
+            names = [tool.name for tool in tools]
+            seen_available.append(names)
+            observations = [
+                json.loads(message['content'])
+                for message in messages
+                if message.get('role') == 'tool'
+            ]
+            distinct = next((row for row in observations
+                             if row.get('result', {}).get('field') == 'purchased_month'), None)
+            preview = next((row for row in observations
+                            if isinstance(row.get('result', {}).get('records'), list)), None)
+            evidence = [row['_evidenceRef'] for row in (preview or {}).get('result', {}).get('records', [])]
+            failed_report = any('报告未通过的类别' in message.get('content', '')
+                                for message in messages if message.get('role') == 'user')
+            if distinct:
+                return response('workspace_publish_report', {
+                    'metrics': {'period_count': distinct['result']['distinctCount']},
+                    'selectedIds': [], 'evidenceIds': evidence, 'summary': '当前订单覆盖 2 个不同月份。',
+                })
+            if failed_report:
+                assert 'workspace_distinct_values' in names
+                return response('workspace_distinct_values', {
+                    'tableId': orders, 'field': 'purchased_month',
+                })
+            if preview:
+                return response('workspace_publish_report', {
+                    'metrics': {'period_count': 1},
+                    'selectedIds': [], 'evidenceIds': evidence, 'summary': '当前订单覆盖 1 个不同月份。',
+                })
+            return response('workspace_preview_rows', {
+                'tableId': orders, 'page': 1, 'pageSize': 50,
+            })
+
+    runner = TaskRunner(WorkspaceBank(manager), lambda _: Model(), learning_enabled=False,
+                        run_directory=tmp_path / 'runs')
+    run = await runner.start(TaskRunRequest(taskId=task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+    await runner.shutdown()
+    assert run['status'] == 'completed'
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['failedReportAttempts'] == 1
+    assert any('workspace_distinct_values' in names for names in seen_available[1:])
+    assert any(trace.get('tool') == 'workspace_distinct_values' and trace.get('ok') is True
+               for trace in run['toolTrace'])
+
 def test_no_learning_arm_names_are_explicit():
     assert ARMS == ('no_learning', 'online_rsi')
 
@@ -257,3 +375,30 @@ async def test_complete_trajectory_residual_enters_report_only_boundary(tmp_path
     assert run['phaseMetrics']['execute']['requests'] == 1
     assert any(event['type'] == 'trajectory_report_boundary' for event in run['events'])
     assert calls[-1] == ('executor', ['workspace_publish_report'])
+
+
+@pytest.mark.asyncio
+async def test_repair_probe_uses_create_extension_and_later_use_chain(tmp_path, monkeypatch):
+    from backend import attribution_experiment as module
+    from backend.attribution_experiment import AttributionExperiment
+    asset = {'tasks': [
+        {'id': f'FX{i:02d}', 'position': i, 'title': str(i), 'opportunity': 'test',
+         'sourceTaskId': f'F{i:02d}'} for i in range(1, 13)
+    ]}
+    monkeypatch.setattr(module, 'build', lambda root: deepcopy(asset))
+    monkeypatch.setattr(module, 'fingerprint', lambda root: {'files': {}, 'digest': 'runtime'})
+    monkeypatch.setattr(AttributionExperiment, '_validate_model', lambda self: None)
+    experiment = AttributionExperiment(tmp_path)
+    # Inspect manifest construction without starting the asynchronous worker.
+    import asyncio
+    captured = {}
+    class Pending:
+        def cancel(self): pass
+    def capture(coro):
+        captured['coro'] = coro
+        return Pending()
+    monkeypatch.setattr(asyncio, 'create_task', capture)
+    started = await experiment.start('repair_probe')
+    assert [row['id'] for row in started['manifest']] == ['FX01', 'FX09', 'FX10']
+    assert started['protocol']['id'] == 'finance-graph-rsi-error-recovery-probe-v1'
+    captured['coro'].close()

@@ -266,6 +266,7 @@ class TaskRunner:
                                 deadlineFinalizationGuards=0,
                                 semanticConstraintGuards=0, runtimeOverheadMs=0, localComputeCalls=0, localComputeMs=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute', 'match', 'compile']},
+                   executionStageMetrics={},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
@@ -571,8 +572,34 @@ class TaskRunner:
                 else:
                     metrics['usageComplete'] = pm['usageComplete'] = False
                 message = result.get('message') or {}
+                decision_stage = None
+                if phase == 'execute':
+                    calls = message.get('tool_calls') or []
+                    names = [call.get('function', {}).get('name') for call in calls]
+                    effects = {known[name].effect for name in names if name in known}
+                    if names and set(names).issubset(report_tool_names):
+                        decision_stage = 'report_composition'
+                    elif effects and effects == {'compute'}:
+                        decision_stage = 'compute_selection_and_binding'
+                    elif effects and effects == {'read'}:
+                        decision_stage = 'read_selection_and_binding'
+                    elif names:
+                        decision_stage = 'mixed_tool_decision'
+                    else:
+                        decision_stage = 'terminal_response'
+                    stage_metrics = run['executionStageMetrics'].setdefault(
+                        decision_stage, dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True),
+                    )
+                    stage_metrics['requests'] += 1
+                    if usage:
+                        stage_metrics['inputTokens'] += usage['input']
+                        stage_metrics['outputTokens'] += usage['output']
+                    else:
+                        stage_metrics['usageComplete'] = False
+                    if result.get('usageComplete') is False:
+                        stage_metrics['usageComplete'] = False
                 event('model', phase, dict(requestId=request_id, model=provider.model, usage=usage,
-                    content=message.get('content'), toolCalls=message.get('tool_calls') or []))
+                    decisionStage=decision_stage, content=message.get('content'), toolCalls=message.get('tool_calls') or []))
                 if result.get('finishReason') in ['length', 'content_filter']:
                     raise ValueError('模型响应未完整结束')
                 return result
@@ -924,6 +951,7 @@ class TaskRunner:
                     return False
                 info = run['evolution']
                 source_ids = selected.get('sourceVersionIds') or [selected['id']]
+                info['trajectoryTraceStart'] = len(run.get('toolTrace', []))
                 info.update(usedVersionId=selected['id'] if len(source_ids) == 1 else None,
                             usedVersionIds=source_ids, generation=selected['generation'], matchVersion=selected['matchVersion'],
                             planningPath='composition' if len(source_ids) > 1 else 'partial', execution='trajectory',
@@ -958,6 +986,7 @@ class TaskRunner:
                     run['graph']['status'] = 'done'
                 finally:
                     append_observations(ledger[start:], True)
+                    info['trajectoryTraceEnd'] = len(run.get('toolTrace', []))
                 uncovered = [str(item) for item in choice['uncovered'] if str(item).strip()]
                 current_intent = '；'.join(uncovered)[:300] if uncovered else '使用当前确定性观察发布完整报告'
                 trajectory_residual_complete = not uncovered
@@ -1221,18 +1250,24 @@ class TaskRunner:
                     if not deadline_finalization.get('announced'):
                         deadline_finalization['announced'] = True
                         messages.append(dict(role='user', content='当前公开资料范围已完整观察，且接近执行时限。不要再读取、保存草稿或导出；请立即调用 publish_report，使用当前观察提交完整 metrics、selectedIds 与 evidenceIds。'))
-                elif report_only or (report_recovery['active'] and scope_is_complete()):
+                elif report_only:
                     available = report_tools
                 elif fact_repair:
                     # The evaluator has already confirmed that all required
                     # rows were observed.  A metric/selection repair may use
-                    # deterministic compute outputs, but must not inflate the
-                    # tail by re-reading the same business data.
+                    # deterministic compute outputs before resubmitting the
+                    # report, but must not inflate the tail by re-reading the
+                    # same business data.  Keep this branch ahead of the
+                    # generic complete-scope report boundary: a fact failure
+                    # can mean the model still needs a new computation over an
+                    # already observed current table.
                     available = [tool for tool in tools if tool.effect in ['compute', 'artifact']]
                     event('report_recovery', '事实修复限制为确定性计算与报告', dict(
                         allowedTools=[tool.name for tool in available],
                         withheldReadTools=[tool.name for tool in tools if tool.effect == 'read'],
                     ))
+                elif report_recovery['active'] and scope_is_complete():
+                    available = report_tools
                 elif run['strategy'] in ['autotool', *graph_strategies] and not run.get('fallback') and not run.get('graphHandoff'):
                     retrieved = retrieve_tools(current_intent, tools)
                     names = {r['name'] for r in retrieved} | {t.name for t in tools if t.effect != 'read'}
@@ -1322,6 +1357,46 @@ class TaskRunner:
                                           attempt=report_recovery['attempts'], missingObservedEvidenceRefs=missing_evidence)
                         run.setdefault('reportRecovery', dict(attempts=[]))['attempts'].append(diagnostic)
                         event('report_recovery', '报告评分失败', diagnostic)
+                        used_ids = (run.get('evolution') or {}).get('usedVersionIds') or (
+                            [(run.get('evolution') or {}).get('usedVersionId')]
+                            if (run.get('evolution') or {}).get('usedVersionId') else []
+                        )
+                        actual_graph_use = any(
+                            trace.get('executor') == 'graph' and trace.get('ok') is True
+                            for trace in run.get('toolTrace', [])
+                        )
+                        if kind in {'business_facts', 'mixed'} and used_ids and actual_graph_use:
+                            recovery = run.setdefault('trajectoryRecovery', {
+                                'status': 'recovering',
+                                'attemptedVersionIds': deepcopy(used_ids),
+                                'startTraceIndex': (run.get('evolution') or {}).get('trajectoryTraceStart', 0),
+                                'replayEndTraceIndex': (run.get('evolution') or {}).get('trajectoryTraceEnd'),
+                                'attempts': [],
+                            })
+                            recovery['status'] = 'recovering'
+                            recovery['failedStage'] = 'report_validation'
+                            recovery['failureTraceIndex'] = len(run.get('toolTrace', [])) - 1
+                            recovery['attempts'].append(deepcopy(diagnostic))
+                            if 'negativeMatch' not in recovery:
+                                decision = run.get('trajectoryMatch') or {}
+                                recovery['negativeMatch'] = {
+                                    'kind': 'business_fact_failure_after_reuse',
+                                    'graphIds': deepcopy(used_ids),
+                                    'request': task.get('task'),
+                                    'stage': 'report_validation',
+                                    'issues': deepcopy(issues),
+                                    'decision': {
+                                        'graphId': decision.get('graphId'),
+                                        'nodeIds': deepcopy(decision.get('nodeIds') or []),
+                                        'reason': decision.get('reason'),
+                                        'uncovered': deepcopy(decision.get('uncovered') or []),
+                                    },
+                                    'successfulGraphTools': sorted({
+                                        trace.get('tool') for trace in run.get('toolTrace', [])
+                                        if trace.get('executor') == 'graph' and trace.get('ok') is True
+                                    }),
+                                }
+                                event('trajectory_recovery', '复用后事实校验失败，进入同run有界恢复', deepcopy(recovery))
                         if missing_evidence and await recover_public_delivery_scope():
                             return
                         recovered_facts = False
@@ -1331,6 +1406,11 @@ class TaskRunner:
                             report_recovery['termination'] = 'repeated_signature' if repeated else 'max_failed_publish_attempts'
                             run['reportRecovery']['termination'] = report_recovery['termination']
                             run.update(status='limited', phase='报告恢复已终止')
+                            if (run.get('trajectoryRecovery') or {}).get('status') == 'recovering':
+                                run['trajectoryRecovery'].update(
+                                    status='failed', termination=report_recovery['termination'],
+                                    endTraceIndex=len(run.get('toolTrace', [])),
+                                )
                             event('report_recovery', '报告恢复已终止', dict(termination=report_recovery['termination']))
                             return
                         report_recovery['active'] = True
@@ -1361,6 +1441,12 @@ class TaskRunner:
                         # Do not pay for another model turn merely to hear it
                         # restate completion or permit duplicate publication.
                         run.update(status='completed', phase='成果已保存')
+                        if (run.get('trajectoryRecovery') or {}).get('status') == 'recovering':
+                            run['trajectoryRecovery'].update(
+                                status='recovered', endTraceIndex=len(run.get('toolTrace', [])),
+                                finalEvaluation=deepcopy(run.get('evaluation')),
+                            )
+                            event('trajectory_recovery', '同run恢复通过，成功轨迹可进入维护', deepcopy(run['trajectoryRecovery']))
                         return
         try:
             await asyncio.wait_for(workflow(), timeout=config.RUN_TIMEOUT)

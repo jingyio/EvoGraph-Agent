@@ -1154,12 +1154,15 @@ class WorkspaceManager:
         paging = {'page': {'type': 'integer', 'minimum': 1}, 'pageSize': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RETURNED_ROWS}}
         delivery = task.get('deliveryContract') or {}
         required_metric_keys = delivery.get('requiredMetricKeys') or []
+        metric_descriptions = delivery.get('metricDescriptions') or {}
         required_group_names = delivery.get('requiredGroupNames') or []
         selected_id_field = delivery.get('selectedIdField') if isinstance(delivery.get('selectedIdField'), str) else None
         selected_id_description = (f'业务记录 ID：使用当前资料字段 {selected_id_field} 的值，不得使用工作区 rowId 或 evidenceId。'
                                    if selected_id_field else '任务要求的业务记录 ID。')
         metric_schema = (
-            object_schema({name: {'type': 'integer'} for name in required_metric_keys})
+            object_schema({name: {'type': 'integer', **({'description': metric_descriptions[name]}
+                                                            if isinstance(metric_descriptions.get(name), str) else {})}
+                           for name in required_metric_keys})
             if required_metric_keys else {'type': 'object', 'additionalProperties': True}
         )
         group_name_schema = ({'type': 'string', 'enum': required_group_names}

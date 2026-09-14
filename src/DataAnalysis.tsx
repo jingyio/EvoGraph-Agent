@@ -83,6 +83,13 @@ type Point = {
     generatedMatchVersions?: Array<string | number>;
   };
 };
+type ExecutionStageMetric = {
+  requests?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  tokens?: number | null;
+  usageComplete?: boolean;
+};
 type ArmSummary = {
   attempts?: number;
   passed?: number;
@@ -94,6 +101,7 @@ type ArmSummary = {
   toolCalls?: number;
   usageIncomplete?: number;
   costUsd?: number | null;
+  executionStages?: Record<string, ExecutionStageMetric>;
 };
 type ModelPricing = {
   currency: "USD";
@@ -1033,6 +1041,28 @@ export default function DataAnalysis() {
     (point) => point.rsi.planningPath === "fast",
   ).length;
   const scopeFastRate = visible.length ? scopeFast / visible.length : null;
+  const executionStageRows = [
+    ["read_selection_and_binding", "读取选择", "选择当前资料、字段或检索范围"],
+    ["compute_selection_and_binding", "计算选择", "选择聚合、关联、比较与参数绑定"],
+    ["mixed_tool_decision", "混合决策", "同次响应包含多类工具或无法单独归类"],
+    ["report_composition", "报告组合", "组织并提交有证据的业务报告"],
+  ] as const;
+  const baselineExecutionStages = baseline.executionStages || {};
+  const rsiExecutionStages = rsi.executionStages || {};
+  const executionRequests = (stages: Record<string, ExecutionStageMetric>) =>
+    executionStageRows.reduce(
+      (total, [key]) => total + (stages[key]?.requests || 0),
+      0,
+    );
+  const baselineOtherRequests =
+    scopeBaselineRequests == null
+      ? null
+      : Math.max(0, scopeBaselineRequests - executionRequests(baselineExecutionStages));
+  const rsiOtherRequests =
+    scopeRsiRequests == null
+      ? null
+      : Math.max(0, scopeRsiRequests - executionRequests(rsiExecutionStages));
+
   const scopeG0 = visible.reduce(
     (total, point) => total + (point.rsi.generatedVersionIds?.length || 0),
     0,
@@ -1065,6 +1095,32 @@ export default function DataAnalysis() {
       point.baseline.usageComplete === false ||
       point.rsi.usageComplete === false,
   ).length;
+  const qualityGate = detail?.summary?.qualityGate;
+  const qualityGateFailed =
+    qualityGate === false ||
+    (typeof qualityGate === "object" &&
+      qualityGate.status != null &&
+      qualityGate.status !== "passed");
+  const claimRestriction =
+    metadata?.status === "candidate"
+      ? {
+          title: "候选状态，仅展示绝对值",
+          detail: "当前测试组尚未晋升 formal，不计算或展示正式收益曲线。",
+        }
+      : incompleteUsage > 0
+        ? {
+            title: "usage 不完整，不计算收益",
+            detail: "至少一个保存运行缺少完整 token usage，保留已知绝对值和失败记录。",
+          }
+        : qualityGateFailed
+          ? {
+              title: "质量门槛未通过，不计算收益",
+              detail: "两臂质量未满足可比条件，保留绝对成本和全部失败。",
+            }
+          : {
+              title: "当前协议不允许正式收益结论",
+              detail: "保留两臂绝对成本和全部失败，不计算或展示净收益曲线。",
+            };
 
   return (
     <main className="analysis-page">
@@ -1361,7 +1417,7 @@ export default function DataAnalysis() {
                 <span>
                   {costConclusionAllowed
                     ? `节省 ${percent(scopeTokenSaving)}`
-                    : "usage/质量不完整，不计算收益"}
+                    : claimRestriction.title}
                 </span>
               </article>
               <article>
@@ -1373,7 +1429,7 @@ export default function DataAnalysis() {
                 <span>
                   {costConclusionAllowed && scopeCostSaving != null
                     ? `节省 ${percent(scopeCostSaving)}`
-                    : "保存的成本估算，不计算收益"}
+                    : claimRestriction.title}
                 </span>
               </article>
               <article>
@@ -1385,7 +1441,7 @@ export default function DataAnalysis() {
                 <span>
                   {costConclusionAllowed
                     ? `节省 ${percent(scopeLatencySaving)}`
-                    : "仅展示已发生的串行耗时"}
+                    : claimRestriction.title}
                 </span>
               </article>
               <article>
@@ -1397,7 +1453,7 @@ export default function DataAnalysis() {
                 <span>
                   {costConclusionAllowed
                     ? `节省 ${percent(scopeRequestSaving)}`
-                    : "保存的真实请求数，不计算收益"}
+                    : claimRestriction.title}
                 </span>
               </article>
               <article>
@@ -1600,6 +1656,43 @@ export default function DataAnalysis() {
             </section>
           )}
 
+          {isAttribution && points.length > 0 && (
+            <section className="analysis-section analysis-decision-stages" aria-label="模型决策请求分解">
+              <header>
+                <div>
+                  <p className="eyebrow">MODEL DECISION BREAKDOWN</p>
+                  <h2>模型决策请求分解</h2>
+                </div>
+                <p>
+                  按保存模型响应实际选择的工具类型归类。这里只展示请求绝对值；失败重试和最终报告请求均保留。
+                </p>
+              </header>
+              <div className="analysis-stage-grid">
+                {executionStageRows.map(([key, label, description]) => (
+                  <article key={key}>
+                    <small>{label}</small>
+                    <div>
+                      <span>{labels.baseline}</span>
+                      <strong>{number(baselineExecutionStages[key]?.requests)}</strong>
+                    </div>
+                    <div>
+                      <span>{labels.rsi}</span>
+                      <strong>{number(rsiExecutionStages[key]?.requests)}</strong>
+                    </div>
+                    <p>{description}</p>
+                  </article>
+                ))}
+              </div>
+              <p className="analysis-stage-note">
+                四类合计只覆盖 execute 阶段。计划、匹配及其他模型请求另有 {number(baselineOtherRequests)} / {number(rsiOtherRequests)} 次，
+                已包含在页面顶部的总请求数中。
+                {metadata.status === "candidate"
+                  ? " 当前仍是候选结果，仅展示绝对值；候选状态下不计算正式节省率。"
+                  : " 该分解用于解释请求发生在哪里，不把某一类别数量直接换算为收益。"}
+              </p>
+            </section>
+          )}
+
           {points.length > 0 && (
             <section className="analysis-section analysis-saving-layout">
               <article>
@@ -1617,8 +1710,8 @@ export default function DataAnalysis() {
                 ) : (
                   <div className="analysis-empty">
                     <ShieldCheck size={20} />
-                    <strong>质量或 usage 未满足可比条件</strong>
-                    <p>保留两臂绝对成本和全部失败，不计算或展示净收益曲线。</p>
+                    <strong>{claimRestriction.title}</strong>
+                    <p>{claimRestriction.detail}</p>
                   </div>
                 )}
               </article>

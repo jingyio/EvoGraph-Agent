@@ -14,6 +14,28 @@ from pathlib import Path
 
 class AnalysisDatasets:
     SOURCE_KINDS = {'workpack', 'online-e2e', 'attribution'}
+    EXECUTION_STAGE_KEYS = (
+        'read_selection_and_binding',
+        'compute_selection_and_binding',
+        'mixed_tool_decision',
+        'report_composition',
+    )
+    READ_DECISION_TOOLS = {
+        'request_tools', 'workspace_list_sources', 'workspace_get_schema',
+        'workspace_profile_table', 'workspace_preview_rows', 'workspace_get_row',
+        'workspace_filter_rows', 'workspace_sort_rows', 'workspace_join_rows',
+        'workspace_compare_tables', 'workspace_search_text', 'workspace_find_evidence',
+        'workspace_get_policy_excerpt', 'workspace_get_task_context',
+        'workspace_list_saved_reports',
+    }
+    COMPUTE_DECISION_TOOLS = {
+        'workspace_aggregate_rows', 'workspace_ordered_partition',
+        'workspace_reconcile_keyed_sums', 'workspace_map_fields',
+        'workspace_aggregate_keyed', 'workspace_derive_values',
+        'workspace_align_keyed', 'workspace_compare_values',
+        'workspace_select_missing', 'workspace_filter_keyed',
+    }
+    REPORT_DECISION_TOOLS = {'workspace_publish_report'}
 
     def __init__(self, root: Path):
         self.root = Path(root)
@@ -857,6 +879,8 @@ class AnalysisDatasets:
             )
             baseline_summary['costUsd'] = self._projected_cost(points, 'baseline')
             rsi_summary['costUsd'] = self._projected_cost(points, 'rsi')
+            baseline_summary['executionStages'] = self._execution_stages(item, 'no_learning', baseline)
+            rsi_summary['executionStages'] = self._execution_stages(item, 'online_rsi', rsi)
             later_use = [use for revision in revisions for use in revision.get('subsequentUses') or []]
             actual_graph_use = deepcopy(saved.get('actualGraphUse'))
             if not isinstance(actual_graph_use, dict):
@@ -949,6 +973,72 @@ class AnalysisDatasets:
             'learning': learning,
             'reliability': reliability,
         }
+
+    @classmethod
+    def _decision_stage(cls, event: dict) -> str:
+        detail = event.get('detail') or {}
+        declared = detail.get('decisionStage')
+        if declared in cls.EXECUTION_STAGE_KEYS:
+            return declared
+        if declared == 'terminal_response':
+            return 'mixed_tool_decision'
+        names = [
+            ((call.get('function') or {}).get('name'))
+            for call in detail.get('toolCalls') or []
+            if isinstance(call, dict)
+        ]
+        names = [name for name in names if isinstance(name, str) and name]
+        selected = set(names)
+        if names and selected.issubset(cls.REPORT_DECISION_TOOLS):
+            return 'report_composition'
+        if names and selected.issubset(cls.COMPUTE_DECISION_TOOLS):
+            return 'compute_selection_and_binding'
+        if names and selected.issubset(cls.READ_DECISION_TOOLS):
+            return 'read_selection_and_binding'
+        return 'mixed_tool_decision'
+
+    @classmethod
+    def _execution_stages(cls, item: dict, arm: str, saved_arm: dict) -> dict:
+        totals = {
+            key: {'requests': 0, 'inputTokens': 0, 'outputTokens': 0, 'usageComplete': True}
+            for key in cls.EXECUTION_STAGE_KEYS
+        }
+        runs = [pair.get(arm) or {} for pair in item.get('pairs') or [] if pair.get(arm)]
+        if not runs and isinstance(saved_arm.get('executionStages'), dict):
+            runs = [{'executionStageMetrics': saved_arm['executionStages']}]
+        for run in runs:
+            stage_metrics = run.get('executionStageMetrics')
+            if isinstance(stage_metrics, dict) and stage_metrics:
+                for raw_stage, values in stage_metrics.items():
+                    if not isinstance(values, dict):
+                        continue
+                    stage = raw_stage if raw_stage in totals else 'mixed_tool_decision'
+                    target = totals[stage]
+                    target['requests'] += int(values.get('requests') or 0)
+                    target['inputTokens'] += int(values.get('inputTokens') or 0)
+                    target['outputTokens'] += int(values.get('outputTokens') or 0)
+                    target['usageComplete'] = target['usageComplete'] and values.get('usageComplete') is True
+                continue
+            for event in run.get('events') or []:
+                if not isinstance(event, dict) or event.get('title') != 'execute':
+                    continue
+                if event.get('type') not in {'model', 'model_error'}:
+                    continue
+                stage = cls._decision_stage(event)
+                target = totals[stage]
+                target['requests'] += 1
+                usage = (event.get('detail') or {}).get('usage')
+                if isinstance(usage, dict) and isinstance(usage.get('input'), int) and isinstance(usage.get('output'), int):
+                    target['inputTokens'] += usage['input']
+                    target['outputTokens'] += usage['output']
+                else:
+                    target['usageComplete'] = False
+        for values in totals.values():
+            values['tokens'] = (
+                values['inputTokens'] + values['outputTokens']
+                if values['usageComplete'] else None
+            )
+        return totals
 
     @staticmethod
     def _attribution_arm_summary(row: dict, usage_incomplete: int) -> dict:

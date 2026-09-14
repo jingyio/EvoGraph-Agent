@@ -160,3 +160,57 @@ async def test_graph_renumbering_is_not_a_structural_revision(tmp_path):
     assert trajectory.canonical_structure(renamed) == trajectory.canonical_structure(proposal)
     next(n for n in renamed['nodes'] if n['tool'] == 'workspace_select_missing')['arguments']['aliases'] = [{'$literal': 'line'}]
     assert trajectory.canonical_structure(renamed) != trajectory.canonical_structure(proposal)
+
+@pytest.mark.asyncio
+async def test_distinct_values_counts_current_periods_and_compiles_for_reuse(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    ws = manager.create('finance')
+    manager.add_source(ws['id'], 'input.json', json.dumps({
+        'orders': [
+            {'order_id': 'a', 'purchased_month': '2018-01'},
+            {'order_id': 'b', 'purchased_month': '2018-01'},
+            {'order_id': 'c', 'purchased_month': '2018-02'},
+            {'order_id': 'd', 'purchased_month': ''},
+        ],
+    }).encode())
+    public, _ = manager.create_task(ws['id'], '汇总本次附件覆盖的不同订单月份数量。', split='train')
+    task = manager.tasks[public['id']]
+    task['computeInterface'] = 'granular-compute-v1'
+    tools = {tool.name: tool for tool in manager.tools(task['id'])}
+    args = {'tableId': task['tableBindings']['orders'], 'field': 'purchased_month'}
+    context = ToolContext({'id': 'periods'})
+    result = await tools['workspace_distinct_values'].execute(args, context)
+    assert result == {
+        'field': 'purchased_month', 'distinctCount': 2,
+        'values': ['2018-01', '2018-02'], 'counts': {'2018-01': 2, '2018-02': 1},
+        'nonemptyCount': 3, 'missingCount': 1, 'truncated': False,
+    }
+    assert len(context.evidence) == 4
+    run = {'id': 'period-source', 'toolTrace': [
+        {'tool': 'workspace_distinct_values', 'arguments': args, 'ok': True, 'result': result},
+    ]}
+    proposal = trajectory.induce(run, manager.task(task['id']), list(tools.values()))
+    assert proposal['nodes'][0]['tool'] == 'workspace_distinct_values'
+    assert proposal['nodes'][0]['arguments'] == {'tableId': {'$table': 'orders'}, 'field': 'purchased_month'}
+
+
+@pytest.mark.asyncio
+async def test_aggregate_rejects_count_alias_for_numeric_sum(tmp_path):
+    from backend.workspace import WorkspaceManager
+    from backend.workspace_compute import tools_for
+    from backend.tools import ToolContext
+
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'rows.json', b'[{"order_id":"o1","amount_cents":100},{"order_id":"o1","amount_cents":50}]')
+    table = manager.public_workspace(workspace['id'])['tables'][0]
+    tools = {tool.name: tool for tool in tools_for(manager, workspace['id'], {'type': 'string'})}
+    context = ToolContext({'id': 'test'})
+    mapped = await tools['workspace_map_fields'].execute({
+        'tableId': table['id'], 'keyField': 'order_id', 'fields': ['amount_cents'],
+    }, context)
+    with pytest.raises(ValueError, match='不产生记录计数'):
+        await tools['workspace_aggregate_keyed'].execute({
+            'receiptId': mapped['receiptId'],
+            'measures': [{'field': 'amount_cents', 'alias': 'payment_count', 'operation': 'sum'}],
+        }, context)

@@ -1,7 +1,72 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "finance-attribution-v4-6",
+  "currentReleaseId": "finance-attribution-v5-repair-probe",
   "releases": [
+    {
+      "releaseId": "finance-attribution-v5-repair-probe",
+      "displayName": "财务复核 · 三任务RSI修订后使用探针",
+      "status": "candidate",
+      "experimentId": "16bbb302-a0eb-49ed-9613-47849aa597be",
+      "runtimeRevision": "sha256:66f943479bc4b693e1b412e7af7d919f1609ebf21210eb1954c9a039a41d0cce",
+      "assetVersion": "finance-rsi-attribution-v5-12",
+      "artifactDigest": "sha256:32e8afa7437ef0e4db3cbe5706c90ff92be0e8c01fdd639dcbb0ca756412a0a2",
+      "createdAt": "2026-09-14T17:21:19.385Z",
+      "claims": [
+        "固定三任务机制探针中，两臂各3/3通过且六次运行usage完整；运行后机制审计发现G1含一个把金额求和误命名为payment_count的无效节点，FX10正确报告依赖其他当前观察与模型判断。",
+        "FX01在线臂创建G0/M0；FX09实际执行G0的13个节点，并从当前成功轨迹产生覆盖扩展G1/M1。",
+        "FX10实际执行G1/M1的18个节点且无工具错误，形成“创建→复用与修订→修订后使用”的完整证据链。",
+        "本探针绝对计量为609,447→324,130 token、47→23次模型请求、369.756→184.904秒；FX01在线冷启动成本高于不学习臂。"
+      ],
+      "limitations": [
+        "仅包含3个财务公开历史附件实例；协议明确排除其作为扩大formal指标，因此当前状态为candidate。",
+        "G1/M1虽在FX10实际执行，但其中 payment_count 节点把 amount_cents 求和，不能视为正确记录计数；该节点未用于最终正确值，后续runtime已增加语义拒绝，旧工件不改写。",
+        "本次证明的是正常成功轨迹带来的覆盖扩展，不是错误纠正；此前两次失败探针只作历史诊断，不进入本组指标。",
+        "没有客服或技术工单，没有独立Judge或人工全文复核；不能由三任务结果主张普遍、长期或跨场景收益。",
+        "收益集中在后续任务：FX01在线臂token增加46.1%；FX09和FX10分别观察到56.59%与78.92%的任务内token下降。"
+      ],
+      "source": "attribution",
+      "protocol": {
+        "id": "finance-graph-rsi-error-recovery-probe-v1",
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "composition": "qwen/qwen3.5-27b",
+        "thinking": false,
+        "computeInterface": "granular-compute-v1",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "taskCountPerArm": 3,
+        "taskOrder": [
+          "FX01",
+          "FX09",
+          "FX10"
+        ],
+        "armOrder": "alternating per pair; same task order in each arm",
+        "noLearning": "graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task",
+        "onlineRsi": "same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment",
+        "shared": [
+          "model",
+          "prompt",
+          "tools",
+          "cold planning",
+          "graph compilation",
+          "parameter binding",
+          "report recovery",
+          "budget",
+          "inputs"
+        ],
+        "judge": "not_run",
+        "actualGraphUseMinimumRate": 0.5,
+        "actualGraphUsePolicy": "count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not",
+        "smokePolicy": "FX01 creates the parent; FX09 exercises the coverage extension and bounded report recovery; FX10 tests later use; excluded from formal metrics",
+        "failurePolicy": "retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure"
+      },
+      "assetManifest": "benchmarks/finance-rsi-attribution-v5-12.json"
+    },
     {
       "displayName": "财务复核 · 六任务图执行学习归因",
       "status": "formal",

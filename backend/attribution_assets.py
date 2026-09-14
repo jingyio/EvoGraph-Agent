@@ -36,6 +36,24 @@ TASKS = [
 ]
 
 
+# Public report-field semantics. Values and expected selections remain private;
+# both experiment arms receive the same definitions through the report schema.
+METRIC_DESCRIPTIONS = {
+    'order_count': '当前订单表中不同 order_id 的数量。',
+    'payment_record_count': '当前支付表的记录行数；多笔支付分别计数。',
+    'paid_cents': '当前支付表 amount_cents 的总和，保持原始分单位。',
+    'line_cents': '当前商品表 price_cents 与 freight_cents 的总和，保持原始分单位。',
+    'period_count': '当前订单表 purchased_month 的不同非空值数量。',
+    'difference_count': '支付总额与商品加运费总额满足当前差额条件的订单数。',
+    'installments_count': '最大分期满足当前阈值条件的订单数。',
+    'multiple_payment_count': '同一 order_id 在支付表中出现两行及以上的订单数。',
+    'high_installment_count': '同一订单最大 installments 满足当前阈值的订单数。',
+    'canceled_paid_count': '订单状态为 canceled 且存在至少一条支付记录的订单数。',
+    'missing_payment_count': '订单表中存在但支付表中没有对应 order_id 的订单数。',
+    'missing_items_count': '订单表中存在但商品表中没有对应 order_id 的订单数。',
+}
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -141,6 +159,7 @@ def install(manager: WorkspaceManager, root: Path, spec: dict):
     internal['deliveryContract'] = {
         'requiredTableSlots': list(internal['tableBindings']),
         'requiredMetricKeys': list(spec['requiredMetricKeys']),
+        'metricDescriptions': {name: METRIC_DESCRIPTIONS[name] for name in spec['requiredMetricKeys']},
         'requiredGroupNames': list(spec['requiredGroupNames']),
         'selectedIdField': 'order_id',
         'selectedIdPolicy': 'Machine selections use current order_id values; evidence uses current workspace row references.',

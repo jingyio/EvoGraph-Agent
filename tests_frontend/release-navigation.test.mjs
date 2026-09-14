@@ -157,3 +157,18 @@ test('twelve-task attribution stays dynamic and candidate runs cannot claim savi
  assert.match(source,/create_reconciliation: "首次创建订单复核经验"/);
  assert.match(source,/extension_threshold_rebind: "扩展任务阈值重绑"/);
 });
+
+test('analysis explains the four absolute execution decision stages without candidate savings', async()=>{
+ const { readFile }=await import('node:fs/promises');
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ for(const label of ['模型决策请求分解','读取选择','计算选择','混合决策','报告组合']) assert.match(source,new RegExp(label));
+ assert.match(source,/四类合计只覆盖 execute 阶段/);
+ assert.match(source,/当前仍是候选结果，仅展示绝对值/);
+ assert.match(source,/候选状态，仅展示绝对值/);
+ assert.match(source,/候选状态下不计算正式节省率/);
+ assert.match(source,/usage 不完整，不计算收益/);
+ assert.match(source,/质量门槛未通过，不计算收益/);
+ assert.match(source,/当前协议不允许正式收益结论/);
+ assert.doesNotMatch(source,/usage\/质量不完整/);
+ assert.doesNotMatch(source,/质量或 usage 未满足可比条件/);
+});

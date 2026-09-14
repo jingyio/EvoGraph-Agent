@@ -145,12 +145,17 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     root = Path(__file__).resolve().parents[1]
     store = AnalysisDatasets(root)
     listing = store.list()
-    assert listing['defaultDatasetId'] == 'finance-attribution-v4-6'
-    assert [row['datasetId'] for row in listing['items']] == [
-        'finance-attribution-v4-6', 'finance-attribution-v5-12-expanded',
-        'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
-    ]
-    assert listing['items'][1]['status'] == 'historical'
+    dataset_ids = [row['datasetId'] for row in listing['items']]
+    assert listing['defaultDatasetId'] in dataset_ids
+    expected_ids = {
+        'finance-attribution-v5-repair-probe', 'finance-attribution-v4-6',
+        'finance-attribution-v5-12-expanded', 'finance-attribution-2026-09-14',
+        'workpack-v17-48', 'taskbank-v4-36',
+    }
+    assert expected_ids.issubset(dataset_ids)
+    items_by_id = {row['datasetId']: row for row in listing['items']}
+    assert items_by_id['finance-attribution-v5-repair-probe']['status'] == 'candidate'
+    assert items_by_id['finance-attribution-v5-12-expanded']['status'] == 'historical'
     current = store.get('finance-attribution-v4-6')
     assert current['summary']['actualGraphUse']['hits'] == 4
     assert current['summary']['actualGraphUse']['attempts'] == 6
@@ -465,3 +470,53 @@ def test_maintenance_diagnostic_api_is_read_only_and_release_scoped(tmp_path, mo
     assert payload['excludedFromFormalMetrics'] is True
     assert payload['diagnostic']['tokens'] == 40158
     assert client.get(f'/api/analysis/datasets/{manifest["datasetId"]}/maintenance-diagnostics/not-registered').status_code == 404
+
+
+def test_attribution_summary_exposes_saved_execution_decision_stages_without_inventing_requests():
+    root = Path(__file__).resolve().parents[1]
+    result = AnalysisDatasets(root).get('finance-attribution-v4-6')
+    baseline = result['summary']['baseline']['executionStages']
+    rsi = result['summary']['rsi']['executionStages']
+    assert {key: row['requests'] for key, row in baseline.items()} == {
+        'read_selection_and_binding': 5,
+        'compute_selection_and_binding': 55,
+        'mixed_tool_decision': 0,
+        'report_composition': 6,
+    }
+    assert {key: row['requests'] for key, row in rsi.items()} == {
+        'read_selection_and_binding': 6,
+        'compute_selection_and_binding': 22,
+        'mixed_tool_decision': 1,
+        'report_composition': 6,
+    }
+    assert sum(row['requests'] for row in baseline.values()) == 66
+    assert sum(row['requests'] for row in rsi.values()) == 35
+    assert result['summary']['baseline']['modelRequests'] == 72
+    assert result['summary']['rsi']['modelRequests'] == 42
+    assert all(row['usageComplete'] is True and row['tokens'] is not None for row in baseline.values())
+
+
+def test_execution_stage_projection_prefers_saved_metrics_and_keeps_failed_execute_usage_unknown():
+    saved = {
+        'executionStageMetrics': {
+            'read_selection_and_binding': {
+                'requests': 2, 'inputTokens': 10, 'outputTokens': 2, 'usageComplete': True,
+            },
+            'terminal_response': {
+                'requests': 1, 'inputTokens': 4, 'outputTokens': 1, 'usageComplete': True,
+            },
+        },
+        'events': [{'type': 'model', 'title': 'execute', 'detail': {'usage': {'input': 999, 'output': 1}}}],
+    }
+    result = AnalysisDatasets._execution_stages({'pairs': [{'no_learning': saved}]}, 'no_learning', {})
+    assert result['read_selection_and_binding']['requests'] == 2
+    assert result['read_selection_and_binding']['tokens'] == 12
+    assert result['mixed_tool_decision']['requests'] == 1
+    assert result['mixed_tool_decision']['tokens'] == 5
+    assert result['compute_selection_and_binding']['requests'] == 0
+
+    failed = {'events': [{'type': 'model_error', 'title': 'execute', 'detail': {}}]}
+    result = AnalysisDatasets._execution_stages({'pairs': [{'online_rsi': failed}]}, 'online_rsi', {})
+    assert result['mixed_tool_decision']['requests'] == 1
+    assert result['mixed_tool_decision']['usageComplete'] is False
+    assert result['mixed_tool_decision']['tokens'] is None

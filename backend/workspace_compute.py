@@ -5,6 +5,7 @@ primitive exposes one operation; the caller chooses fields, joins and criteria.
 """
 from copy import deepcopy
 import math
+import re
 from uuid import uuid4
 
 from .tools import Tool, object_schema
@@ -13,6 +14,7 @@ INTERFACE = 'granular-compute-v1'
 NAMES = {
     'workspace_map_fields', 'workspace_aggregate_keyed', 'workspace_align_keyed',
     'workspace_derive_values', 'workspace_compare_values', 'workspace_select_missing',
+    'workspace_distinct_values',
 }
 
 
@@ -45,6 +47,30 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
             'truncated': len(values) > max_rows, **extra,
         }
 
+    def distinct(args, context):
+        table = manager.table(workspace_id, args['tableId'])
+        manager._validate_field(table, args['field'])
+        counts = {}
+        missing = 0
+        for row in table['rows']:
+            value = row['values'].get(args['field'])
+            if value is None or (isinstance(value, str) and not value.strip()):
+                missing += 1
+                continue
+            key = str(value)
+            counts[key] = counts.get(key, 0) + 1
+        manager._record_evidence(workspace_id, context, table['rows'])
+        values = sorted(counts)
+        return {
+            'field': args['field'],
+            'distinctCount': len(values),
+            'values': values[:max_rows],
+            'counts': {key: counts[key] for key in values[:max_rows]},
+            'nonemptyCount': sum(counts.values()),
+            'missingCount': missing,
+            'truncated': len(values) > max_rows,
+        }
+
     def project(args, context):
         table = manager.table(workspace_id, args['tableId'])
         for field in [args['keyField'], *args['fields']]:
@@ -72,6 +98,8 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
         aliases = [m['alias'] for m in args['measures']]
         if len(set(aliases)) != len(aliases):
             raise ValueError('聚合别名必须唯一')
+        if any(re.search(r'(^|_)count($|_)', alias.lower()) for alias in aliases):
+            raise ValueError('键控数值聚合不产生记录计数；请使用映射收据的 rowCount、keyCount 或表行数计数工具')
         grouped = {}
         for row in source['rows']:
             grouped.setdefault(row['key'], []).append(row['values'])
@@ -169,10 +197,13 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
     labels = {'type': 'array', 'minItems': 1, 'maxItems': 20, 'uniqueItems': True, 'items': label}
     operators = {'type': 'string', 'enum': ['abs_gt', 'gt', 'gte', 'lt', 'lte', 'equals']}
     return [
+        Tool('workspace_distinct_values', '统计当前表一个字段的不同非空值数量，并返回每个值的记录数。适用于月份数、渠道数等去重计数；distinctCount 不是表行数。', 'compute', object_schema({
+            'tableId': table_schema, 'field': label}), distinct,
+             outputs=['distinctCount', 'values', 'counts', 'nonemptyCount', 'missingCount']),
         Tool('workspace_map_fields', '选择当前表的业务键和需计算字段，保留一对多行，返回映射收据 receiptId。', 'compute', object_schema({
             'tableId': table_schema, 'keyField': label, 'fields': labels}), project,
              outputs=['receiptId', 'columns', 'rowCount', 'keyCount', 'preview']),
-        Tool('workspace_aggregate_keyed', '按映射收据的业务键聚合数值列，独立选择每列 sum/max/min 与别名；返回键控数值收据。', 'compute', object_schema({
+        Tool('workspace_aggregate_keyed', '按映射收据的业务键聚合数值列，独立选择每列 sum/max/min 与别名；返回键控数值收据。它不统计记录数，行数使用映射收据的 rowCount，业务键数使用 keyCount。', 'compute', object_schema({
             'receiptId': receipt, 'measures': {'type': 'array', 'minItems': 1, 'maxItems': 20, 'items': object_schema({
                 'field': label, 'alias': label, 'operation': {'type': 'string', 'enum': ['sum', 'max', 'min']}})}}), aggregate,
              outputs=['receiptId', 'totals', 'perKey', 'keyCount', 'missingByAlias']),
