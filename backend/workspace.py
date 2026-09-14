@@ -288,25 +288,69 @@ class WorkspaceManager:
             raise ValueError('工作区 ID 无效')
         return self.directory / workspace_id
 
+    def _runtime_path(self, workspace_id: str) -> Path:
+        return self._workspace_path(workspace_id) / '.rsi'
+
+    def _inputs_path(self, workspace_id: str) -> Path:
+        return self._workspace_path(workspace_id) / 'inputs'
+
+    def _requests_path(self, workspace_id: str) -> Path:
+        return self._workspace_path(workspace_id) / 'requests'
+
     def _persist(self, workspace: dict[str, Any]) -> None:
         directory = self._workspace_path(workspace['id'])
         directory.mkdir(parents=True, exist_ok=True)
+        self._inputs_path(workspace['id']).mkdir(exist_ok=True)
+        self._requests_path(workspace['id']).mkdir(exist_ok=True)
+        runtime = self._runtime_path(workspace['id'])
         meta = deepcopy(workspace)
         tables = meta.pop('tables', {})
-        write_private(directory / 'workspace.json', meta)
-        write_private(directory / 'tables.json', tables)
+        write_private(runtime / 'workspace.json', meta)
+        write_private(runtime / 'tables.json', tables)
+
+    @staticmethod
+    def _public_source(source: dict[str, Any]) -> dict[str, Any]:
+        item = deepcopy(source)
+        item.pop('storageName', None)
+        return item
+
+    @staticmethod
+    def _available_filename(directory: Path, filename: str) -> str:
+        candidate = directory / filename
+        if not candidate.exists():
+            return filename
+        path = Path(filename)
+        stem, suffix = path.stem, path.suffix
+        for index in range(2, 10_000):
+            candidate_name = f'{stem}-{index}{suffix}'
+            if not (directory / candidate_name).exists():
+                return candidate_name
+        raise ValueError('同名资料文件过多')
+
+    def _source_record(self, workspace_id: str, source_id: str) -> dict[str, Any]:
+        workspace = self.workspace(workspace_id)
+        source = next((item for item in workspace['sources'] if item['id'] == source_id), None)
+        if not source:
+            raise ValueError('资料文件不存在')
+        return source
 
     def restore(self) -> None:
         if not self.directory.exists():
             return
-        for path in self.directory.glob('*/workspace.json'):
+        paths = list(self.directory.glob('*/.rsi/workspace.json')) + list(self.directory.glob('*/workspace.json'))
+        restored = set()
+        for path in paths:
             try:
                 workspace = json.loads(path.read_text())
                 tables_path = path.parent / 'tables.json'
                 workspace['tables'] = json.loads(tables_path.read_text()) if tables_path.exists() else {}
-                if workspace.get('id') != path.parent.name or workspace.get('role') not in WORKSPACE_ROLES:
+                workspace_directory = path.parent.parent if path.parent.name == '.rsi' else path.parent
+                if workspace.get('id') != workspace_directory.name or workspace.get('role') not in WORKSPACE_ROLES:
+                    continue
+                if workspace['id'] in restored:
                     continue
                 self.workspaces[workspace['id']] = workspace
+                restored.add(workspace['id'])
                 for task in workspace.get('tasks', []):
                     self.tasks[task['id']] = task
             except (OSError, ValueError, KeyError, TypeError):
@@ -330,7 +374,7 @@ class WorkspaceManager:
         workspace = self.workspace(workspace_id)
         sources = []
         for source in workspace['sources']:
-            item = deepcopy(source)
+            item = self._public_source(source)
             item['downloadPath'] = f'/api/workspaces/{workspace_id}/sources/{source["id"]}/download'
             sources.append(item)
         return {'id': workspace['id'], 'role': workspace['role'], 'label': workspace['label'], 'provenance': workspace['provenance'],
@@ -359,13 +403,14 @@ class WorkspaceManager:
         tables = _parse_source(filename, content)
         source_id = str(uuid4())
         normalized = [_normalize_table(source_id, filename, sheet, rows) for sheet, rows in tables]
-        directory = self._workspace_path(workspace_id) / 'sources'
+        directory = self._inputs_path(workspace_id)
         directory.mkdir(parents=True, exist_ok=True)
-        write_path = directory / f'{source_id}-{filename}'
+        storage_name = self._available_filename(directory, filename)
+        write_path = directory / storage_name
         write_path.write_bytes(content)
         source = {'id': source_id, 'name': filename, 'format': Path(filename).suffix.lower().lstrip('.'), 'sizeBytes': len(content),
                   'status': 'parsed', 'tableIds': [table['id'] for table in normalized], 'uploadedAt': now(),
-                  'provenance': deepcopy(provenance or {'kind': 'user_upload'})}
+                  'provenance': deepcopy(provenance or {'kind': 'user_upload'}), 'storageName': storage_name}
         workspace['sources'].append(source)
         workspace['tables'].update({table['id']: table for table in normalized})
         workspace['updatedAt'] = now()
@@ -374,17 +419,19 @@ class WorkspaceManager:
 
     def remove_source(self, workspace_id: str, source_id: str) -> None:
         workspace = self.workspace(workspace_id)
-        source = next((item for item in workspace['sources'] if item['id'] == source_id), None)
-        if source is None:
-            raise ValueError('资料文件不存在')
+        source = self._source_record(workspace_id, source_id)
+        try:
+            source_path = self.source_path(workspace_id, source_id)
+        except ValueError:
+            source_path = None
         workspace['sources'] = [item for item in workspace['sources'] if item['id'] != source_id]
         workspace['tables'] = {key: value for key, value in workspace['tables'].items() if value['sourceId'] != source_id}
         workspace['updatedAt'] = now()
         for task in workspace['tasks']:
             if any(table_id in source['tableIds'] for table_id in task.get('tableIds', [])):
                 task['sourceStatus'] = 'removed'
-        for path in (self._workspace_path(workspace_id) / 'sources').glob(source_id + '-*'):
-            path.unlink(missing_ok=True)
+        if source_path:
+            source_path.unlink(missing_ok=True)
         self._persist(workspace)
 
     def table(self, workspace_id: str, table_id: str) -> dict[str, Any]:
@@ -475,6 +522,8 @@ class WorkspaceManager:
         workspace['tasks'].append(task)
         workspace['updatedAt'] = now()
         self.tasks[task_id] = task
+        request_number = len(workspace['tasks'])
+        write_private(self._requests_path(workspace_id) / f'request-{request_number:03d}-{task_id[:8]}.txt', request + '\n')
         self._persist(workspace)
         return self.public_task(task_id), []
 
@@ -568,7 +617,8 @@ class WorkspaceManager:
             return rows[start:start + page_size], start + page_size < len(rows)
 
         def list_sources(args, context):
-            return {'sources': deepcopy(workspace['sources']), 'tables': [_public_table(table) for table in workspace['tables'].values()]}
+            return {'sources': [self._public_source(source) for source in workspace['sources']],
+                    'tables': [_public_table(table) for table in workspace['tables'].values()]}
 
         def get_schema(args, context):
             tables = [get_table(args)] if args.get('tableId') else list(workspace['tables'].values())
@@ -1010,7 +1060,7 @@ class WorkspaceManager:
 
         def save_draft(args, context):
             draft_id = str(uuid4())
-            path = self._workspace_path(workspace_id) / 'drafts'
+            path = self._runtime_path(workspace_id) / 'drafts'
             path.mkdir(parents=True, exist_ok=True)
             write_private(path / (draft_id + '.json'), {'id': draft_id, 'taskId': task['id'], 'createdAt': now(), **deepcopy(args)})
             return {'draftId': draft_id, 'saved': True, 'status': 'draft_only_no_external_side_effect'}
@@ -1114,14 +1164,19 @@ class WorkspaceManager:
         return candidates[0]
 
     def source_path(self, workspace_id: str, source_id: str) -> Path:
-        workspace = self.workspace(workspace_id)
-        source = next((item for item in workspace['sources'] if item['id'] == source_id), None)
-        if not source:
-            raise ValueError('资料文件不存在')
+        source = self._source_record(workspace_id, source_id)
+        storage_name = source.get('storageName')
+        if isinstance(storage_name, str) and storage_name == _safe_filename(storage_name):
+            candidate = self._inputs_path(workspace_id) / storage_name
+            if candidate.is_file():
+                return candidate
         candidates = list((self._workspace_path(workspace_id) / 'sources').glob(source_id + '-*'))
         if len(candidates) != 1 or not candidates[0].is_file():
             raise ValueError('资料文件已被清理')
         return candidates[0]
+
+    def source_name(self, workspace_id: str, source_id: str) -> str:
+        return str(self._source_record(workspace_id, source_id)['name'])
 
 
 class WorkspaceBank:

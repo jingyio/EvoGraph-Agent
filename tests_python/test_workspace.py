@@ -102,6 +102,56 @@ async def test_workspace_parses_supported_files_scopes_evidence_and_never_learns
     await runner.shutdown()
 
 
+def test_workspace_keeps_user_inputs_outside_hidden_runtime_directory_and_restores_them(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    first = manager.add_source(workspace['id'], 'orders.csv', b'order_id,status\na-1,canceled\n')
+    task, questions = manager.create_task(workspace['id'], '核对当前订单并形成有证据的内部复核简报。')
+    assert task and not questions
+    second = manager.add_source(workspace['id'], 'orders.csv', b'order_id,status\na-2,paid\n')
+
+    root = tmp_path / 'artifacts' / 'workspaces' / workspace['id']
+    assert (root / 'inputs' / 'orders.csv').read_bytes().startswith(b'order_id')
+    assert (root / 'inputs' / 'orders-2.csv').read_bytes().endswith(b'paid\n')
+    requests = sorted((root / 'requests').glob('request-*.txt'))
+    assert len(requests) == 1
+    assert requests[0].read_text(encoding='utf-8') == task['task'] + '\n'
+    assert (root / '.rsi' / 'workspace.json').is_file()
+    assert (root / '.rsi' / 'tables.json').is_file()
+    assert not (root / 'workspace.json').exists()
+    assert not (root / 'tables.json').exists()
+    assert 'storageName' not in manager.public_workspace(workspace['id'])['sources'][0]
+    assert manager.source_path(workspace['id'], first['source']['id']).name == 'orders.csv'
+    assert manager.source_path(workspace['id'], second['source']['id']).name == 'orders-2.csv'
+
+    restored = WorkspaceManager(tmp_path)
+    restored.restore()
+    assert restored.task(task['id'])['task'] == task['task']
+    assert restored.source_path(workspace['id'], second['source']['id']).name == 'orders-2.csv'
+    restored.remove_source(workspace['id'], second['source']['id'])
+    assert not (root / 'inputs' / 'orders-2.csv').exists()
+
+
+def test_workspace_restores_legacy_metadata_and_source_paths_without_migrating_them(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    source = manager.add_source(workspace['id'], 'orders.csv', b'order_id\na-1\n')['source']
+    root = tmp_path / 'artifacts' / 'workspaces' / workspace['id']
+    runtime = root / '.rsi'
+    legacy_sources = root / 'sources'
+    legacy_sources.mkdir()
+    manager.source_path(workspace['id'], source['id']).replace(legacy_sources / f'{source["id"]}-orders.csv')
+    (runtime / 'workspace.json').replace(root / 'workspace.json')
+    (runtime / 'tables.json').replace(root / 'tables.json')
+    runtime.rmdir()
+
+    restored = WorkspaceManager(tmp_path)
+    restored.restore()
+    assert restored.public_workspace(workspace['id'])['sources'][0]['name'] == 'orders.csv'
+    assert restored.source_path(workspace['id'], source['id']).name == f'{source["id"]}-orders.csv'
+    assert not (root / '.rsi').exists()
+
+
 def test_workspace_followup_uses_only_parent_visible_report_context(tmp_path):
     manager = WorkspaceManager(tmp_path)
     workspace = manager.create('finance')

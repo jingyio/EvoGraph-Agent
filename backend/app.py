@@ -426,7 +426,7 @@ def create_app(service=None):
     @app.get('/api/workspaces/{key}/sources/{source_id}/download')
     def workspace_source_download(key: str, source_id: str):
         path = workspace_manager.source_path(key, source_id)
-        return FileResponse(path, filename=path.name.split('-', 1)[-1])
+        return FileResponse(path, filename=workspace_manager.source_name(key, source_id))
 
     @app.post('/api/workspaces/{key}/tasks', status_code=201)
     def workspace_create_task(key: str, request: WorkspaceTaskRequest):
