@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowDownToLine, ArrowRight, Bot, Check, ChevronLeft, ChevronRight, CircleStop, FileBarChart2, FilePlus2, FileSearch, FileText, FolderOpen, GitCompareArrows, LoaderCircle, MessageSquareText, Network, PanelRightOpen, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Table2, Trash2, UploadCloud, X } from 'lucide-react';
+import { AlertCircle, ArrowDownToLine, ArrowRight, Bot, Check, ChevronLeft, ChevronRight, CircleStop, FileBarChart2, FilePlus2, FileSearch, FileText, FolderOpen, LoaderCircle, MessageSquareText, Network, PanelRightOpen, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Table2, Trash2, UploadCloud, X } from 'lucide-react';
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { api, upload } from './api';
 import './workspace.css';
@@ -16,21 +16,6 @@ type Metrics = { modelRequests?: number; toolCalls?: number; inputTokens?: numbe
 type Run = { id: string; taskId: string; status: string; phase: string; strategy: string; events: TraceEvent[]; metrics: Metrics; evaluation: { status: string; issues?: string[] }; submission?: { metrics?: Record<string, unknown>; selectedIds?: string[]; evidenceIds?: string[]; summary?: string; assumptions?: string[] }; graph?: { nodes: GraphNode[]; nodeStates: Record<string, string> }; fallback?: string; evolution?: { planningPath?: string; usedVersionId?: string; lookupMs?: number; localCompileMs?: number; bindingMs?: number }; error?: string };
 type GraphNode = { id: string; tool: string; dependencies: string[]; foreach?: unknown; reuse?: unknown; defer?: boolean };
 type RunSummary = { id: string; taskId: string; status: string; phase: string; strategy: string; createdAt: string; metrics: Metrics; evaluation: { status: string } };
-type Arm = 'baseline' | 'rsi';
-type Workpack = {
-  id: string; workflowType: string; scenario: Role; title: string; split: string; difficulty: string; recordCount: number; task: string;
-  sourceTaskId?: string; sourceUrl?: string;
-  deliveryContract?: { requiredSources?: string[]; metrics?: Record<string, string>; selectedIds?: string };
-  sourceProvenance?: { sourceRecords?: { kind?: string; url?: string; taskbankTaskId?: string }; authoredPolicy?: boolean; injectedAnomaly?: boolean };
-};
-type SavedPairRun = { id: string; status: string; strategy: string; metrics: Metrics; evaluation: { status: string }; evolution?: Run['evolution'] };
-type SavedComparison = {
-  available: boolean; reason?: string; workpack?: Workpack;
-  experiment?: { id: string; mode: string; finishedAt?: string; limits: Record<string, number>; qualityGate?: { status?: string; sameQualityCostClaim?: boolean } };
-  pair?: { workpackId: string; difficulty: string; round: number; status: string; runs: { baseline?: SavedPairRun; rsi?: SavedPairRun } };
-  comparison?: { baselineTokens: number; rsiTokens: number; tokenSavingRate?: number | null; sameFrozenInput: boolean; note: string };
-};
-type SavedTrace = { arm: Arm; run: Run };
 
 const ROLES: { key: Role; label: string; caption: string }[] = [
   { key: 'finance', label: '财务运营', caption: '订单、支付、退款与异常复核' },
@@ -40,7 +25,6 @@ const ROLES: { key: Role; label: string; caption: string }[] = [
 const formatCount = (value?: number) => new Intl.NumberFormat('zh-CN').format(value || 0);
 const formatMs = (value?: number) => value == null ? '—' : value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${Math.round(value)}ms`;
 const totalTokens = (metrics?: Metrics) => (metrics?.inputTokens || 0) + (metrics?.outputTokens || 0);
-const percent = (value?: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 const statusName: Record<string, string> = { queued: '排队', running: '处理中', completed: '已完成', limited: '受限停止', cancelled: '已取消', failed: '失败', passed: '硬校验通过', user_review_required: '等待复核', failed_evaluation: '未通过校验' };
 
 function eventTitle(event: TraceEvent): string {
@@ -128,36 +112,6 @@ function GraphView({ run }: { run: Run }) {
   return <div className="workspace-graph">{run.graph.nodes.map((node, index) => <div key={node.id} className={`workspace-graph-node ${run.graph?.nodeStates[node.id] || 'pending'}`}><div><small>{node.id}</small><strong>{node.tool.replace('workspace_', '')}</strong></div><span>{node.dependencies.length ? `依赖 ${node.dependencies.join(' · ')}` : '起始节点'}</span>{Boolean(node.reuse) && <em>复用观察</em>}{Boolean(node.foreach) && <em>当前行绑定</em>}{node.defer && <em>模型接管</em>}{index < run.graph!.nodes.length - 1 && <ChevronRight size={16} />}</div>)}</div>;
 }
 
-function SavedComparisonPanel({ comparison, loading, trace, traceLoading, onOpenTrace }: {
-  comparison: SavedComparison | null; loading: boolean; trace: SavedTrace | null; traceLoading: Arm | null; onOpenTrace: (arm: Arm) => void;
-}) {
-  if (loading) return <section className="workspace-comparison loading"><LoaderCircle size={16} /><span>正在载入同题保存对照</span></section>;
-  if (!comparison) return null;
-  if (!comparison.available || !comparison.pair || !comparison.experiment) {
-    return <section className="workspace-comparison unavailable"><GitCompareArrows size={17} /><div><small>同题对比</small><strong>当前资料没有保存的严格配对运行</strong><p>{comparison.reason || '不会自动启动 Baseline。'}</p></div></section>;
-  }
-  const baseline = comparison.pair.runs.baseline;
-  const rsi = comparison.pair.runs.rsi;
-  const runs: { arm: Arm; label: string; item?: SavedPairRun }[] = [
-    { arm: 'baseline', label: 'PLAN + REACT', item: baseline },
-    { arm: 'rsi', label: 'GRAPH RSI', item: rsi },
-  ];
-  const traceEvents = trace?.run.events.filter(event => event.type !== 'model_start') || [];
-  return <section className="workspace-comparison">
-    <header><div><small>SAVED SAME-TASK COMPARISON</small><strong>相同资料与问题的双臂回放</strong></div><span>V17 · 串行 1 / 1 / 1</span></header>
-    <p className="workspace-comparison-note">{comparison.comparison?.note}</p>
-    <div className="workspace-comparison-input"><span>资料 {comparison.workpack?.deliveryContract?.requiredSources?.length || 0} 份</span><span>指标 {Object.keys(comparison.workpack?.deliveryContract?.metrics || {}).length} 项</span><span>难度 {comparison.workpack?.difficulty || comparison.pair.difficulty}</span><span>硬校验两臂通过</span></div>
-    <div className="workspace-comparison-lanes">{runs.map(({ arm, label, item }) => <article key={arm} className={arm}>
-      <small>{label}</small><strong>{formatCount(totalTokens(item?.metrics))}</strong><span>token</span>
-      <dl><div><dt>LLM</dt><dd>{formatCount(item?.metrics.modelRequests)}</dd></div><div><dt>工具</dt><dd>{formatCount(item?.metrics.toolCalls)}</dd></div><div><dt>耗时</dt><dd>{formatMs(item?.metrics.durationMs)}</dd></div></dl>
-      {arm === 'rsi' && <em>{item?.evolution?.planningPath === 'fast' ? 'Fast 复用' : item?.evolution?.planningPath === 'fallback' ? 'Fallback' : '图执行'}</em>}
-      <div className="workspace-comparison-actions"><button onClick={() => onOpenTrace(arm)} disabled={!item || traceLoading === arm}>{traceLoading === arm ? <LoaderCircle size={13} /> : <Play size={13} />}轨迹</button>{item && <a href={`/api/workpack-experiments/${comparison.experiment!.id}/runs/${arm}/${item.id}/report`} target="_blank" rel="noreferrer">报告 <ArrowRight size={13} /></a>}</div>
-    </article>)}</div>
-    <div className="workspace-comparison-saving"><strong>{percent(comparison.comparison?.tokenSavingRate)}</strong><span>该保存 pair 的 RSI token 降幅</span><small>质量门槛：{comparison.experiment.qualityGate?.status === 'passed' ? '通过' : '未通过'}</small></div>
-    {trace && <div className="workspace-saved-trace"><header><div><small>{trace.arm === 'rsi' ? 'GRAPH RSI' : 'PLAN + REACT'} · 保存轨迹</small><strong>{trace.run.id.slice(0, 8)}</strong></div><span>{formatCount(traceEvents.length)} 个真实事件</span></header><GraphView run={trace.run} /><div className="workspace-saved-events">{traceEvents.map(event => <div key={event.seq} className={eventChannel(event)}><i>{eventChannel(event) === 'model' ? 'M' : eventChannel(event) === 'rsi' ? 'R' : eventChannel(event) === 'tool' ? 'T' : 'C'}</i><span><strong>{eventTitle(event)}</strong><small>{event.elapsedMs == null ? '—' : formatMs(event.elapsedMs)}</small></span></div>)}</div></div>}
-  </section>;
-}
-
 export default function WorkspaceWorkbench() {
   const input = useRef<HTMLInputElement>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -171,13 +125,6 @@ export default function WorkspaceWorkbench() {
   const [costConfirmed, setCostConfirmed] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [workpacks, setWorkpacks] = useState<Workpack[]>([]);
-  const [activeWorkpack, setActiveWorkpack] = useState<Workpack | null>(null);
-  const [savedComparison, setSavedComparison] = useState<SavedComparison | null>(null);
-  const [comparisonLoading, setComparisonLoading] = useState(false);
-  const [comparisonTrace, setComparisonTrace] = useState<SavedTrace | null>(null);
-  const [comparisonTraceLoading, setComparisonTraceLoading] = useState<Arm | null>(null);
-  const [catalogDifficulty, setCatalogDifficulty] = useState<'all' | 'A' | 'B' | 'C'>('all');
   const [strategy, setStrategy] = useState<'plan_react' | 'graph_rsi'>('graph_rsi');
   const [followup, setFollowup] = useState('');
   const [busy, setBusy] = useState<'workspace' | 'upload' | 'prepare' | 'run' | ''>('');
@@ -191,18 +138,9 @@ export default function WorkspaceWorkbench() {
   const selectedEvent = replayEvents.find(event => event.seq === selectedEventSeq) || replayEvents.at(-1);
   const selectedEventIndex = Math.max(0, replayEvents.findIndex(event => event.seq === selectedEvent?.seq));
   const exports = useMemo(() => (run?.events || []).flatMap(event => event.detail?.result?.downloadPath ? [{ path: event.detail.result.downloadPath, rowCount: event.detail.result.rowCount }] : []), [run]);
-  const catalog = useMemo(() => workpacks.filter(item => item.scenario === role && item.split === 'train'
-    && (catalogDifficulty === 'all' || item.difficulty === catalogDifficulty)), [workpacks, role, catalogDifficulty]);
-  const catalogCounts = useMemo(() => ({
-    all: workpacks.filter(item => item.scenario === role && item.split === 'train').length,
-    A: workpacks.filter(item => item.scenario === role && item.split === 'train' && item.difficulty === 'A').length,
-    B: workpacks.filter(item => item.scenario === role && item.split === 'train' && item.difficulty === 'B').length,
-    C: workpacks.filter(item => item.scenario === role && item.split === 'train' && item.difficulty === 'C').length,
-  }), [workpacks, role]);
-
   async function createWorkspace(nextRole: Role) {
     setBusy('workspace'); setError(''); setRun(null); setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
-    setActiveWorkpack(null); setSavedComparison(null); setComparisonTrace(null); setStrategy('graph_rsi');
+    setStrategy('graph_rsi');
     try {
       const item = await api<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ role: nextRole, label: `${ROLES.find(roleItem => roleItem.key === nextRole)?.label || nextRole}工作区` }) });
       setWorkspace(item); setTableId(item.tables[0]?.id || ''); setPreview(null); setRuns([]);
@@ -221,7 +159,6 @@ export default function WorkspaceWorkbench() {
 
   useEffect(() => { void createWorkspace('finance'); }, []);
   useEffect(() => { setSelectedEventSeq(null); }, [run?.id]);
-  useEffect(() => { api<Workpack[]>('/api/workpacks').then(setWorkpacks).catch(reason => setError(reason.message)); }, []);
   useEffect(() => {
     if (!workspace || !tableId) { setPreview(null); return; }
     api<Preview>(`/api/workspaces/${workspace.id}/tables/${encodeURIComponent(tableId)}/preview`).then(setPreview).catch(reason => setError(reason.message));
@@ -235,24 +172,9 @@ export default function WorkspaceWorkbench() {
   }, [run?.id, active]);
 
   async function chooseRole(nextRole: Role) { setRole(nextRole); await createWorkspace(nextRole); }
-  async function loadSavedComparison(packId: string) {
-    setComparisonLoading(true); setSavedComparison(null); setComparisonTrace(null);
-    try { setSavedComparison(await api<SavedComparison>(`/api/workpack-comparisons/${encodeURIComponent(packId)}`)); }
-    catch (reason) { setError((reason as Error).message); }
-    finally { setComparisonLoading(false); }
-  }
-  async function installWorkpack(pack: Workpack) {
-    setBusy('workspace'); setError('');
-    try {
-      const result = await api<{ workspace: Workspace; task: WorkspaceTask }>(`/api/workpacks/${pack.id}/workspace`, { method: 'POST', body: '{}' });
-      setRole(pack.scenario); setWorkspace(result.workspace); setReadyTask(result.task); setRequest(result.task.task); setTableId(result.workspace.tables[0]?.id || ''); setRun(null); setRuns([]); setCostConfirmed(false); setClarifications([]); setActiveWorkpack(pack); setStrategy('graph_rsi');
-      void loadSavedComparison(pack.id);
-    } catch (reason) { setError((reason as Error).message); }
-    finally { setBusy(''); }
-  }
   async function addFiles(files: FileList | File[]) {
     if (!workspace || !files.length || busy) return;
-    setBusy('upload'); setError(''); setActiveWorkpack(null); setSavedComparison(null); setComparisonTrace(null);
+    setBusy('upload'); setError('');
     try {
       for (const file of Array.from(files)) await upload(`/api/workspaces/${workspace.id}/files`, file);
       await refreshWorkspace();
@@ -261,7 +183,7 @@ export default function WorkspaceWorkbench() {
   }
   async function removeSource(source: Source) {
     if (!workspace) return;
-    setError(''); setActiveWorkpack(null); setSavedComparison(null); setComparisonTrace(null);
+    setError('');
     try { await api(`/api/workspaces/${workspace.id}/files/${source.id}`, { method: 'DELETE', body: '{}' }); await refreshWorkspace(); }
     catch (reason) { setError((reason as Error).message); }
   }
@@ -295,15 +217,6 @@ export default function WorkspaceWorkbench() {
     await api(`/api/workspaces/runs/${run.id}/cancel`, { method: 'POST', body: '{}' });
   }
   async function openRun(item: RunSummary) { try { setRun(await api<Run>(`/api/workspaces/runs/${item.id}`)); } catch (reason) { setError((reason as Error).message); } }
-  async function openSavedTrace(arm: Arm) {
-    const savedRun = savedComparison?.pair?.runs[arm];
-    const experimentId = savedComparison?.experiment?.id;
-    if (!savedRun || !experimentId) return;
-    setComparisonTraceLoading(arm); setError('');
-    try { setComparisonTrace({ arm, run: await api<Run>(`/api/workpack-experiments/${experimentId}/runs/${arm}/${savedRun.id}`) }); }
-    catch (reason) { setError((reason as Error).message); }
-    finally { setComparisonTraceLoading(null); }
-  }
   function filesChanged(event: ChangeEvent<HTMLInputElement>) { if (event.target.files) void addFiles(event.target.files); event.target.value = ''; }
   function dropped(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }
 
@@ -321,16 +234,14 @@ export default function WorkspaceWorkbench() {
           <UploadCloud size={21} /><strong>{busy === 'upload' ? '正在解析资料' : '拖入资料'}</strong><span>CSV · XLSX · JSON · TXT</span><input ref={input} type="file" accept=".csv,.xlsx,.json,.txt" multiple onChange={filesChanged} />
         </div>
         <div className="workspace-source-list">{workspace.sources.map(source => <div key={source.id}><FileText size={15} /><span><strong>{source.name}</strong><small>{source.format.toUpperCase()} · {(source.sizeBytes / 1024).toFixed(1)} KB</small>{source.provenance?.source && <small className="workspace-provenance">{source.provenance.source}</small>}</span><span className="workspace-source-actions">{source.downloadPath && <a href={source.downloadPath} title="下载资料"><ArrowDownToLine size={13} /></a>}<button onClick={() => void removeSource(source)} title="移除资料" disabled={Boolean(active)}><Trash2 size={14} /></button></span></div>)}</div>
-        <div className="workspace-workpacks"><header><div><small>演示题库</small><strong>{catalogCounts.all} 个冻结训练工作包</strong></div><span>PUBLIC DATA</span></header><div className="workspace-catalog-filter">{(['all', 'A', 'B', 'C'] as const).map(level => <button key={level} className={catalogDifficulty === level ? 'selected' : ''} onClick={() => setCatalogDifficulty(level)} disabled={Boolean(active)}>{level === 'all' ? '全部' : `${level} · ${catalogCounts[level]}`}</button>)}</div><div className="workspace-catalog-list">{catalog.map(item => <button key={item.id} className={activeWorkpack?.id === item.id ? 'selected' : ''} onClick={() => void installWorkpack(item)} disabled={Boolean(active) || busy === 'workspace'} title={item.sourceUrl || '公开来源资料'}><span><strong>{item.title} · 实例 {item.id.slice(-2)}</strong><small>{item.difficulty} · {item.deliveryContract?.requiredSources?.length || 0} 份资料 · {item.recordCount} 条记录</small></span><em>{Object.keys(item.deliveryContract?.metrics || {}).length} 指标</em></button>)}</div><p>实例使用不同公开记录；A/B/C 描述任务结构，不是与旧 36 任务严格标定的难度分数。</p></div>
         <header className="workspace-table-header"><div><small>数据表</small><strong>{workspace.tables.length} 张</strong></div></header>
         <div className="workspace-table-list">{workspace.tables.map(table => <button key={table.id} className={table.id === tableId ? 'selected' : ''} onClick={() => setTableId(table.id)}><Table2 size={14} /><span>{table.sheet}<small>{formatCount(table.rowCount)} 行 · {table.fields.length} 列</small></span></button>)}</div>
       </aside>
       <section className="workspace-center">
         <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask?.followupRunId ? '已准备追问任务' : readyTask ? '已准备当前任务' : '输入业务需求'}</strong></div><span>{active ? run?.phase || '执行中' : readyTask?.followupRunId ? '追问等待启动' : readyTask ? '等待启动' : '未运行'}</span></header>
-          <textarea value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); setActiveWorkpack(null); setSavedComparison(null); setComparisonTrace(null); }} disabled={Boolean(active)} placeholder={role === 'finance' ? '例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。' : role === 'support' ? '例如：按投诉渠道、企业响应与公开叙述生成跟进队列，并标出待核查项。' : '例如：按未分派、里程碑和活动记录形成工程分诊清单，给出每项依据。'} />
+          <textarea value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={Boolean(active)} placeholder={role === 'finance' ? '例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。' : role === 'support' ? '例如：按投诉渠道、企业响应与公开叙述生成跟进队列，并标出待核查项。' : '例如：按未分派、里程碑和活动记录形成工程分诊清单，给出每项依据。'} />
           <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || Boolean(active) || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-strategy-picker" role="group" aria-label="本次工作策略"><button className={strategy === 'graph_rsi' ? 'selected' : ''} onClick={() => setStrategy('graph_rsi')} disabled={Boolean(active)}><small>GRAPH RSI</small>结构化执行</button><button className={strategy === 'plan_react' ? 'selected' : ''} onClick={() => setStrategy('plan_react')} disabled={Boolean(active)}><small>PLAN + REACT</small>模型调度</button></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={Boolean(active)} /><span>我确认这会启动一次真实模型 Agent</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || Boolean(active) || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始工作</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消</button>}</footer>
         </div>
-        {activeWorkpack && <SavedComparisonPanel comparison={savedComparison} loading={comparisonLoading} trace={comparisonTrace} traceLoading={comparisonTraceLoading} onOpenTrace={arm => void openSavedTrace(arm)} />}
         {clarifications.length > 0 && <section className="workspace-clarify"><header><MessageSquareText size={17} /><div><small>需要确认</small><strong>补齐影响结论的资料范围</strong></div></header>{clarifications.map(item => <label key={item.id}><span>{item.question}</span><input value={answers[item.id] || ''} onChange={event => setAnswers(current => ({ ...current, [item.id]: event.target.value }))} placeholder="填写说明或上传相应资料" /></label>)}<button className="workspace-secondary" onClick={() => void prepareTask()} disabled={busy === 'prepare'}><RefreshCw size={14} />提交确认</button></section>}
         <section className="workspace-data"><header><div><small>资料预览</small><strong>{preview?.table.sheet || '尚未选择数据表'}</strong></div>{preview && <span>{formatCount(preview.table.rowCount)} 行 · {preview.table.fields.length} 列</span>}</header>{preview ? <><div className="workspace-fields">{preview.table.fields.map(field => <span key={field}><b>{field}</b><small>{preview.table.types[field]} · 缺失 {preview.table.missing[field] || 0}</small></span>)}</div><div className="workspace-table-scroll"><table><thead><tr>{columns.slice(0, 6).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{preview.records.map((row, index) => <tr key={String(row.rowId || index)}>{columns.slice(0, 6).map(field => <td key={field}>{String(row[field] ?? '—')}</td>)}</tr>)}</tbody></table></div></> : <div className="workspace-empty"><FolderOpen size={20} /><span>上传资料后显示解析预览</span></div>}</section>
         {run && <section className="workspace-runtime"><header><div><small>真实执行过程</small><strong>{statusName[run.status] || run.status}</strong></div><div className="workspace-runtime-meta"><span>{run.strategy === 'graph_rsi' ? 'Graph RSI' : 'Plan + ReAct'}</span><span>{run.evolution?.planningPath === 'fast' ? 'Fast 复用' : run.evolution?.planningPath === 'fallback' ? 'Fallback' : '当前任务结构'}</span></div></header><div className="workspace-runtime-metrics"><Metric label="LLM 请求" value={formatCount(run.metrics.modelRequests)} hint="真实 provider 请求" /><Metric label="token" value={formatCount(totalTokens(run.metrics))} hint="输入 + 输出" /><Metric label="工具" value={formatCount(run.metrics.toolCalls)} hint="本次执行" /><Metric label="耗时" value={formatMs(run.metrics.durationMs)} hint={run.phase || '端到端'} /></div><GraphView run={run} />
