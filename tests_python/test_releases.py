@@ -165,3 +165,50 @@ def test_current_release_is_the_unrun_v3_r3_candidate_with_one_asset_context():
     assert result['plannedPairs'] == 48 and result['pairs'] == []
     assert result['summary']['netTokenSaving'] is None
     assert len(result['taskReview']) == 6
+
+
+def test_attribution_release_maps_public_arms_and_keeps_g0_out_of_revisions(tmp_path):
+    root = tmp_path
+    key = 'attr-candidate'
+    experiment_id = 'attr-exp'
+    directory = root / 'artifacts/attribution-experiments' / experiment_id
+    manager = WorkspaceManager(directory)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'input.json', b'{"orders":[{"order_id":"o1"}]}')
+    task, questions = manager.create_task(workspace['id'], '复核当前附件', split='train')
+    assert not questions
+    protocol = {'id': 'attribution-test', 'taskCountPerArm': 1}
+    fingerprint = {'digest': 'frozen'}
+    def run(run_id):
+        return {'id': run_id, 'taskId': task['id'], 'status': 'completed',
+                'evaluation': {'status': 'passed'},
+                'metrics': {'inputTokens': 10, 'outputTokens': 5, 'usageComplete': True,
+                            'durationMs': 20, 'modelRequests': 1, 'toolCalls': 1, 'toolErrors': 0}}
+    no_learning, online = run('a'), run('b')
+    online['evolution'] = {'generatedVersionIds': ['g0'], 'generatedMatchVersions': [{'graphId': 'g0', 'version': 0}]}
+    write_private(directory / 'no_learning/runs/a.json', no_learning)
+    write_private(directory / 'online_rsi/runs/b.json', online)
+    item = {'id': experiment_id, 'assetVersion': 'asset', 'fingerprint': fingerprint,
+            'protocol': protocol, 'status': 'completed', 'manifest': [{'id': 'FA01'}],
+            'pairs': [{'status': 'completed', 'taskId': task['id'],
+                       'spec': {'id': 'FA01', 'title': 'one', 'scenario': 'finance', 'position': 1,
+                                'opportunity': 'create', 'sourceTaskId': 'F01'},
+                       'no_learning': no_learning, 'online_rsi': online,
+                       'experienceAfter': {'onlineRsiVersions': [{'id': 'g0', 'generation': 0,
+                           'matchVersion': 0, 'parentGraphId': None, 'sourceRunId': 'b',
+                           'patches': [{'before': [], 'after': [1]}],
+                           'matchPatches': [{'before': None, 'after': {'purpose': 'x'}}]}]}}]}
+    path = directory / 'experiment.json'
+    write_private(path, item)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    release = {'releaseId': key, 'displayName': 'Attribution', 'status': 'candidate',
+               'source': 'attribution', 'experimentId': experiment_id,
+               'runtimeRevision': 'sha256:frozen', 'artifactDigest': 'sha256:' + digest,
+               'assetVersion': 'asset', 'protocol': protocol, 'claims': [], 'limitations': [], 'createdAt': '2026'}
+    write_private(root / 'releases/manifest.json', {'currentReleaseId': key, 'releases': [release]})
+    store = ReleaseEvidence(root)
+    evidence = store.evidence(key)
+    assert evidence['pairs'][0]['runs']['baseline']['id'] == 'a'
+    assert evidence['pairs'][0]['runs']['rsi']['id'] == 'b'
+    assert evidence['revisions'] == []
+    assert store.run(key, 'FA01', 'baseline')['storedArm'] == 'no_learning'

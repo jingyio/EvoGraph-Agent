@@ -10,6 +10,20 @@ from backend.analysis_datasets import AnalysisDatasets
 from backend.graph_store import write_private
 
 
+MODEL_PRICING = {
+    'currency': 'USD',
+    'source': {
+        'name': 'OpenRouter 标准价格快照',
+        'url': 'https://openrouter.ai/models/qwen/qwen3.5-27b/api',
+        'retrievedAt': '2026-09-14',
+    },
+    'models': {
+        'qwen/qwen3.5-27b': {'inputPerMillionUsd': .195, 'outputPerMillionUsd': 1.56},
+        'qwen/qwen3.5-9b': {'inputPerMillionUsd': .08, 'outputPerMillionUsd': .13},
+    },
+}
+
+
 def fixture(root: Path):
     experiment_id = 'chosen-v17'
     metrics_a = {'inputTokens': 80, 'outputTokens': 20, 'usageComplete': True, 'durationMs': 1000,
@@ -23,8 +37,10 @@ def fixture(root: Path):
             'workflowType': 'finance-review', 'round': index, 'recordCount': 10, 'difficulty': 'A',
             'status': 'completed', 'runs': {
                 'baseline': {'id': f'baseline-{index}', 'status': 'completed', 'metrics': deepcopy(metrics_a),
+                             'models': {'planner': 'qwen/qwen3.5-27b', 'composition': 'qwen/qwen3.5-27b', 'executor': 'qwen/qwen3.5-27b'},
                              'evaluation': {'status': 'passed'}},
                 'rsi': {'id': f'rsi-{index}', 'status': 'completed', 'metrics': deepcopy(metrics_b),
+                        'models': {'planner': 'qwen/qwen3.5-27b', 'composition': 'qwen/qwen3.5-27b', 'executor': 'qwen/qwen3.5-27b'},
                         'evaluation': {'status': 'passed'},
                         'evolution': {'planningPath': 'fallback' if index == 1 else 'fast',
                                       'generatedVersionIds': ['g0'] if index == 1 else [],
@@ -58,7 +74,7 @@ def fixture(root: Path):
         'createdAt': '2026-09-13', 'claims': [], 'limitations': [],
     }
     write_private(root / 'releases/analysis-manifest.json',
-                  {'schemaVersion': 1, 'defaultDatasetId': 'v17', 'datasets': [manifest]})
+                  {'schemaVersion': 1, 'defaultDatasetId': 'v17', 'modelPricing': MODEL_PRICING, 'datasets': [manifest]})
     return AnalysisDatasets(root), experiment_path, experiment
 
 
@@ -69,6 +85,10 @@ def test_analysis_dataset_is_pinned_and_derives_token_and_serial_latency_curves(
     result = store.get('v17')
     assert result['summary']['tokenSaving'] == .5
     assert result['summary']['latencySaving'] == .4
+    assert result['summary']['baseline']['costUsd'] == .0000936
+    assert result['summary']['rsi']['costUsd'] == .0000468
+    assert result['summary']['costSaving'] == .5
+    assert result['points'][0]['baseline']['costUsd'] == .0000468
     assert len(result['points']) == 2
     assert result['points'][-1]['cumulativeBaselineTokens'] == 200
     assert result['points'][-1]['cumulativeRsiLatencyMs'] == 1200
@@ -125,7 +145,11 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     root = Path(__file__).resolve().parents[1]
     store = AnalysisDatasets(root)
     listing = store.list()
-    assert [row['datasetId'] for row in listing['items']] == ['workpack-v17-48', 'taskbank-v4-36']
+    assert listing['defaultDatasetId'] == 'finance-attribution-2026-09-14'
+    assert [row['datasetId'] for row in listing['items']] == [
+        'finance-attribution-2026-09-14', 'workpack-v17-48', 'taskbank-v4-36',
+    ]
+    assert listing['items'][1]['status'] == 'historical'
     result = store.get('taskbank-v4-36')
     assert result['dataset']['status'] == 'historical'
     assert result['dataset']['source'] == {'kind': 'online-e2e'}
@@ -157,3 +181,135 @@ def test_analysis_dataset_rejects_unregistered_source_paths(tmp_path):
     write_private(registry_path, registry)
     with pytest.raises(ValueError, match='来源不受支持'):
         store.get('v17')
+
+
+def attribution_fixture(root: Path):
+    repository = Path(__file__).resolve().parents[1]
+    registry = json.loads((repository / 'releases/analysis-manifest.json').read_text())
+    manifest = deepcopy(next(row for row in registry['datasets'] if row['source']['kind'] == 'attribution'))
+    source = repository / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
+    target = root / 'artifacts/attribution-experiments' / manifest['experimentId'] / 'experiment.json'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source.read_bytes())
+    write_private(root / 'releases/analysis-manifest.json', {
+        'schemaVersion': 1,
+        'defaultDatasetId': manifest['datasetId'],
+        'modelPricing': MODEL_PRICING,
+        'datasets': [manifest],
+    })
+    return AnalysisDatasets(root), target, json.loads(target.read_text()), manifest
+
+
+def test_attribution_projection_keeps_incomplete_usage_and_creation_boundaries(tmp_path):
+    store, _, _, manifest = attribution_fixture(tmp_path)
+    result = store.get(manifest['datasetId'])
+    assert result['experimentStatus'] == 'infrastructure_stopped'
+    assert result['summary']['taskCount'] == 6
+    assert result['summary']['pairedCompleted'] == 3
+    assert result['summary']['baseline']['passed'] == 3
+    assert result['summary']['baseline']['tokens'] == 238253
+    assert result['summary']['rsi']['passed'] == 2
+    assert result['summary']['rsi']['tokens'] is None
+    assert result['summary']['rsi']['usageIncomplete'] == 1
+    assert result['summary']['tokenSaving'] is None
+    assert result['summary']['latencySaving'] is None
+    assert result['summary']['costConclusionAllowed'] is False
+    assert result['summary']['learning']['workflowCreated'] == 2
+    assert result['summary']['learning']['matchingCreated'] == 2
+    assert result['summary']['learning']['graphRevisions'] == 0
+    assert result['summary']['learning']['subsequentUses'] == 0
+    assert result['revisions'] == []
+    assert len(result['points']) == 3
+    assert len(result['taskPlan']) == 6
+    assert [row['status'] for row in result['taskPlan']] == ['recorded'] * 3 + ['pending'] * 3
+    assert result['points'][2]['baseline']['tokens'] == 168889
+    assert result['points'][2]['rsi']['tokens'] is None
+    assert result['points'][2]['cumulativeBaselineTokens'] == 238253
+    assert result['points'][2]['cumulativeRsiTokens'] is None
+    assert result['points'][2]['cumulativeTokenSaving'] is None
+    assert result['points'][0]['rsi']['generatedMatchVersions'] == [0]
+    assert result['points'][0]['baseline']['reportUrl'].endswith(
+        '/runs/no_learning/8faab78f-7e0f-4855-8689-e47f6b6d0cf5/report'
+    )
+    assert result['points'][0]['rsi']['traceUrl'].endswith(
+        '/runs/online_rsi/9d286f5f-78d6-476e-a2d6-e838eb512765'
+    )
+
+
+def test_attribution_dataset_fails_closed_on_digest_runtime_asset_protocol_and_status(tmp_path):
+    store, path, original, manifest = attribution_fixture(tmp_path)
+    registry_path = tmp_path / 'releases/analysis-manifest.json'
+
+    path.write_text(path.read_text() + '\n')
+    with pytest.raises(ValueError, match='摘要不一致'):
+        store.get(manifest['datasetId'])
+    write_private(path, original)
+
+    patches = [
+        {'status': 'completed'},
+        {'assetVersion': 'other-asset'},
+        {'fingerprint': {**original['fingerprint'], 'digest': 'other-runtime'}},
+        {'protocol': {**original['protocol'], 'model': 'other-model'}},
+        {'protocol': {**original['protocol'], 'taskOrder': list(reversed(original['protocol']['taskOrder']))}},
+    ]
+    for patch in patches:
+        changed = {**original, **patch}
+        write_private(path, changed)
+        registry = json.loads(registry_path.read_text())
+        registry['datasets'][0]['artifactDigest'] = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+        write_private(registry_path, registry)
+        with pytest.raises(ValueError, match='测试组与保存实验不一致'):
+            store.get(manifest['datasetId'])
+    write_private(path, original)
+
+
+def test_attribution_revision_projection_separates_m_only_revision_and_requires_execution():
+    g0 = {
+        'id': 'g0', 'generation': 0, 'matchVersion': 1, 'parentGraphId': None,
+        'sourceRunId': 'create-run',
+        'patches': [{'before': [], 'after': ['read']}],
+        'matchPatches': [
+            {'sourceRunId': 'create-run', 'before': None, 'after': {'purpose': 'finance'}},
+            {'sourceRunId': 'revise-run', 'before': {'threshold': 8}, 'after': {'threshold': 10}},
+        ],
+    }
+    item = {'pairs': [
+        {'spec': {'id': 'FA01'}, 'online_rsi': {'id': 'create-run'}},
+        {'spec': {'id': 'FA02'}, 'online_rsi': {'id': 'revise-run'},
+         'experienceAfter': {'onlineRsiVersions': [g0]}},
+        {'spec': {'id': 'FA03'}, 'online_rsi': {
+            'id': 'use-run', 'evolution': {'usedVersionId': 'g0', 'matchVersion': 1},
+            'toolTrace': [{'executor': 'graph', 'ok': True}],
+        }},
+    ]}
+    revisions = AnalysisDatasets._attribution_revisions(item)
+    assert len(revisions) == 1
+    assert revisions[0]['sourcePairId'] == 'FA02'
+    assert revisions[0]['sourceRunId'] == 'revise-run'
+    assert revisions[0]['graphChanged'] is False
+    assert revisions[0]['matchingChanged'] is True
+    assert revisions[0]['subsequentUses'] == [
+        {'pairId': 'FA03', 'taskId': 'FA03', 'runId': 'use-run', 'matchVersion': 1}
+    ]
+    item['pairs'][2]['online_rsi']['toolTrace'] = []
+    assert AnalysisDatasets._attribution_revisions(item)[0]['subsequentUses'] == []
+
+
+def test_cost_estimate_uses_role_phase_models_and_refuses_unknown_usage_or_prices():
+    pricing = deepcopy(MODEL_PRICING)
+    mixed = {
+        'metrics': {'inputTokens': 100, 'outputTokens': 20, 'usageComplete': True},
+        'models': {
+            'planner': 'qwen/qwen3.5-9b',
+            'composition': 'qwen/qwen3.5-27b',
+            'executor': 'qwen/qwen3.5-27b',
+        },
+        'phaseMetrics': {
+            'plan': {'inputTokens': 60, 'outputTokens': 10, 'usageComplete': True},
+            'composition': {'inputTokens': 0, 'outputTokens': 0, 'usageComplete': True},
+            'execute': {'inputTokens': 40, 'outputTokens': 10, 'usageComplete': True},
+        },
+    }
+    assert AnalysisDatasets._cost_usd(mixed, pricing) == .0000295
+    assert AnalysisDatasets._cost_usd({**mixed, 'metrics': {**mixed['metrics'], 'usageComplete': False}}, pricing) is None
+    assert AnalysisDatasets._cost_usd({**mixed, 'models': {**mixed['models'], 'executor': 'missing/model'}}, pricing) is None

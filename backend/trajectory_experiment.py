@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 from uuid import uuid4, UUID
-from . import config
+from . import config, trajectory
 from .domain import now
 from .graph_store import write_private
 from .task_runner import TaskRunner, TaskRunRequest
@@ -90,7 +90,7 @@ class TrajectoryExperiment:
     def task(self,key,run):
         manager=WorkspaceManager(self.directory/key);manager.restore();return manager.task(run['taskId'])
     async def start(self,mode='precheck'):
-        if mode not in ('precheck','full'):raise ValueError('unknown stage')
+        if mode not in ('smoke','precheck','full'):raise ValueError('unknown stage')
         if self.tasks:raise ValueError('已有轨迹实验在途')
         asset_path=self.root/'artifacts'/VERSION/'manifest.json'
         if not asset_path.exists():raise ValueError('先准备并冻结任务资产')
@@ -99,19 +99,24 @@ class TrajectoryExperiment:
         if mode=='full':
             predecessor=next((i for i in reversed(list(self.items.values())) if i['mode']=='precheck' and summary(i)['qualityGate'] and i['fingerprint']==fp),None)
             if not predecessor:raise ValueError('当前runtime预检未通过，禁止扩大')
-        manifest=[s for s in assets['tasks'] if s['split']=='train' and (mode=='full' or s.get('precheck'))]
+        candidates=[s for s in assets['tasks'] if s['split']=='train' and (mode=='full' or s.get('precheck'))]
+        # One pair only: a diagnostic smoke never becomes release evidence and
+        # always starts from a fresh isolated RSI library.
+        manifest=candidates[:1] if mode=='smoke' else candidates
         key=str(uuid4());directory=self.directory/key
         item={'id':key,'mode':mode,'status':'running','createdAt':now(),'assetVersion':VERSION,'fingerprint':fp,'manifest':manifest,'pairs':[],
               'predecessorId':predecessor['id'] if predecessor else None,
-              'protocol':{'limits':{'run':1,'model':1,'read':1},'model':config.MODEL,'planner':config.PLANNER_MODEL,'runtimeProtocol':'trajectory-v3',
+              'protocol':{'limits':{'run':1,'model':1,'read':1},'model':config.MODEL,'planner':config.PLANNER_MODEL,'runtimeProtocol':trajectory.PROTOCOL,
                           'maxModelRequestsPerRun':config.MAX_STEPS,'runTimeoutSeconds':config.RUN_TIMEOUT,
                           'maxToolCallsPerRun':80,'judge':'not_run','qualityPolicy':'stop expansion on first failing pair; retain all attempts',
                           'learning':'RSI empty library; prior successful normal train only; labels excluded from matching',
                           'windowSize':4,'targetTokenSaving':0.30,
-                          'fastReuseMinimumRate':0.50,
-                          'size':'48 train = three scenarios × two sequential business cohorts × eight requests; 6 validation + 6 test reserved',
+                          'fastReuseMinimumRate':None if mode=='smoke' else 0.50,
+                          'size':('1 paired F01 diagnostic smoke; does not qualify for release, precheck, or full expansion'
+                                  if mode=='smoke' else '48 train = three scenarios × two sequential business cohorts × eight requests; 6 validation + 6 test reserved'),
                           'precheckSize':'12 train = each scenario two fixed requests from each cohort',
-                          'fastReusePolicy':'actual RSI Fast reuse must be at least 50% of completed RSI runs; otherwise this candidate cannot pass its release gate'}}
+                          'fastReusePolicy':('not assessed in one-pair smoke; actual Fast reuse is assessed only in precheck/full'
+                                             if mode=='smoke' else 'actual RSI Fast reuse must be at least 50% of completed RSI runs; otherwise this candidate cannot pass its release gate')}}
         self.items[key]=item;self.save(item)
         for relative in fp['files']:write_private(directory/'sources'/relative,(self.root/relative).read_text())
         write_private(directory/'frozen-assets-manifest.json',assets)

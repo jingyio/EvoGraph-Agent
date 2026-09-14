@@ -1,11 +1,87 @@
 {
   "schemaVersion": 1,
-  "defaultDatasetId": "workpack-v17-48",
+  "defaultDatasetId": "finance-attribution-2026-09-14",
+  "modelPricing": {
+    "currency": "USD",
+    "source": {
+      "name": "OpenRouter 标准价格快照",
+      "url": "https://openrouter.ai/models/qwen/qwen3.5-27b/api",
+      "retrievedAt": "2026-09-14"
+    },
+    "models": {
+      "qwen/qwen3.5-27b": {
+        "inputPerMillionUsd": 0.195,
+        "outputPerMillionUsd": 1.56
+      },
+      "qwen/qwen3.5-9b": {
+        "inputPerMillionUsd": 0.08,
+        "outputPerMillionUsd": 0.13
+      }
+    }
+  },
   "datasets": [
+    {
+      "datasetId": "finance-attribution-2026-09-14",
+      "displayName": "财务复核 · 图执行学习归因（3/6 后停止）",
+      "status": "candidate",
+      "experimentId": "95a99f20-712f-4411-a77b-19f99265a897",
+      "runtimeRevision": "sha256:23afd4c2aa2868c956c437f9eceaa26c351d474d669baa103cae882616172938",
+      "assetVersion": "finance-rsi-attribution-v1",
+      "artifactDigest": "sha256:e6dacf58dceb872189854c45aa974086c9cd794e07db75ef964744c718edba05",
+      "protocol": {
+        "id": "finance-graph-rsi-learning-attribution-v1",
+        "mode": "formal",
+        "experimentStatus": "infrastructure_stopped",
+        "qualityGateStatus": "incomplete",
+        "taskCountPerArm": 6,
+        "completedPairCount": 3,
+        "model": "qwen/qwen3.5-27b",
+        "planner": "qwen/qwen3.5-27b",
+        "composition": "qwen/qwen3.5-27b",
+        "thinking": false,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "taskOrder": [
+          "FA01",
+          "FA02",
+          "FA03",
+          "FA04",
+          "FA05",
+          "FA06"
+        ],
+        "order": "两臂任务顺序相同，每对先后交替，严格串行"
+      },
+      "taskCount": 6,
+      "attribution": {
+        "kind": "cross-task-learning",
+        "armLabels": {
+          "baseline": "图执行 · 不学习",
+          "rsi": "图执行 · 在线RSI"
+        },
+        "control": "每次冷规划与编译，不读取或写入跨任务经验",
+        "learning": "从独立空经验开始，只学习本实验此前成功train任务"
+      },
+      "createdAt": "2026-09-14T11:57:45.395Z",
+      "claims": [
+        "已保存前三个财务复核配对：图执行不学习臂3/3通过，在线RSI臂2/3通过。",
+        "在线RSI正常运行创建2个G0和2个M0；未观察到实际复用、父子修订或修订后使用。"
+      ],
+      "limitations": [
+        "正式协议在3/6个配对后因基础设施停止，当前候选版本尚未完成正式对照。",
+        "在线RSI第3项达到执行总时限且usage不完整；未知token不按0补齐，不计算token或latency收益。",
+        "当前结果只证明两次成功轨迹被编译为初始经验；尚未证明经验复用或反馈进化。"
+      ],
+      "source": {
+        "kind": "attribution"
+      }
+    },
     {
       "datasetId": "workpack-v17-48",
       "displayName": "V17 · 48-task 严格串行对照",
-      "status": "formal",
+      "status": "historical",
       "experimentId": "005ffeb9-964e-42ac-86e9-fb9e8f2212fe",
       "runtimeRevision": "sha256:58a05bb656b493b013c825ab3180bab1de9a3fbe7c67e813e3af532325e87bc2",
       "assetVersion": "workpacks-v1",

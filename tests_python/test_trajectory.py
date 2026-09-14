@@ -32,6 +32,22 @@ def setup(manager, request='差额严格大于5分，分期达到8期。'):
     return task, {t.name: t for t in manager.tools(task['id'])}, args
 
 
+def fragment_ids(proposal):
+    return [node['id'] for node in proposal['nodes']]
+
+
+def dependency_closure(proposal, *targets):
+    nodes = {node['id']: node for node in proposal['nodes']}
+    selected = set(targets)
+    pending = list(targets)
+    while pending:
+        current = pending.pop()
+        for dependency in nodes[current].get('dependencies') or []:
+            if dependency not in selected:
+                selected.add(dependency); pending.append(dependency)
+    return [node['id'] for node in proposal['nodes'] if node['id'] in selected]
+
+
 async def test_finance_many_to_many_missing_strict_boundary_overlap_and_current_evidence(tmp_path):
     m=WorkspaceManager(tmp_path); task, tools, args=setup(m)
     ctx=ToolContext({'id':'protocol'})
@@ -57,17 +73,21 @@ async def test_induction_never_plan_answers_and_current_nested_slots(tmp_path):
     run={'id':'source','status':'completed','evaluation':{'status':'passed'},'plan':{'nodes':[{'tool':'unexecuted'}]},
          'toolTrace':[{'ok':True,'tool':'workspace_reconcile_keyed_sums','arguments':args,'result':out}]}
     proposal=trajectory.induce(run,task,list(tools.values()))
-    assert len(proposal['nodes'])==1
+    assert [node['fragmentType'] for node in proposal['nodes']].count('aggregate')==4
+    assert [node['fragmentType'] for node in proposal['nodes']].count('derivedTotal')==1
+    assert [node['fragmentType'] for node in proposal['nodes']].count('comparison')==2
+    assert [node['fragmentType'] for node in proposal['nodes']].count('missing')==4
     assert len(proposal['descriptor']['slots'])==2
     assert 'o1' not in json.dumps(proposal)
     assert not set(task['tableBindings'].values()) & set(str(v) for _,v in trajectory.walk(proposal))
     g=dict(proposal,id='g0',generation=0,matchVersion=0)
     new, newtools, _=setup(m,'请复核差额严格大于10分且分期达到12期，各自独立。')
     new.update(family='poison',template='poison',workpackId='poison',difficulty='poison',privateValidation={'secret':'poison'})
-    choice={'graphId':'g0','decision':'partial','nodeIds':['t0'],'bindings':[
+    choice={'graphId':'g0','decision':'partial','nodeIds':fragment_ids(proposal),'bindings':[
         {'slot':key,'value':10 if slot['sourceValue']==5 else 12,'quote':new['task']} for key,slot in g['descriptor']['slots'].items()],
         'reason':'protocol test','uncovered':['report']}
     resolved=trajectory.bind_selection(choice,[g],new,list(newtools.values()))
+    assert len(resolved['nodes'])==1
     assert resolved['nodes'][0]['arguments']['comparisons'][0]['threshold']==10
     assert resolved['nodes'][0]['arguments']['aggregates'][0]['tableId']==new['tableBindings']['payments']
     assert 'poison' not in json.dumps(trajectory.selection_prompt(new,[g]))
@@ -255,3 +275,134 @@ def test_multi_fragment_selection_rejects_duplicate_and_accepts_independent_dag(
     assert [node['id'] for node in selected['nodes']]==['c0_t0','c1_t0']
     with pytest.raises(ValueError,match='重复'):
         trajectory.bind_selection(choice,[one,dict(one,id='two')],task,list(tools.values()))
+
+async def test_brl_threshold_is_auditable_cents_slot_and_rebinds_current_value(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    source, tools, arguments = setup(manager, '请复核差额严格超过 0.05 BRL、最大分期达到 8 期及以上。')
+    context = ToolContext({'id': 'source-brl'})
+    result = await tools['workspace_reconcile_keyed_sums'].execute(arguments, context)
+    run = {'id': 'source-brl', 'status': 'completed', 'evaluation': {'status': 'passed'}, 'toolTrace': [
+        {'ok': True, 'tool': 'workspace_reconcile_keyed_sums', 'arguments': arguments, 'result': result},
+    ]}
+    proposal = trajectory.induce(run, source, list(tools.values()))
+    assert proposal['nodes'][0]['tool'] == 'workspace_reconcile_keyed_sums'
+    transformed = next((name, slot) for name, slot in proposal['descriptor']['slots'].items() if slot.get('transform'))
+    assert transformed[1]['sourceValue'] == .05
+    assert transformed[1]['transform'] == {'kind': 'scale', 'factor': 100, 'resultType': 'int'}
+
+    current, current_tools, _ = setup(manager, '请复核差额严格超过 0.10 BRL、最大分期达到 12 期及以上。')
+    version = dict(proposal, id='brl-g0', generation=0, matchVersion=0)
+    bindings = []
+    for name, slot in proposal['descriptor']['slots'].items():
+        if slot.get('transform'):
+            bindings.append({'slot': name, 'value': .10, 'quote': '0.10 BRL'})
+        else:
+            bindings.append({'slot': name, 'value': 12, 'quote': '12 期'})
+    selected = trajectory.bind_selection({
+        'graphId': 'brl-g0', 'decision': 'partial', 'nodeIds': fragment_ids(proposal), 'bindings': bindings,
+        'reason': '当前阈值已重新绑定', 'uncovered': ['report'],
+    }, [version], current, list(current_tools.values()))
+    comparison = selected['nodes'][0]['arguments']['comparisons']
+    assert comparison[0]['threshold'] == 10
+    assert comparison[1]['threshold'] == 12
+
+
+async def test_reconcile_fragments_keep_valid_clauses_and_merge_one_physical_call(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    source, tools, arguments = setup(manager)
+    arguments['comparisons'].extend([
+        {'name': 'unbound', 'leftAlias': 'paid', 'operator': 'gt', 'threshold': 777},
+        {'name': 'missing_payment', 'leftAlias': 'paid', 'operator': 'equals', 'threshold': 0},
+        {'name': 'missing_items', 'leftAlias': 'price', 'operator': 'equals', 'threshold': 0},
+    ])
+    result = await tools['workspace_reconcile_keyed_sums'].execute(arguments, ToolContext({'id': 'fragment-source'}))
+    proposal = trajectory.induce({
+        'id': 'fragment-source', 'status': 'completed', 'evaluation': {'status': 'passed'},
+        'toolTrace': [{'ok': True, 'tool': 'workspace_reconcile_keyed_sums', 'arguments': arguments, 'result': result}],
+    }, source, list(tools.values()))
+    comparisons = [node for node in proposal['nodes'] if node.get('fragmentType') == 'comparison']
+    assert [node['arguments']['name']['$literal'] for node in comparisons] == ['difference', 'terms']
+    assert any(boundary.get('fragmentType') == 'comparison' and boundary.get('name') == 'unbound'
+               for boundary in proposal['descriptor']['modelBoundaries'])
+    assert {'missing_payment', 'missing_items'}.issubset({
+        boundary.get('name') for boundary in proposal['descriptor']['modelBoundaries']
+        if boundary.get('fragmentType') == 'comparison'
+    })
+    assert len([node for node in proposal['nodes'] if node.get('fragmentType') == 'aggregate']) == 4
+    assert len([node for node in proposal['nodes'] if node.get('fragmentType') == 'missing']) == 4
+
+    current, current_tools, _ = setup(manager, '差额严格大于10分，分期达到12期。')
+    bindings = [
+        {'slot': name, 'value': 10 if slot['sourceValue'] == 5 else 12, 'quote': current['task']}
+        for name, slot in proposal['descriptor']['slots'].items()
+    ]
+    selected = trajectory.bind_selection({
+        'graphId': 'fragment-g0', 'decision': 'partial', 'nodeIds': fragment_ids(proposal),
+        'bindings': bindings, 'reason': '保留可验证片段', 'uncovered': ['report'],
+    }, [dict(proposal, id='fragment-g0', generation=0, matchVersion=0)], current, list(current_tools.values()))
+    assert len(selected['nodes']) == 1
+    physical = selected['nodes'][0]
+    assert physical['tool'] == 'workspace_reconcile_keyed_sums'
+    assert len(physical['arguments']['aggregates']) == 4
+    assert len(physical['arguments']['derivedTotals']) == 1
+    assert [item['threshold'] for item in physical['arguments']['comparisons']] == [10, 12]
+    assert set(physical['missingAliases']) == {'paid', 'terms', 'price', 'freight'}
+
+
+async def test_reconcile_fragment_dependency_closure_and_missing_clause(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    task, tools, arguments = setup(manager)
+    result = await tools['workspace_reconcile_keyed_sums'].execute(arguments, ToolContext({'id': 'closure-source'}))
+    proposal = trajectory.induce({
+        'id': 'closure-source', 'status': 'completed', 'evaluation': {'status': 'passed'},
+        'toolTrace': [{'ok': True, 'tool': 'workspace_reconcile_keyed_sums', 'arguments': arguments, 'result': result}],
+    }, task, list(tools.values()))
+    version = dict(proposal, id='closure-g0', generation=0, matchVersion=0)
+    derived = next(node for node in proposal['nodes'] if node.get('fragmentType') == 'derivedTotal')
+    comparison = next(node for node in proposal['nodes'] if node.get('fragmentType') == 'comparison')
+    with pytest.raises(ValueError, match='依赖'):
+        trajectory.bind_selection({'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [derived['id']],
+                                   'bindings': [], 'reason': '缺少依赖', 'uncovered': []},
+                                  [version], task, list(tools.values()))
+    with pytest.raises(ValueError, match='依赖'):
+        trajectory.bind_selection({'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [comparison['id']],
+                                   'bindings': [], 'reason': '缺少依赖', 'uncovered': []},
+                                  [version], task, list(tools.values()))
+
+    paid_missing = next(node for node in proposal['nodes']
+                        if node.get('fragmentType') == 'missing' and node['arguments']['alias']['$literal'] == 'paid')
+    selected = trajectory.bind_selection({
+        'graphId': 'closure-g0', 'decision': 'partial',
+        'nodeIds': dependency_closure(proposal, paid_missing['id']), 'bindings': [],
+        'reason': '只复用支付缺失检查', 'uncovered': ['other clauses', 'report'],
+    }, [version], task, list(tools.values()))
+    assert len(selected['nodes']) == 1
+    assert selected['nodes'][0]['arguments']['aggregates'] == [{
+        'tableId': task['tableBindings']['payments'], 'keyField': 'order_id',
+        'field': 'amount_cents', 'alias': 'paid',
+    }]
+    assert selected['nodes'][0]['missingAliases'] == ['paid']
+    replayed = await tools['workspace_reconcile_keyed_sums'].execute(
+        selected['nodes'][0]['arguments'], ToolContext({'id': 'closure-replay'}))
+    assert replayed['missingByAlias']['paid'] == ['o4']
+
+    corrupted = deepcopy(version)
+    target = next(node for node in corrupted['nodes'] if node.get('fragmentType') == 'comparison')
+    target['arguments']['leftAlias'] = {'$literal': 'unknown_alias'}
+    ids = dependency_closure(corrupted, target['id'])
+    bindings = [{'slot': name, 'value': slot['sourceValue'], 'quote': task['task']}
+                for name, slot in corrupted['descriptor']['slots'].items() if slot['nodeId'] in ids]
+    with pytest.raises(ValueError, match='别名'):
+        trajectory.bind_selection({'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': ids,
+                                   'bindings': bindings, 'reason': '损坏别名', 'uncovered': []},
+                                  [corrupted], task, list(tools.values()))
+
+
+def test_trajectory_contract_hash_ignores_dynamic_artifact_delivery_schema(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    task, tools, _ = setup(manager)
+    original = trajectory.api_hash(list(tools.values()))
+    changed = deepcopy(list(tools.values()))
+    report = next(tool for tool in changed if tool.name == 'workspace_publish_report')
+    report.parameters = {'type': 'object', 'properties': {'new_public_group': {'type': 'string'}}}
+    assert trajectory.api_hash(changed) == original

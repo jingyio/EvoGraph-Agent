@@ -586,6 +586,9 @@ class WorkspaceManager:
         groups = args.get('groups') or []
         if len({g['name'] for g in groups}) != len(groups) or any(g['count'] != len(g['selectedIds']) or not set(g['evidenceIds']).issubset(context.evidence) for g in groups):
             return {'status': 'failed', 'issues': ['groups'], 'scope': 'workspace-evidence'}
+        required_group_names = (task.get('deliveryContract') or {}).get('requiredGroupNames') or []
+        if required_group_names and {group['name'] for group in groups} != set(required_group_names):
+            return {'status': 'failed', 'issues': ['group_names'], 'scope': 'workspace-delivery-contract'}
         expected = task.get('privateValidation')
         if not expected:
             return {'status': 'user_review_required', 'issues': [], 'scope': 'user-data-no-private-answer'}
@@ -1166,7 +1169,9 @@ class WorkspaceManager:
         if required_group_names:
             report_required.append('groups')
         report_schema = {'type': 'object', 'properties': {'metrics': metric_schema,
-                                                          'groups': {'type': 'array', 'maxItems': 40, 'items': group_schema},
+                                                          'groups': {'type': 'array',
+                                                                     'maxItems': len(required_group_names) if required_group_names else 40,
+                                                                     'items': group_schema},
                                                           'selectedIds': {'type': 'array', 'maxItems': 1000, 'uniqueItems': True, 'items': {'type': 'string', 'description': selected_id_description}},
                                                           'evidenceIds': {'type': 'array', 'minItems': 1, 'maxItems': 2000, 'uniqueItems': True, 'items': {'type': 'string', 'description': '当前实际观察到的工作区行 rowId 或完整 evidenceId。'}},
                                                           'summary': {'type': 'string', 'minLength': 1, 'maxLength': 6000},
@@ -1232,6 +1237,15 @@ class WorkspaceManager:
             Tool('workspace_export_csv', '把当前表的全部或指定行导出为本地 CSV 文件。', 'artifact', object_schema({'tableId': table_id_schema(), 'rowIds': {'type': 'array', 'maxItems': 5000, 'uniqueItems': True, 'items': {'type': 'string'}}, 'name': {'type': 'string', 'minLength': 1, 'maxLength': 160}}, required=['tableId', 'name']), idempotent('export', export)),
             Tool('workspace_publish_report', '保存有证据的分析报告。多个独立原因用 groups 分别给出 name/reason/condition/count/selectedIds/evidenceIds；允许重叠，空组也明确0。'+selected_id_description+' evidenceIds 必须使用当前观察的工作区行 rowId 或完整 evidenceId。不会执行外部业务动作。', 'artifact', report_schema, idempotent('publish', publish)),
         ]
+        if task.get('computeInterface') == 'granular-compute-v1':
+            from .workspace_compute import tools_for
+            # Both attribution arms receive the same primitive API. Legacy
+            # workspaces keep their audited complete reconciliation interface.
+            tools = [tool for tool in tools if tool.name not in {
+                'workspace_reconcile_keyed_sums', 'workspace_aggregate_rows',
+                'workspace_ordered_partition',
+            }]
+            tools.extend(tools_for(self, workspace_id, table_id_schema(), MAX_RETURNED_ROWS))
         # The runtime still validates against each current workspace's table-ID
         # enum.  Only the experience identity uses stable table slots/fields.
         for tool in tools:

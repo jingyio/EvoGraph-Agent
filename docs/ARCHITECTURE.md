@@ -1,5 +1,14 @@
 # 当前架构
 
+## 2026-09-14 细粒度学习归因运行线
+
+最新候选后端为 `trajectory-v5-granular`，六任务资产 `finance-rsi-attribution-v4`。两臂均使用图执行、同一 27B 模型及共享工具/提示/恢复；区别仅在跨任务经验读取与正常 train 学习。48任务扩展暂缓。旧任务与实验均保留。
+
+`backend/workspace_compute.py` 实现 run 内映射、聚合、关联、派生、比较和缺失工具；`ToolContext` 保存仅本次运行的计算收据。执行器为成功收据记录显式上游来源；轨迹诱导把这些来源编译为 `$output` 边，从当前附件重算，不保存旧业务结果。数值转换条件保留模型边界，不阻塞其他兼容子图。工具独立步骤仍可批量调用。
+
+`backend/attribution_assets.py` 冻结六个现有 Olist 历史附件/自然问题/评分 hash；机会标签仅供审计。`backend/attribution_experiment.py` 使用独立空经验和严格串行交替臂顺序，保留失败与完整开销。共享工作树有在途数据分析修改，故真实运行从冻结源码快照导入并校验 hash，结果保存于标准归因工件目录。详见 [工具与复用设计](granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
+
+
 ## 2026-09-14 V3-r3 当前运行线
 
 `releases/manifest.json` 当前唯一候选是
@@ -176,3 +185,7 @@ Schema见[任务与工具契约审阅](trajectory-v3-task-and-tool-review-2026-0
 ### V3-r2 历史失败预检与 V3-r3 候选投影
 
 `ReleaseEvidence` 对 candidate 的已保存 trajectory experiment 执行 runtime、资产、协议和 pair/run 身份校验。未运行的 V3-r3 只显示冻结任务审阅，不显示指标或曲线；若预检 `quality_stopped`，对应历史 release 只保留同一运行的失败报告、输入、轨迹和绝对开销。节省率/累计收益曲线关闭，直到完整质量门槛通过。
+
+### 数据分析成本投影（2026-09-14）
+
+`AnalysisDatasets` 在读取固定实验 artifact 时同时读取 `releases/analysis-manifest.json` 中的版本化 `modelPricing` 快照。`/api/analysis/datasets/{id}` 返回每个 run 的输入/输出 token、实际角色模型、USD 估算成本和独立累计曲线。角色模型一致时按 run 总 token 计费；角色不同只在 `phaseMetrics` 与总 usage 完全闭合时按 plan/match→planner、composition/compile→composition、execute/graph→executor 计费。任何缺口返回 `null`，前端保留曲线缺口，绝不以 0 或默认模型补写。

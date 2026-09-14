@@ -27,6 +27,7 @@ from .workpacks import install_workpack, list_workpacks
 from .workpack_experiment import WorkpackExperiment
 from .workpack_judge import WorkpackJudge
 from .analysis_datasets import AnalysisDatasets
+from .attribution_experiment import AttributionExperiment
 
 
 class ReportReview(BaseModel):
@@ -107,6 +108,7 @@ def create_app(service=None):
     releases = ReleaseEvidence(taskbank.root)
     analysis_datasets = AnalysisDatasets(taskbank.root)
     trajectory_experiment = TrajectoryExperiment(taskbank.root)
+    attribution_experiment = AttributionExperiment(taskbank.root)
     workpack_experiment = WorkpackExperiment(taskbank, taskbank.root)
     workpack_judge = WorkpackJudge(workpack_experiment, taskbank.root)
     paired = PairedEvaluation(task_runner)
@@ -120,6 +122,7 @@ def create_app(service=None):
         task_runner.restore()
         workspace_runner.restore()
         trajectory_experiment.restore()
+        attribution_experiment.restore()
         workpack_experiment.restore()
         workpack_judge.restore()
         paired.restore()
@@ -133,6 +136,7 @@ def create_app(service=None):
             await workspace_runner.shutdown()
             await workpack_judge.shutdown()
             await trajectory_experiment.shutdown()
+            await attribution_experiment.shutdown()
             await workpack_experiment.shutdown()
             await live_showcase.shutdown()
             await service.shutdown()
@@ -143,6 +147,7 @@ def create_app(service=None):
     app.state.workspace_manager = workspace_manager
     app.state.workspace_runner = workspace_runner
     app.state.workpack_experiment = workpack_experiment
+    app.state.attribution_experiment = attribution_experiment
     app.state.workpack_judge = workpack_judge
     app.state.paired = paired
     app.state.judge = judge
@@ -425,6 +430,47 @@ def create_app(service=None):
             run=trajectory_experiment.run(key, arm, run_id)
             return HTMLResponse(render_report(run, trajectory_experiment.task(key, run)), headers={'Content-Disposition': 'attachment; filename="trajectory-report.html"'})
         except (KeyError, FileNotFoundError, ValueError): raise HTTPException(404, '报告不存在')
+
+    @app.get('/api/attribution-experiments')
+    def attribution_list():
+        return [
+            {'id': item['id'], 'createdAt': item['createdAt'], 'mode': item['mode'],
+             'status': item['status'], 'summary': attribution_experiment.get(item['id'])['summary']}
+            for item in sorted(attribution_experiment.items.values(), key=lambda value: value['createdAt'])
+        ]
+
+    @app.post('/api/attribution-experiments', status_code=202)
+    async def attribution_start(request: WorkspaceRunRequest, mode: Literal['smoke', 'probe', 'formal'] = 'smoke'):
+        if not request.confirmCost:
+            raise HTTPException(400, '需要确认真实模型费用')
+        if workspace_runner.tasks or workpack_experiment.tasks or trajectory_experiment.tasks:
+            raise HTTPException(409, '已有工作区或实验任务在途')
+        try:
+            return await attribution_experiment.start(mode)
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+
+    @app.get('/api/attribution-experiments/{key}')
+    def attribution_get(key: str):
+        if key not in attribution_experiment.items:
+            raise HTTPException(404, '归因实验不存在')
+        return attribution_experiment.dashboard(key)
+
+    @app.get('/api/attribution-experiments/{key}/runs/{arm}/{run_id}')
+    def attribution_run(key: str, arm: str, run_id: str):
+        try:
+            return attribution_experiment.run(key, arm, run_id)
+        except (KeyError, FileNotFoundError, ValueError):
+            raise HTTPException(404, '归因运行不存在')
+
+    @app.get('/api/attribution-experiments/{key}/runs/{arm}/{run_id}/report', response_class=HTMLResponse)
+    def attribution_report(key: str, arm: str, run_id: str):
+        try:
+            run = attribution_experiment.run(key, arm, run_id)
+            return HTMLResponse(render_report(run, attribution_experiment.task(key, run)),
+                                headers={'Content-Disposition': 'attachment; filename="finance-attribution-report.html"'})
+        except (KeyError, FileNotFoundError, ValueError):
+            raise HTTPException(404, '归因报告不存在')
 
     @app.get('/api/workpack-experiments/protocol')
     def workpack_experiment_protocol(mode: Literal['smoke_v4', 'precheck_v4', 'full_train_v2', 'smoke_v5', 'precheck_v5', 'full_train_v3',

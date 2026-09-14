@@ -1,5 +1,20 @@
 # 项目状态快照
 
+## 2026-09-14 reconciliation clause IR（已实现，未运行付费模型）
+
+- 对冻结 V2 smoke `c0a387c3-5272-4a24-8743-9bd6ed821c13` 的 RSI run
+  `5879a866-a4e0-423c-bc04-357c0f2dfe88` 做了只读审计：结构化报告通过，但 13 次模型请求、
+  175,453 输入 token、94.321 秒；1 次 plan、11 次执行工具决策、1 次报告。两个工具错误分别是
+  `comparisons` 被传成字符串，以及 `group_count` 缺少 `groupBy`。旧工件未改写。
+- `workspace_reconcile_keyed_sums` 的成功收据现按 aggregate、derivedTotal、每个 comparison 和
+  missingByAlias obligation 编译为可独立选择的逻辑片段；依赖闭包验证后，同一 bundle 合并为一次
+  物理 reconciliation 调用。单个不可绑定 comparison 不再丢弃其余对账主体。
+- `0.05 BRL`→5分保存为可审计精确缩放槽；V2 的 `missing_payment/missing_items equals 0`
+  伪比较不进入经验，真实缺失语义来自已成功工具返回的 `missingByAlias`。别名、core、Schema 或依赖
+  不一致均失败关闭；旧普通 trajectory node 仍兼容。
+- 无模型验证：相关 65 项通过，全量 Python 208 项通过，TypeScript/Vite build 与
+  `git diff --check` 通过。尚未产生新的真实 RSI 命中或成本收益，需新 runtime smoke 才能判断。
+
 ## 2026-09-14 数据分析新增调用次数与准确率（已完成）
 
 - V17/V4 及后续同格式测试组新增累计大模型调用曲线和累计任务准确率曲线；顶部 KPI 显示两臂真实 `modelRequests`、调用节省率与结构化通过率。
@@ -194,3 +209,9 @@ runtime 的前提下执行。详见 `docs/workspace-workpack-v8-reconciliation-p
 ## 2026-09-14 V3-r2 真实 API 预检结果
 
 已按用户授权启动 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 的 12 对预检，但 F01 首对两臂均质量失败后严格停止；未启动其余任务。Baseline `limited`（24 请求、31 工具、609,579 token、144.346s、metrics 失败）；RSI `limited`（13 请求、20 工具、185,288 token、111.181s、metrics/selectedIds/groups 失败、Fast 0/1）。这是已保存的真实 API 失败工件，不能主张 69.60% token 差或任何效率/进化收益。下一步先修一对多金额/单位与报告交付契约，再以新空经验库重新预检。
+
+## 2026-09-14 · 数据分析成本快照
+
+`#analysis` 的每个测试组现从 `releases/analysis-manifest.json` 的版本化 OpenRouter 价格快照读取模型估算单价，并按每个保存 run 的真实 `inputTokens`、`outputTokens` 和 `models` 计算 USD 估算成本；没有完整 usage、没有记录角色模型、没有对应单价，或混合模型缺少可核对的 phase 计量时保持空值，不按 token 总量或默认模型猜测。当前快照：`qwen/qwen3.5-27b` 输入 `$0.195/M`、输出 `$1.56/M`；`qwen/qwen3.5-9b` 输入 `$0.080/M`、输出 `$0.130/M`，来源为 OpenRouter 标准价格页面，抓取日为 2026-09-14。
+
+V17 48-task 保存工件全用 27B，估算成本 Baseline `$0.5635`、RSI `$0.3501`，在同任务质量门槛下对应 `37.9%` 估算节省；V4 36-task 为 `$0.1514`、`$0.1040`，对应 `31.3%`。财务归因候选的 RSI 有 usage 缺口，只展示已知绝对成本，不计算成本收益。

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from urllib.parse import quote
 from .trajectory_experiment import summary
+from .attribution_experiment import summarize as attribution_summary
 from .trajectory_assets import GROUPS, ROLE_LABELS, request_for
 from .workspace import WorkspaceManager
 
@@ -53,14 +54,34 @@ class ReleaseEvidence:
 
     def experiment(self, key):
         release = self.manifest(key)
-        if release['source'] != 'trajectory':
+        folders = {'trajectory': 'trajectory-experiments', 'attribution': 'attribution-experiments'}
+        folder = folders.get(release['source'])
+        if folder is None:
             raise ValueError('该历史发布使用独立历史审计入口')
-        directory = self.root / 'artifacts/trajectory-experiments' / release['experimentId']
-        item = json.loads((directory / 'experiment.json').read_text())
-        if (item['id'] != release['experimentId'] or item['assetVersion'] != release['assetVersion'] or
-                'sha256:' + item['fingerprint']['digest'] != release['runtimeRevision'] or item['protocol'] != release['protocol']):
+        directory = self.root / 'artifacts' / folder / release['experimentId']
+        path = directory / 'experiment.json'
+        content = path.read_bytes()
+        item = json.loads(content)
+        checks = [
+            item['id'] == release['experimentId'],
+            item['assetVersion'] == release['assetVersion'],
+            'sha256:' + item['fingerprint']['digest'] == release['runtimeRevision'],
+            item['protocol'] == release['protocol'],
+        ]
+        artifact_digest = release.get('artifactDigest')
+        if artifact_digest is not None:
+            checks.append('sha256:' + hashlib.sha256(content).hexdigest() == artifact_digest)
+        if not all(checks):
             raise ValueError('保存工件与发布清单不一致；拒绝替换数据来源')
         return release, item, directory
+
+    @staticmethod
+    def _stored_arm(release, arm):
+        if arm not in ('baseline', 'rsi'):
+            raise KeyError('未知实验侧')
+        if release['source'] == 'attribution':
+            return {'baseline': 'no_learning', 'rsi': 'online_rsi'}[arm]
+        return arm
 
     def _pair(self, key, pair_id):
         release, item, directory = self.experiment(key)
@@ -71,14 +92,15 @@ class ReleaseEvidence:
 
     def run(self, key, pair_id, arm):
         release, _, directory, pair = self._pair(key, pair_id)
-        if arm not in ('baseline', 'rsi') or not pair.get(arm):
+        stored_arm = self._stored_arm(release, arm)
+        if not pair.get(stored_arm):
             raise KeyError('该侧没有保存运行')
-        stored = pair[arm]
-        run = json.loads((directory / arm / 'runs' / (stored['id'] + '.json')).read_text())
+        stored = pair[stored_arm]
+        run = json.loads((directory / stored_arm / 'runs' / (stored['id'] + '.json')).read_text())
         if run['id'] != stored['id'] or run['taskId'] != pair['taskId']:
             raise ValueError('运行身份与发布任务不一致')
         return {'releaseId': release['releaseId'], 'experimentId': release['experimentId'], 'pairId': pair_id,
-                'arm': arm, 'run': run}
+                'arm': arm, 'storedArm': stored_arm, 'run': run}
 
     def _workspace(self, directory, pair):
         manager = WorkspaceManager(directory)
@@ -95,7 +117,8 @@ class ReleaseEvidence:
                 'inputs': [{'id': s['id'], 'name': s['name'], 'sizeBytes': s['sizeBytes'], 'provenance': s.get('provenance'),
                             'download': base + '/inputs/' + s['id']} for s in workspace['sources']],
                 'tables': workspace['tables'],
-                'runs': {arm: self.run(key, pair_id, arm)['run'] for arm in ('baseline', 'rsi') if pair.get(arm)}}
+                'runs': {arm: self.run(key, pair_id, arm)['run'] for arm in ('baseline', 'rsi')
+                         if pair.get(self._stored_arm(release, arm))}}
 
     def input_file(self, key, pair_id, source_id):
         _, _, directory, pair = self._pair(key, pair_id)
@@ -193,6 +216,67 @@ class ReleaseEvidence:
                     'pairs': [], 'plannedPairs': expected['train'], 'taskReview': reviews, 'revisions': [],
                     'evolutionEvidence': {'graph': False, 'matching': False}}
         release, item, directory = self.experiment(key)
+        if release['source'] == 'attribution':
+            item = deepcopy(item)
+            public_pairs = []
+            for pair in item['pairs']:
+                pair_id = pair['spec']['id']
+                for public_arm, stored_arm in (('baseline', 'no_learning'), ('rsi', 'online_rsi')):
+                    if pair.get(stored_arm):
+                        pair[stored_arm] = self.run(key, pair_id, public_arm)['run']
+                public_pairs.append({
+                    'pairId': pair_id, 'title': pair['spec']['title'], 'scenario': pair['spec']['scenario'],
+                    'position': pair['spec']['position'], 'opportunity': pair['spec']['opportunity'],
+                    'status': pair['status'], 'detail': f'/api/releases/{quote(key)}/pairs/{quote(pair_id)}',
+                    'runs': {
+                        'baseline': {name: pair['no_learning'].get(name) for name in ['id', 'status', 'metrics', 'evaluation', 'evolution']},
+                        'rsi': {name: pair['online_rsi'].get(name) for name in ['id', 'status', 'metrics', 'evaluation', 'evolution']},
+                    },
+                })
+            metrics = attribution_summary(item)
+            revisions = []
+            for index, pair in enumerate(item['pairs']):
+                versions = (pair.get('experienceAfter') or {}).get('onlineRsiVersions') or []
+                for version in versions:
+                    graph_changed = bool(version.get('parentGraphId')) and any(
+                        patch.get('before') != patch.get('after') for patch in version.get('patches') or []
+                    )
+                    matching_changed = int(version.get('matchVersion') or 0) > 0 and any(
+                        patch.get('before') != patch.get('after') for patch in version.get('matchPatches') or []
+                    )
+                    if not graph_changed and not matching_changed:
+                        continue
+                    uses = []
+                    for later in item['pairs'][index + 1:]:
+                        run = later.get('online_rsi') or {}
+                        evolution = run.get('evolution') or {}
+                        used = set(evolution.get('usedVersionIds') or [])
+                        if evolution.get('usedVersionId'):
+                            used.add(evolution['usedVersionId'])
+                        if version['id'] in used and any(
+                            trace.get('executor') == 'graph' and trace.get('ok') is True
+                            for trace in run.get('toolTrace') or []
+                        ):
+                            uses.append({'pairId': later['spec']['id'], 'runId': run['id'],
+                                         'evaluation': run.get('evaluation')})
+                    revisions.append({'versionId': version['id'], 'sourceRunId': version.get('sourceRunId'),
+                                      'sourcePairId': pair['spec']['id'], 'parentVersionId': version.get('parentGraphId'),
+                                      'graphChanged': graph_changed, 'matchingChanged': matching_changed,
+                                      'subsequentUses': uses, 'graphDiff': version.get('patches') or [],
+                                      'matchingDiff': version.get('matchPatches') or []})
+            task_plan = [
+                {'index': spec.get('position'), 'taskId': spec['id'], 'title': spec.get('title') or spec['id'],
+                 'opportunity': spec.get('opportunity'),
+                 'status': next((pair['status'] for pair in item['pairs'] if pair['spec']['id'] == spec['id']), 'not_run')}
+                for spec in item['manifest']
+            ]
+            return {'release': release, 'experimentStatus': item['status'], 'summary': metrics,
+                    'pairs': public_pairs, 'plannedPairs': len(item['manifest']), 'taskPlan': task_plan,
+                    'revisions': revisions,
+                    'evolutionEvidence': {
+                        'graph': any(row['graphChanged'] and row['subsequentUses'] for row in revisions),
+                        'matching': any(row['matchingChanged'] and row['subsequentUses'] for row in revisions),
+                    }}
         # Use membership-checked saved runs for every metric, report and curve.
         item = deepcopy(item)
         pairs = []
@@ -242,10 +326,11 @@ class ReleaseEvidence:
         registry = self.registry()
         rows = []
         for source, folder, page, asset in [('trajectory', 'trajectory-experiments', 'trajectory', 'trajectory-review-v1'),
+                                           ('attribution', 'attribution-experiments', 'candidate', 'finance-rsi-attribution-v1'),
                                            ('workpack', 'workpack-experiments', 'experiments', 'workpacks-v1')]:
             for path in sorted((self.root / 'artifacts' / folder).glob('*/experiment.json')):
                 item = json.loads(path.read_text())
-                if source == 'trajectory':
+                if source in ('trajectory', 'attribution'):
                     revision = 'sha256:' + item.get('fingerprint', {}).get('digest', 'unrecorded')
                 else:
                     fp = item.get('protocol', {}).get('runtimeFingerprint') or {}

@@ -1,5 +1,17 @@
 # 下一阶段任务
 
+## reconciliation clause IR（2026-09-14）
+
+- [x] 冻结审计 V2 RSI smoke 的 13 次模型请求、2 次工具错误和整节点编译边界；不修改旧工件。
+- [x] 将成功 reconciliation 收据拆为 aggregate、derivedTotal、comparison、missingByAlias
+  逻辑片段，并在当前槽绑定和依赖闭包校验后合并为一次物理工具调用。
+- [x] 拒绝复用 V2 的 `missing_* equals 0` 伪比较；缺失义务只引用工具已返回的
+  `missingByAlias`，同时保留可验证 aggregate/derived/difference 主体。
+- [x] 补充 BRL→分重绑、8→12 阈值重绑、坏 comparison 局部丢弃、derived/missing 依赖闭包、
+  单次物理合并和 alias/Schema 失败关闭的无模型测试；全量 Python 208 项及构建通过。
+- [ ] 冻结新的 runtime 身份后运行最小真实 smoke，观察 match 选择是否能把原 11 次执行决策压缩为
+  1 次 match + 1 次 reconciliation + 报告；若模型仍不选完整闭包，如实记录并继续改 selector 表达。
+
 ## 前端数据分析入口（2026-09-14）
 
 - [x] 主导航“当前证据”改为“数据分析”，旧 `#evidence` 兼容跳转，主导航仍只有两个入口。
@@ -170,3 +182,9 @@ G0 并在后续实际 Fast 35 次。详见
 - [ ] 修复 F01 真实运行暴露的支付/商品一对多汇总与分/BRL 单位口径，使报告 `metrics`、业务 ID 清单和原因分组与私有评分一致。
 - [ ] 为上述修复补充不调用模型的回归测试；不得把私有真值注入用户题面、匹配器或固定业务 SOP。
 - [ ] 仅在修复评审后，从新的空 RSI 经验库重新运行 12 对严格串行预检；保留 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 的失败与开销。
+
+## 数据分析成本快照（2026-09-14）
+
+- [x] 将每次保存 run 的输入/输出 token、角色模型和 OpenRouter 价格快照投影到数据分析 API。
+- [x] 增加 USD 成本 KPI、逐任务成本和累计成本曲线；候选/usage 缺口不生成成本收益。
+- [ ] 新正式发布时，在写入新的测试组清单前复核 OpenRouter 价格快照日期和模型版本；不得用当前价格覆盖既有历史分析。

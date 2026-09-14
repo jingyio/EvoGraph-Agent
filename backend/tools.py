@@ -10,6 +10,8 @@ from jsonschema import Draft7Validator
 class ToolContext:
     run: dict
     evidence: set = field(default_factory=set)
+    computations: dict = field(default_factory=dict)
+    computation_sources: dict = field(default_factory=dict)
 
 
 @dataclass
