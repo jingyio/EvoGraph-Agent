@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from . import config
 from .attribution_assets import VERSION, build, install
+from . import cross_domain_attribution_assets
 from .domain import now
 from .graph_store import write_private
 from .task_runner import TaskRunRequest, TaskRunner
@@ -123,7 +124,7 @@ def summarize(item):
         'points': points,
         'protocolComplete': protocol_complete,
         'qualityGate': quality,
-        'costConclusionAllowed': quality,
+        'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal'},
         'netTokenSaving': (1 - arm_summary['online_rsi']['tokens'] / arm_summary['no_learning']['tokens']) if arm_summary['no_learning']['tokens'] else None,
         'netLatencySaving': (1 - arm_summary['online_rsi']['durationMs'] / arm_summary['no_learning']['durationMs']) if arm_summary['no_learning']['durationMs'] else None,
         'actualGraphUse': {
@@ -166,7 +167,7 @@ class AttributionExperiment:
         for pair in item.get('pairs') or []:
             for arm in ARMS:
                 if pair.get(arm):
-                    pair[arm] = {name: deepcopy(pair[arm].get(name)) for name in ['id', 'status', 'metrics', 'phaseMetrics', 'evaluation', 'evolution', 'error', 'submission']}
+                    pair[arm] = {name: deepcopy(pair[arm].get(name)) for name in ['id', 'status', 'metrics', 'phaseMetrics', 'executionStageMetrics', 'evaluation', 'evolution', 'error', 'submission']}
         return item
 
     def run(self, key, arm, run_id):
@@ -188,26 +189,43 @@ class AttributionExperiment:
             raise ValueError(f'归因实验要求执行、规划和组合统一使用 {MODEL}')
 
     async def start(self, mode='smoke'):
-        if mode not in {'smoke', 'probe', 'repair_probe', 'formal'}:
+        allowed = {'smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal'}
+        if mode not in allowed:
             raise ValueError('unknown attribution stage')
         if self.tasks:
             raise ValueError('已有归因实验在途')
         self._validate_model()
-        asset = build(self.root)
+        cross_domain = mode.startswith('cross_domain_')
+        asset_version = cross_domain_attribution_assets.VERSION if cross_domain else VERSION
+        asset_builder = cross_domain_attribution_assets.build if cross_domain else build
+        asset_installer = cross_domain_attribution_assets.install if cross_domain else install
+        asset = asset_builder(self.root)
         runtime = fingerprint(self.root)
         predecessor = None
-        if mode == 'formal':
+        formal_mode = 'cross_domain_formal' if cross_domain else 'formal'
+        probe_mode = 'cross_domain_probe' if cross_domain else 'probe'
+        if mode == formal_mode:
             predecessor = next((
                 item for item in reversed(list(self.items.values()))
-                if item.get('mode') == 'probe' and item.get('assetVersion') == VERSION
+                if item.get('mode') == probe_mode and item.get('assetVersion') == asset_version
                 and item.get('fingerprint') == runtime and summarize(item)['qualityGate']
             ), None)
             if not predecessor:
-                raise ValueError('同一 runtime 与资产的双任务预检未通过，禁止启动正式十二任务归因实验')
+                scope = '跨场景十二对' if cross_domain else '双任务'
+                raise ValueError(f'同一 runtime 与资产的{scope}预检未通过，禁止启动正式归因实验')
         if mode == 'repair_probe':
             # Minimal natural chain: create the order-review parent, recover the
             # payment-period coverage extension, then test its later use.
             manifest = deepcopy([asset['tasks'][index] for index in (0, 8, 9)])
+        elif mode == 'cross_domain_smoke':
+            # Finance has already passed the same shared delivery chain. Spend the
+            # smoke budget only on the two newly introduced scenarios.
+            manifest = deepcopy([
+                row for row in asset['tasks']
+                if row.get('scenario') in {'support', 'tickets'} and row.get('scenarioPosition') == 1
+            ])
+        elif mode == 'cross_domain_probe':
+            manifest = deepcopy([row for row in asset['tasks'] if row.get('precheck')])
         else:
             task_limit = {'smoke': 1, 'probe': 2}.get(mode, len(asset['tasks']))
             manifest = deepcopy(asset['tasks'][:task_limit])
@@ -218,13 +236,14 @@ class AttributionExperiment:
             'mode': mode,
             'status': 'running',
             'createdAt': now(),
-            'assetVersion': VERSION,
+            'assetVersion': asset_version,
             'fingerprint': runtime,
             'manifest': manifest,
             'pairs': [],
             'predecessorId': predecessor['id'] if predecessor else None,
             'protocol': {
                 'id': ('finance-graph-rsi-error-recovery-probe-v1' if mode == 'repair_probe'
+                       else 'cross-domain-graph-rsi-learning-attribution-v1' if cross_domain
                        else 'finance-graph-rsi-learning-attribution-v5-12'),
                 'model': MODEL,
                 'planner': MODEL,
@@ -241,11 +260,14 @@ class AttributionExperiment:
                 'onlineRsi': 'same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment',
                 'shared': ['model', 'prompt', 'tools', 'cold planning', 'graph compilation', 'parameter binding', 'report recovery', 'budget', 'inputs'],
                 'judge': 'not_run',
-                'actualGraphUseMinimumRate': (None if mode == 'smoke' else 0.50),
+                'actualGraphUseMinimumRate': (None if mode in {'smoke', 'cross_domain_smoke'} else 0.50),
                 'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
+                                else 'two new-domain capability pairs (support C01 and tickets T01); excluded from learning and formal conclusions' if mode == 'cross_domain_smoke'
                                 else 'cold-start plus first reuse/rebind pair; excluded from formal metrics' if mode == 'probe'
+                                else 'twelve frozen pairs across finance, support and tickets; excluded from formal metrics' if mode == 'cross_domain_probe'
                                 else 'FX01 creates the parent; FX09 exercises the coverage extension and bounded report recovery; FX10 tests later use; excluded from formal metrics' if mode == 'repair_probe'
+                                else 'formal frozen 48-task cross-domain chain' if cross_domain
                                 else 'formal frozen twelve-task finance chain'),
                 'failurePolicy': 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure',
             },
@@ -273,7 +295,7 @@ class AttributionExperiment:
                         raise ValueError('runtime changed after freeze')
                     if runners['no_learning'].evolution.versions:
                         raise ValueError('关闭学习臂读取了跨任务经验')
-                    workspace, task = install(manager, self.root, spec)
+                    workspace, task = asset_installer(manager, self.root, spec)
                     pair = {'index': index + 1, 'spec': spec, 'workspaceId': workspace['id'], 'taskId': task['id'], 'status': 'running'}
                     item['pairs'].append(pair)
                     self.save(item)
@@ -303,7 +325,7 @@ class AttributionExperiment:
                         or (pair[arm].get('evolution') or {}).get('maintenanceError')
                         for arm in ARMS
                     )
-                    if mode in {'smoke', 'probe', 'repair_probe'} and any(
+                    if mode in {'smoke', 'probe', 'repair_probe', 'cross_domain_smoke', 'cross_domain_probe'} and any(
                         pair[arm].get('status') != 'completed' or (pair[arm].get('evaluation') or {}).get('status') != 'passed'
                         for arm in ARMS
                     ):

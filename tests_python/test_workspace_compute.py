@@ -214,3 +214,161 @@ async def test_aggregate_rejects_count_alias_for_numeric_sum(tmp_path):
             'receiptId': mapped['receiptId'],
             'measures': [{'field': 'amount_cents', 'alias': 'payment_count', 'operation': 'sum'}],
         }, context)
+
+
+@pytest.mark.asyncio
+async def test_compare_datetimes_returns_threshold_and_invalid_findings(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('support')
+    manager.add_source(workspace['id'], 'responses.json', json.dumps({
+        'responses': [
+            {'complaint_id': 'late', 'received': '2026-01-01T00:00:00Z', 'sent': '2026-01-03T01:00:00Z'},
+            {'complaint_id': 'edge', 'received': '2026-01-01T00:00:00Z', 'sent': '2026-01-03T00:00:00Z'},
+            {'complaint_id': 'bad', 'received': '2026-01-02T00:00:00Z', 'sent': '2026-01-01T00:00:00Z'},
+            {'complaint_id': 'missing', 'received': '', 'sent': '2026-01-01T00:00:00Z'},
+        ],
+    }).encode())
+    public, _ = manager.create_task(workspace['id'], '复核严格超过48小时的投诉。', split='train')
+    task = manager.tasks[public['id']]
+    task['computeInterface'] = 'granular-compute-v1'
+    tools = {tool.name: tool for tool in manager.tools(task['id'])}
+    context = ToolContext({'id': 'datetime-test'})
+    mapped = await tools['workspace_map_fields'].execute({
+        'tableId': task['tableBindings']['responses'], 'keyField': 'complaint_id',
+        'fields': ['received', 'sent'],
+    }, context)
+    result = await tools['workspace_compare_datetimes'].execute({
+        'receiptId': mapped['receiptId'], 'fields': ['received', 'sent'],
+        'name': 'delayed_transfer', 'operator': 'gt', 'thresholdHours': 48,
+    }, context)
+    invalid = await tools['workspace_select_invalid_datetimes'].execute({
+        'receiptId': mapped['receiptId'], 'fields': ['received', 'sent'],
+        'name': 'date_review',
+    }, context)
+    assert result['selectedIds'] == ['late']
+    assert result['count'] == 1
+    assert result['incompleteKeys'] == ['bad', 'missing']
+    assert invalid['selectedIds'] == ['bad', 'missing']
+    assert invalid['count'] == 2
+    assert len(context.evidence) == 4
+    source = {'$output': {'traceIndex': 0, 'path': ['receiptId']}}
+    proposal = trajectory.induce({'id': 'datetime-source', 'toolTrace': [
+        {'tool': 'workspace_map_fields', 'arguments': {
+            'tableId': task['tableBindings']['responses'], 'keyField': 'complaint_id',
+            'fields': ['received', 'sent'],
+        }, 'ok': True, 'result': mapped},
+        {'tool': 'workspace_compare_datetimes', 'arguments': {
+            'receiptId': mapped['receiptId'], 'fields': ['received', 'sent'],
+            'name': 'delayed_transfer', 'operator': 'gt', 'thresholdHours': 48,
+        }, 'ok': True, 'result': result, 'argumentSources': {'receiptId': source}},
+        {'tool': 'workspace_select_invalid_datetimes', 'arguments': {
+            'receiptId': mapped['receiptId'], 'fields': ['received', 'sent'],
+            'name': 'date_review',
+        }, 'ok': True, 'result': invalid, 'argumentSources': {'receiptId': source}},
+    ]}, manager.task(task['id']), list(tools.values()))
+    assert [node['tool'] for node in proposal['nodes']] == [
+        'workspace_map_fields', 'workspace_compare_datetimes',
+        'workspace_select_invalid_datetimes',
+    ]
+    assert len(proposal['descriptor']['slots']) == 1
+
+
+@pytest.mark.asyncio
+async def test_mapped_filter_key_restriction_and_count_compile_for_reuse(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('tickets')
+    manager.add_source(workspace['id'], 'tickets.json', json.dumps({
+        'issues': [
+            {'issue_id': 'a', 'state': 'open'},
+            {'issue_id': 'b', 'state': 'closed'},
+            {'issue_id': 'c', 'state': 'open'},
+        ],
+        'activity': [
+            {'issue_id': 'a', 'comments': 5, 'assignee_count': 0, 'labels': 'bug, backend'},
+            {'issue_id': 'b', 'comments': 10, 'assignee_count': 0, 'labels': 'bug'},
+            {'issue_id': 'c', 'comments': 2, 'assignee_count': 1, 'labels': 'docs'},
+        ],
+    }).encode())
+    public, _ = manager.create_task(
+        workspace['id'],
+        '复核 state 为 open 且评论达到 3 条的事项，标出 assignee_count 为零和 labels 包含 bug 的记录。',
+        split='train',
+    )
+    task = manager.tasks[public['id']]
+    task['computeInterface'] = 'granular-compute-v1'
+    tools = {tool.name: tool for tool in manager.tools(task['id'])}
+    context = ToolContext({'id': 'mapped-filter'})
+    traces = []
+
+    async def call(name, args):
+        sources = {}
+        for path, leaf in trajectory.walk(args):
+            for index, trace in enumerate(traces):
+                if leaf == trace['result'].get('receiptId'):
+                    sources['/'.join(map(str, path))] = {
+                        '$output': {'traceIndex': index, 'path': ['receiptId']},
+                    }
+        result = await tools[name].execute(args, context)
+        traces.append({
+            'tool': name, 'arguments': args, 'ok': True,
+            'result': result, 'argumentSources': sources,
+        })
+        return result
+
+    bindings = task['tableBindings']
+    issues = await call('workspace_map_fields', {
+        'tableId': bindings['issues'], 'keyField': 'issue_id', 'fields': ['state'],
+    })
+    open_rows = await call('workspace_filter_mapped_rows', {
+        'receiptId': issues['receiptId'],
+        'filters': [{'field': 'state', 'operator': 'equals', 'value': 'open'}],
+    })
+    open_keys = await call('workspace_select_keys', {
+        'receiptId': open_rows['receiptId'], 'name': 'open',
+    })
+    activity = await call('workspace_map_fields', {
+        'tableId': bindings['activity'], 'keyField': 'issue_id',
+        'fields': ['comments', 'assignee_count', 'labels'],
+    })
+    open_activity = await call('workspace_restrict_to_keys', {
+        'receiptId': activity['receiptId'], 'keysReceiptId': open_rows['receiptId'],
+    })
+    focus_rows = await call('workspace_filter_mapped_rows', {
+        'receiptId': open_activity['receiptId'],
+        'filters': [{'field': 'comments', 'operator': 'gte', 'value': 3}],
+    })
+    focus = await call('workspace_select_keys', {
+        'receiptId': focus_rows['receiptId'], 'name': 'focus',
+    })
+    unassigned_rows = await call('workspace_filter_mapped_rows', {
+        'receiptId': focus_rows['receiptId'],
+        'filters': [{'field': 'assignee_count', 'operator': 'zero'}],
+    })
+    unassigned = await call('workspace_select_keys', {
+        'receiptId': unassigned_rows['receiptId'], 'name': 'unassigned_focus',
+    })
+    counts = await call('workspace_count_keyed', {
+        'receiptId': activity['receiptId'], 'alias': 'activity_rows',
+    })
+    open_counts = await call('workspace_restrict_to_keys', {
+        'receiptId': counts['receiptId'], 'keysReceiptId': open_keys['receiptId'],
+    })
+
+    assert open_keys['selectedIds'] == ['a', 'c']
+    assert focus['selectedIds'] == ['a']
+    assert unassigned['selectedIds'] == ['a']
+    assert counts['totals']['activity_rows'] == 3
+    assert open_counts['totals']['activity_rows'] == 2
+    assert set(open_counts['perKey']) == {'a', 'c'}
+
+    proposal = trajectory.induce(
+        {'id': 'mapped-filter-source', 'toolTrace': traces},
+        manager.task(task['id']), list(tools.values()),
+    )
+    compiled_tools = [node['tool'] for node in proposal['nodes']]
+    assert 'workspace_filter_mapped_rows' in compiled_tools
+    assert 'workspace_restrict_to_keys' in compiled_tools
+    assert 'workspace_count_keyed' in compiled_tools
+    serialized = json.dumps(proposal['nodes'])
+    assert 'receipt_' not in serialized
+    assert serialized.count('$output') >= 6

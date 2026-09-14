@@ -347,6 +347,15 @@ class TaskRunner:
                         + '。每个原因都必须显式提交；没有命中时仍提交 count=0、selectedIds=[]、evidenceIds=[]。这是交付格式，不规定读取或计算步骤。',
             ))
 
+        field_value_notes = ((delivery_contract or {}).get('fieldValueNotes')
+                             if isinstance(delivery_contract, dict) else None)
+        if isinstance(field_value_notes, str) and field_value_notes.strip():
+            messages.append(dict(
+                role='system',
+                content='当前附件的公开字段值口径：' + field_value_notes.strip()
+                        + ' 这是数据语义，不规定读取、计算或工具调用顺序。',
+            ))
+
         if task.get('computeInterface') == 'granular-compute-v1':
             messages.append(dict(role='system', content=
                 '当前计算工具使用本次运行的 receiptId 连接上游观察；只能引用已经成功返回的收据，不能猜测ID。'
