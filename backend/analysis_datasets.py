@@ -517,19 +517,23 @@ class AnalysisDatasets:
                 pairId=spec.get('id'), workpackId=spec.get('id'), title=spec.get('title'),
                 detailUrl=(f'/api/releases/{manifest["releaseId"]}/pairs/{spec["id"]}' if manifest.get('releaseId') else None),
                 opportunity=spec.get('opportunity'), scenario=spec.get('scenario') or 'finance',
-                workflowType='财务复核', round=None,
+                cohortId=spec.get('cohort'),
+                workflowType=self._attribution_cohort_label(spec.get('cohort')), round=None,
                 generatedMatchVersions=deepcopy(match_versions),
                 usedMatchVersion=evolution.get('matchVersion') if used_graph else None,
             )
+            point['baseline']['executionStages'] = deepcopy(baseline.get('executionStageMetrics') or {})
             point['rsi'].update({
                 'generatedMatchVersions': deepcopy(match_versions),
                 'usedMatchVersion': evolution.get('matchVersion') if used_graph else None,
+                'executionStages': deepcopy(rsi.get('executionStageMetrics') or {}),
             })
             points.append(point)
         quality_status = self._quality_status(manifest, item)
         revisions = self._attribution_revisions(item)
         task_plan = self._attribution_task_plan(item)
         summary = self._summary(manifest, item, points, quality_status, revisions=revisions)
+        summary['cohorts'] = self._attribution_cohort_summaries(points)
         descriptor = self._descriptor(manifest)
         descriptor['taskCount'] = len(task_plan)
         descriptor['taskPlan'] = deepcopy(task_plan)
@@ -725,6 +729,66 @@ class AnalysisDatasets:
         }
 
     @staticmethod
+    def _attribution_cohort_label(cohort: object) -> str:
+        labels = {
+            'finance-reconciliation': '订单财务复核',
+            'finance-payment-health': '支付结构健康',
+        }
+        return labels.get(cohort, str(cohort or '财务复核'))
+
+    @classmethod
+    def _attribution_cohort_summaries(cls, points: list[dict]) -> list[dict]:
+        grouped: dict[str, list[dict]] = {}
+        for point in points:
+            cohort_id = point.get('cohortId')
+            if not isinstance(cohort_id, str) or not cohort_id:
+                continue
+            grouped.setdefault(cohort_id, []).append(point)
+        summaries = []
+        for cohort_id, rows in grouped.items():
+            def arm_summary(arm: str) -> dict:
+                attempts = len(rows)
+                passed = sum(point[arm].get('passed') is True for point in rows)
+                usage_complete = all(point[arm].get('usageComplete') is True for point in rows)
+                def total(field: str):
+                    values = [point[arm].get(field) for point in rows]
+                    return sum(values) if values and all(isinstance(value, (int, float)) for value in values) else None
+                return {
+                    'attempts': attempts, 'passed': passed, 'usageComplete': usage_complete,
+                    'tokens': total('tokens'), 'durationMs': total('durationMs'),
+                    'modelRequests': total('modelRequests'), 'toolCalls': total('toolCalls'),
+                    'toolErrors': total('toolErrors'), 'costUsd': total('costUsd'),
+                }
+            baseline = arm_summary('baseline')
+            rsi = arm_summary('rsi')
+            comparable = (
+                baseline['attempts'] == baseline['passed'] == rsi['attempts'] == rsi['passed']
+                and baseline['usageComplete'] and rsi['usageComplete']
+            )
+            summaries.append({
+                'cohortId': cohort_id,
+                'label': cls._attribution_cohort_label(cohort_id),
+                'pairIds': [point.get('pairId') for point in rows],
+                'baseline': baseline, 'rsi': rsi,
+                'qualityGate': {
+                    'status': 'passed' if comparable else 'failed',
+                    'sameQualityCostClaim': comparable,
+                    'reason': (
+                        f'预先冻结子簇中两臂均{len(rows)}/{len(rows)}通过，usage完整。'
+                        if comparable else
+                        f'预先冻结子簇中不学习{baseline["passed"]}/{baseline["attempts"]}、在线RSI{rsi["passed"]}/{rsi["attempts"]}；保留失败，不计算同质量收益。'
+                    ),
+                },
+                'costConclusionAllowed': comparable,
+                'tokenSaving': cls._saving(baseline['tokens'], rsi['tokens']) if comparable else None,
+                'latencySaving': cls._saving(baseline['durationMs'], rsi['durationMs']) if comparable else None,
+                'requestSaving': cls._saving(baseline['modelRequests'], rsi['modelRequests']) if comparable else None,
+                'costSaving': cls._saving(baseline['costUsd'], rsi['costUsd']) if comparable else None,
+                'note': '按冻结任务资产中的业务子簇分层；未删除或重排任何任务。',
+            })
+        return summaries
+
+    @staticmethod
     def _attribution_task_plan(item: dict) -> list[dict]:
         recorded = {((pair.get('spec') or {}).get('id')): pair for pair in item.get('pairs') or []}
         return [{
@@ -737,6 +801,7 @@ class AnalysisDatasets:
             'requestHash': spec.get('requestHash'),
             'inputHash': spec.get('inputHash'),
             'scoreHash': spec.get('scoreHash'),
+            'cohort': spec.get('cohort'),
         } for offset, spec in enumerate(item.get('manifest') or [])]
 
     @staticmethod

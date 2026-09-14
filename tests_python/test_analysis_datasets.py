@@ -173,6 +173,25 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     assert candidate['summary']['actualGraphUse']['attempts'] == 12
     assert candidate['summary']['learning']['graphRevisions'] == 2
     assert candidate['summary']['learning']['matchingRevisions'] == 2
+    cohorts = {row['cohortId']: row for row in candidate['summary']['cohorts']}
+    reconciliation = cohorts['finance-reconciliation']
+    assert reconciliation['pairIds'] == [f'FX{index:02d}' for index in range(1, 9)]
+    assert reconciliation['baseline']['passed'] == reconciliation['rsi']['passed'] == 8
+    assert reconciliation['baseline']['tokens'] == 1025754
+    assert reconciliation['rsi']['tokens'] == 366230
+    assert reconciliation['tokenSaving'] == pytest.approx(0.642965)
+    assert reconciliation['requestSaving'] == pytest.approx(0.642857)
+    assert reconciliation['latencySaving'] == pytest.approx(0.409036)
+    assert reconciliation['costConclusionAllowed'] is True
+    payment_health = cohorts['finance-payment-health']
+    assert payment_health['baseline']['passed'] == 3
+    assert payment_health['rsi']['passed'] == 4
+    assert payment_health['costConclusionAllowed'] is False
+    assert payment_health['tokenSaving'] is None
+    assert candidate['dimensions']['workflows'] == ['支付结构健康', '订单财务复核']
+    order_points = candidate['points'][:8]
+    assert sum(point['baseline']['executionStages']['compute_selection_and_binding']['requests'] for point in order_points) == 68
+    assert sum(point['rsi']['executionStages']['compute_selection_and_binding']['requests'] for point in order_points) == 14
     chains = {row['sourcePairId']: {use['pairId'] for use in row['subsequentUses']}
               for row in candidate['revisions']}
     assert 'FX10' in chains['FX09']

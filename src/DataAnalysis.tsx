@@ -61,6 +61,7 @@ type Arm = {
   reportUrl?: string;
   traceUrl?: string;
   toolErrors?: number | null;
+  executionStages?: Record<string, ExecutionStageMetric>;
   error?: string;
 };
 type Point = {
@@ -90,6 +91,20 @@ type ExecutionStageMetric = {
   tokens?: number | null;
   usageComplete?: boolean;
 };
+type CohortSummary = {
+  cohortId: string;
+  label: string;
+  pairIds: string[];
+  baseline: ArmSummary & { usageComplete?: boolean };
+  rsi: ArmSummary & { usageComplete?: boolean };
+  qualityGate: { status: string; sameQualityCostClaim: boolean; reason: string };
+  costConclusionAllowed: boolean;
+  tokenSaving?: number | null;
+  latencySaving?: number | null;
+  requestSaving?: number | null;
+  costSaving?: number | null;
+  note?: string;
+};
 type ArmSummary = {
   attempts?: number;
   passed?: number;
@@ -99,6 +114,7 @@ type ArmSummary = {
   latencyMs?: number;
   modelRequests?: number;
   toolCalls?: number;
+  toolErrors?: number;
   usageIncomplete?: number;
   costUsd?: number | null;
   executionStages?: Record<string, ExecutionStageMetric>;
@@ -198,6 +214,7 @@ type Detail = DatasetSummary & {
     };
     qualityGate?: { status?: string; reason?: string } | boolean;
     reliability?: { allUsageComplete?: boolean; note?: string };
+    cohorts?: CohortSummary[];
     curve?: unknown[];
   };
   revisions?: RevisionEvidence[];
@@ -427,6 +444,18 @@ function normalizeArm(
       asNumber(arm.toolErrors) ??
       asNumber(metrics.toolErrors) ??
       asNumber(fallback.toolErrors),
+    executionStages: Object.fromEntries(
+      Object.entries(asRecord(arm.executionStages)).map(([key, value]) => {
+        const stage = asRecord(value);
+        return [key, {
+          requests: asNumber(stage.requests),
+          inputTokens: asNumber(stage.inputTokens),
+          outputTokens: asNumber(stage.outputTokens),
+          tokens: asNumber(stage.tokens),
+          usageComplete: typeof stage.usageComplete === "boolean" ? stage.usageComplete : undefined,
+        }];
+      }),
+    ),
     usageComplete:
       typeof arm.usageComplete === "boolean"
         ? arm.usageComplete
@@ -904,11 +933,12 @@ export default function DataAnalysis() {
     detail ||
     datasets.find((item) => item.datasetId === datasetId);
   const isAttribution = attributionMode(metadata, detail);
-  const costConclusionAllowed = releaseAllowsCostClaims(
+  const releaseCostConclusionAllowed = releaseAllowsCostClaims(
     metadata?.status,
     detail?.summary?.costConclusionAllowed,
   );
   const labels = armLabels(metadata, detail);
+  const cohortSummaries = detail?.summary?.cohorts || [];
   const plan = plannedTasks(metadata, detail);
   const revisions = normalizedRevisions(detail);
   const points = useMemo(
@@ -1049,8 +1079,25 @@ export default function DataAnalysis() {
     ["mixed_tool_decision", "混合决策", "同次响应包含多类工具或无法单独归类"],
     ["report_composition", "报告组合", "组织并提交有证据的业务报告"],
   ] as const;
-  const baselineExecutionStages = baseline.executionStages || {};
-  const rsiExecutionStages = rsi.executionStages || {};
+  const aggregateExecutionStages = (arm: "baseline" | "rsi") => {
+    const totals: Record<string, ExecutionStageMetric> = {};
+    executionStageRows.forEach(([key]) => {
+      const rows = visible.map((point) => point[arm].executionStages?.[key]);
+      totals[key] = {
+        requests: rows.reduce((sum, row) => sum + (row?.requests || 0), 0),
+        inputTokens: rows.reduce((sum, row) => sum + (row?.inputTokens || 0), 0),
+        outputTokens: rows.reduce((sum, row) => sum + (row?.outputTokens || 0), 0),
+        usageComplete: rows.every((row) => row?.usageComplete !== false),
+      };
+    });
+    return totals;
+  };
+  const baselineExecutionStages = visible.length
+    ? aggregateExecutionStages("baseline")
+    : baseline.executionStages || {};
+  const rsiExecutionStages = visible.length
+    ? aggregateExecutionStages("rsi")
+    : rsi.executionStages || {};
   const executionRequests = (stages: Record<string, ExecutionStageMetric>) =>
     executionStageRows.reduce(
       (total, [key]) => total + (stages[key]?.requests || 0),
@@ -1097,6 +1144,12 @@ export default function DataAnalysis() {
       point.baseline.usageComplete === false ||
       point.rsi.usageComplete === false,
   ).length;
+  const selectedCohort = workflow === "all"
+    ? undefined
+    : cohortSummaries.find((cohort) => cohort.label === workflow);
+  const scopeCostConclusionAllowed =
+    releaseCostConclusionAllowed ||
+    (isAttribution && selectedCohort?.costConclusionAllowed === true);
   const qualityGate = detail?.summary?.qualityGate;
   const qualityGateFailed =
     qualityGate === false ||
@@ -1104,7 +1157,12 @@ export default function DataAnalysis() {
       qualityGate.status != null &&
       qualityGate.status !== "passed");
   const claimRestriction =
-    metadata?.status === "candidate" && qualityGateFailed
+    selectedCohort && !selectedCohort.costConclusionAllowed
+      ? {
+          title: "该冻结子簇质量不等",
+          detail: selectedCohort.qualityGate.reason,
+        }
+      : metadata?.status === "candidate" && qualityGateFailed
       ? {
           title: "候选状态且质量门槛未通过",
           detail: "仅展示绝对成本和诊断差值，不计算或展示正式收益曲线。",
@@ -1248,7 +1306,7 @@ export default function DataAnalysis() {
                     : "当前候选版本尚未完成正式对照"}
                 </strong>
                 <span>
-                  可查看已保存的任务、绝对开销和诊断差值；在状态晋升为 formal 前，不展示或主张 token、成本、latency 与调用次数收益。
+                  全量十二任务保持质量受限，不主张整体同质量收益。按任务资产预先冻结的子簇可单独查看：只有两臂全部通过且 usage 完整的子簇才展示同质量效率变化。
                 </span>
               </div>
             </section>
@@ -1293,6 +1351,49 @@ export default function DataAnalysis() {
                   </div>
                 </section>
               )}
+
+          {isAttribution && cohortSummaries.length > 0 && (
+            <section className="analysis-section analysis-cohorts" aria-label="冻结业务子簇结果">
+              <header>
+                <div>
+                  <p className="eyebrow">FROZEN COHORT BREAKDOWN</p>
+                  <h2>全量账本不删点，按冻结业务子簇解释结果</h2>
+                </div>
+                <p>子簇来自运行前冻结的任务资产。点击后只切换同一实验内的任务和曲线，不重排、不删除失败。</p>
+              </header>
+              <div className="analysis-cohort-grid">
+                {cohortSummaries.map((cohort) => {
+                  const comparable = cohort.costConclusionAllowed;
+                  return (
+                    <button
+                      type="button"
+                      key={cohort.cohortId}
+                      className={workflow === cohort.label ? "selected" : ""}
+                      aria-pressed={workflow === cohort.label}
+                      onClick={() => {
+                        setScenario("finance");
+                        setWorkflow(cohort.label);
+                        setSelectedIndex(null);
+                      }}
+                    >
+                      <span>{cohort.pairIds.join("–")}</span>
+                      <strong>{cohort.label}</strong>
+                      <b>{cohort.baseline.passed}/{cohort.baseline.attempts} → {cohort.rsi.passed}/{cohort.rsi.attempts}</b>
+                      <dl>
+                        <div><dt>Token</dt><dd>{number(cohort.baseline.tokens)} → {number(cohort.rsi.tokens)}</dd></div>
+                        <div><dt>模型请求</dt><dd>{number(cohort.baseline.modelRequests)} → {number(cohort.rsi.modelRequests)}</dd></div>
+                        <div><dt>串行时间</dt><dd>{duration(cohort.baseline.durationMs)} → {duration(cohort.rsi.durationMs)}</dd></div>
+                        <div><dt>工具错误</dt><dd>{number(cohort.baseline.toolErrors)} → {number(cohort.rsi.toolErrors)}</dd></div>
+                      </dl>
+                      <em>{comparable ? `同质量子簇：token 减少 ${percent(cohort.tokenSaving)}，请求减少 ${percent(cohort.requestSaving)}` : "可靠性子簇：保留失败，成本差只作诊断"}</em>
+                      <small>{cohort.qualityGate.reason}</small>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="analysis-cohort-note">双方都通过的 11 项仅属于事后敏感性分析，不进入这些主卡片，也不替代全量 12 项质量结论。</p>
+            </section>
+          )}
 
           {detail?.maintenanceDiagnostics && (
             <section className="analysis-section analysis-maintenance" aria-label="发布后维护验证">
@@ -1428,7 +1529,7 @@ export default function DataAnalysis() {
                   {number(scopeBaselineTokens)} → {number(scopeRsiTokens)}
                 </strong>
                 <span>
-                  {costConclusionAllowed
+                  {scopeCostConclusionAllowed
                     ? `节省 ${percent(scopeTokenSaving)}`
                     : claimRestriction.title}
                 </span>
@@ -1440,7 +1541,7 @@ export default function DataAnalysis() {
                   {money(scopeBaselineCost)} → {money(scopeRsiCost)}
                 </strong>
                 <span>
-                  {costConclusionAllowed && scopeCostSaving != null
+                  {scopeCostConclusionAllowed && scopeCostSaving != null
                     ? `节省 ${percent(scopeCostSaving)}`
                     : claimRestriction.title}
                 </span>
@@ -1452,7 +1553,7 @@ export default function DataAnalysis() {
                   {duration(scopeBaselineLatency)} → {duration(scopeRsiLatency)}
                 </strong>
                 <span>
-                  {costConclusionAllowed
+                  {scopeCostConclusionAllowed
                     ? `节省 ${percent(scopeLatencySaving)}`
                     : claimRestriction.title}
                 </span>
@@ -1464,7 +1565,7 @@ export default function DataAnalysis() {
                   {number(scopeBaselineRequests)} → {number(scopeRsiRequests)}
                 </strong>
                 <span>
-                  {costConclusionAllowed
+                  {scopeCostConclusionAllowed
                     ? `节省 ${percent(scopeRequestSaving)}`
                     : claimRestriction.title}
                 </span>
@@ -1700,7 +1801,7 @@ export default function DataAnalysis() {
                 四类合计只覆盖 execute 阶段。计划、匹配及其他模型请求另有 {number(baselineOtherRequests)} / {number(rsiOtherRequests)} 次，
                 已包含在页面顶部的总请求数中。
                 {metadata.status === "candidate"
-                  ? " 当前仍是候选结果，仅展示绝对值；候选状态下不计算正式节省率。"
+                  ? " 当前仍是候选结果，仅展示绝对值；候选状态下不计算正式节省率。预先冻结且两臂全通过的子簇仅展示同质量分层分析。"
                   : " 该分解用于解释请求发生在哪里，不把某一类别数量直接换算为收益。"}
               </p>
             </section>
@@ -1713,7 +1814,7 @@ export default function DataAnalysis() {
                   <p className="eyebrow">EFFICIENCY CHANGE</p>
                   <h2>累计效率节省率</h2>
                 </header>
-                {costConclusionAllowed ? (
+                {scopeCostConclusionAllowed ? (
                   <PolylineChart
                     points={curve}
                     metric="saving"
@@ -1911,7 +2012,7 @@ export default function DataAnalysis() {
                       : "RSI 执行路径"}
                   </small>
                   <strong>
-                    {costConclusionAllowed
+                    {releaseCostConclusionAllowed
                       ? `token ${percent(selectedTokenSaving)} · 成本 ${percent(selectedCostSaving)} · latency ${percent(selectedLatencySaving)}`
                       : "当前实验不计算收益"}
                   </strong>
