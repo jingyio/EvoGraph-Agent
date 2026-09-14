@@ -8,26 +8,34 @@
       "status": "candidate",
       "experimentId": "not-started",
       "runtimeRevision": "pending:recorded-at-experiment-start",
-      "assetVersion": "trajectory-review-v2",
-      "assetManifest": "benchmarks/trajectory-review-v2.json",
+      "assetVersion": "trajectory-review-v3",
+      "assetManifest": "benchmarks/trajectory-review-v3.json",
       "protocol": {
-        "runtimeProtocol": "trajectory-v3-pending",
-        "limits": { "run": 1, "model": 1, "read": 1 },
-        "precheckPairs": 9,
+        "runtimeProtocol": "trajectory-v3",
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "precheckPairs": 12,
         "fullPairs": 48,
-        "assetCounts": { "train": 48, "validation": 6, "test": 6 },
+        "assetCounts": {
+          "train": 48,
+          "validation": 6,
+          "test": 6
+        },
         "learning": "train only; validation/test frozen; RSI starts from an empty isolated library",
-        "qualityPolicy": "precheck first; no full run until all paired quality and usage gates pass"
+        "qualityPolicy": "12-pair precheck first; no full run until paired quality and usage gates pass"
       },
       "createdAt": "2026-09-14",
       "source": "trajectory-plan",
       "claims": [
-        "六个公开业务问题契约与手工测试包已统一冻结。",
+        "已冻结48项异构公开业务任务、独立validation/test和离线机会审计。",
         "尚未产生模型运行、效率或进化结论。"
       ],
       "limitations": [
         "当前候选版本尚未完成正式对照",
-        "严格预检和48项train对照均未启动，因此没有token、延迟、质量或G/M修订证据。",
+        "12对严格预检和48项train对照均未启动，因此没有token、延迟、质量或G/M修订证据。",
         "runtime revision将在实验启动时按实际源码快照记录。"
       ]
     },
