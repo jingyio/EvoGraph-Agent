@@ -15,7 +15,8 @@ export const legacyPages = [
 export function canonicalHash(hash: string): string {
   const [page, query = ""] = hash.replace(/^#/, "").split("?");
   if (page === "employees" || !page) return "#home";
-  if (page === "home" || page === "evidence" || page === "archive") return hash;
+  if (page === "evidence") return `#analysis${query ? "?" + query : ""}`;
+  if (page === "home" || page === "analysis" || page === "archive") return hash;
   if ((legacyPages as readonly string[]).includes(page))
     return `#archive?page=${page}${query ? "&" + query : ""}`;
   return "#home";

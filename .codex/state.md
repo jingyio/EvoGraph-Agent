@@ -1,5 +1,12 @@
 # 项目状态快照
 
+## 2026-09-14 当前前端：可切换数据分析（已完成）
+
+- 主导航第二入口改为 `#analysis` 数据分析；旧 `#evidence` 兼容跳转。V3-r3 任务与工具审阅保留在 `#archive?page=candidate`。
+- 新 `releases/analysis-manifest.json` 首项精确绑定 V17 48-task 保存工件 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe`，并冻结 runtime/artifact digest、任务资产、协议、48对与质量状态。
+- 只读 API 返回逐任务 token、`durationMs`、请求/工具、成功状态、G0/Fast 和报告深链；场景/工作流筛选后重新累计。V17 token 节省44.5839%，保存串行时长节省26.9232%；无G1/G2，不主张递归结构进化。
+- 本次只使用保存工件，不运行模型，不改写 V17 或 P0.5 候选实验。前端8/8、Python 193/193、构建和diff检查通过；浏览器核验默认页、数据分析、筛选、报告、候选审阅与390px宽度。
+
 ## 2026-09-14 当前接力：V3-r3 候选修复（未运行）
 
 - 当前模型配置为 `qwen/qwen3.5-9b`（执行、规划、组合），thinking 关闭；`AGENT_MAX_STEPS=24`。

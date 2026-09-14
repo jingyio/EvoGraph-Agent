@@ -26,6 +26,7 @@ from .workspace import WorkspaceManager, WorkspaceBank, WORKSPACE_ROLES
 from .workpacks import install_workpack, list_workpacks
 from .workpack_experiment import WorkpackExperiment
 from .workpack_judge import WorkpackJudge
+from .analysis_datasets import AnalysisDatasets
 
 
 class ReportReview(BaseModel):
@@ -104,6 +105,7 @@ def create_app(service=None):
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
     releases = ReleaseEvidence(taskbank.root)
+    analysis_datasets = AnalysisDatasets(taskbank.root)
     trajectory_experiment = TrajectoryExperiment(taskbank.root)
     workpack_experiment = WorkpackExperiment(taskbank, taskbank.root)
     workpack_judge = WorkpackJudge(workpack_experiment, taskbank.root)
@@ -335,6 +337,22 @@ def create_app(service=None):
             raise HTTPException(404, '该发布没有对应的保存证据；未使用其他实验替代')
         except ValueError as error:
             raise HTTPException(409, str(error))
+
+    def analysis_read(operation, *args):
+        try:
+            return operation(*args)
+        except (KeyError, FileNotFoundError):
+            raise HTTPException(404, '数据分析测试组不存在或保存工件缺失')
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get('/api/analysis/datasets')
+    def analysis_dataset_list():
+        return analysis_read(analysis_datasets.list)
+
+    @app.get('/api/analysis/datasets/{dataset_id}')
+    def analysis_dataset_get(dataset_id: str):
+        return analysis_read(analysis_datasets.get, dataset_id)
 
     @app.get('/api/releases/current')
     def current_release():

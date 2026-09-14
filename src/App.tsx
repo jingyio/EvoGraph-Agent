@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Layers3 } from "lucide-react";
 import WorkspaceWorkbench from "./WorkspaceWorkbench";
-import CurrentEvidence from "./CurrentEvidence";
+import DataAnalysis from "./DataAnalysis";
 import Archive from "./Archive";
 import { canonicalHash } from "./navigation";
 import "./release.css";
@@ -37,17 +37,17 @@ export default function App() {
             数字员工
           </a>
           <a
-            href="#evidence"
-            aria-current={page === "evidence" ? "page" : undefined}
+            href="#analysis"
+            aria-current={page === "analysis" ? "page" : undefined}
           >
-            当前证据
+            数据分析
           </a>
         </nav>
       </header>
       {page === "home" ? (
         <WorkspaceWorkbench />
-      ) : page === "evidence" ? (
-        <CurrentEvidence />
+      ) : page === "analysis" ? (
+        <DataAnalysis />
       ) : (
         <Archive key={hash} />
       )}

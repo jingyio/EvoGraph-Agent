@@ -4,8 +4,8 @@
 
 `releases/manifest.json` 当前唯一候选是
 `trajectory-p05-v3-r3-candidate` / `trajectory-review-v3-r3`。它冻结 48 个 train、6 个
-validation、6 个 test 任务，固定 12 对预检和 `run=model=read=1`；尚未启动，因此当前证据页只展示
-任务审阅与“尚未完成正式对照”。
+validation、6 个 test 任务，固定 12 对预检和 `run=model=read=1`；尚未启动。候选题面与工具审阅保留在
+“开发与历史 → 当前候选审阅”，不进入数据分析页。
 
 V3-r3 保留 V3-r2 的公开记录选择、切分和来源，并重新冻结题面：用户题面仅保留真实业务目标、
 业务阈值/口径、缺失资料语义、业务成果和禁止动作。`metrics`、`groups`、`selectedIds`、
@@ -24,36 +24,32 @@ V3-r2 的 F01 真实 API 预检 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 已转为
 核对日期：2026-09-14。当前前端采用单一发布上下文；业务runtime的既有边界及历史实验保持原义。
 
 
-## 当前前端与发布清单
+## 当前前端与分析数据集
 
-主导航只有 `#home` 数字员工和 `#evidence` 当前证据，全部页面共用 `App.tsx` 的壳。
+主导航只有 `#home` 数字员工和 `#analysis` 数据分析，全部页面共用 `App.tsx` 的壳。
 数字员工面向自由问题、附件、澄清、费用确认、业务成果、结构化清单下载与同工作区追问；
 图参数、完整事件、错误和字段契约在技术审计折叠区。可从“继续之前的工作”恢复用户
-自己的保存工作区/run。这里不展示实验选择器或benchmark总览。
+自己的保存工作区/run。这里不展示实验选择器或 benchmark 总览。旧 `#evidence` 保留兼容，
+由 `navigation.ts` 跳转到 `#analysis`。
 
-`releases/manifest.json` 是唯一当前选择源。当前指向尚未运行的
-`trajectory-p05-v3-r3-candidate`，任务资产为 `trajectory-review-v3-r3`：48 train、6 validation、
-6 test，严格预检固定为六个 cohort 各两项，共12对。页面显示计划48、已运行0和“尚未获得
-证据”；不自动补入 V17、V4、V2 或任何历史效率数字。
+`releases/analysis-manifest.json` 是数据分析测试组的唯一选择源。首个测试组
+`workpack-v17-48` 精确绑定 Workpack V17 实验 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe`、
+`workpacks-v1`、V17 runtime execution digest 与 `workspace-workpack-online-full-train-v15`。
+`backend/analysis_datasets.py:AnalysisDatasets` 还校验保存工件 SHA-256、completed 状态、48 个 pair、
+质量门槛和协议；不按创建时间猜实验。`/api/analysis/datasets` 返回可选测试组，
+`/api/analysis/datasets/{datasetId}` 只读返回同一测试组的逐任务 token、串行 latency、成功状态、
+模型/工具请求、G0/Fast 路径和 run/report 深链。任一身份不匹配都拒绝显示。
 
-`backend/releases.py:ReleaseEvidence` 提供 `/api/releases/current`、发布专属evidence、
-pair、run、input、report和selection。每次核对experiment/runtime/asset/protocol以及
-run-task归属，缺失/不匹配报错且不回退其他实验。指标、可靠性、图与匹配修订/来源/
-后续使用、报告和曲线均从这一成员集合派生。未运行候选只校验受版本控制的公开资产清单
-并返回空证据。读取不学习、不执行工具、不写原工件。`CurrentEvidence.tsx` 按业务成果→
-可信度→进化→成本/可靠性→回放展示，所有下钻保留release边界。成本区同时展示保存工件
-的单任务token/串行latency节省率、累计净节省率和两臂绝对曲线；失败且usage完整的pair
-保留，usage不完整形成缺口而非补0。
+`DataAnalysis.tsx` 可以按测试组、业务场景和工作流整体切换数据上下文。筛选后的曲线按真实到达
+顺序重新累计 Baseline/RSI token 与端到端 `durationMs`，同时显示累计 token/latency 节省率；
+未知 usage 或 latency 保持缺口，不按 0 补齐。V17 的 12 个 G0 与 35 次 Fast 可展示，但页面明确
+说明没有 G1/G2 或匹配规则修订，不能把 Fast 命中称为递归结构进化。后续实验只有新增一条精确
+清单记录后才会成为可切换测试组，不能把 P0.5 candidate 拼入 V17 曲线。
 
-`#archive` 从页尾默认折叠的“开发与历史”进入。历史目录显示各自版本、状态、runtime、
-任务资产与协议，无跨版本总计。旧experiments/trajectory/compare/insights/replay/
-showcase/live/evaluation/evolution/taskbank/platforms/demo全部转到archive路由并保留
-查询参数；具体旧默认指向由manifest.legacyRoutes声明，不按时间猜。历史组件按需加载，
-V4页面的实验身份由Archive上下文传入，showcase.ts不再硬编码实验。RsiInsights不再
-混读V3，V3保留独立原报告深链。原历史API和artifacts未删除或改写。
-
-完整路由/数据源映射、API和验收见 [版本隔离记录](frontend-release-isolation-2026-09-14.md)。
-下面提及旧页面路由的段落是其原业务路径说明；当前入口统一经上述archive兼容层。
+`releases/manifest.json` 仍负责 P0.5 当前候选与历史发布审计。原 `CurrentEvidence.tsx` 不删除，
+从 `#archive?page=candidate` 打开，用于审阅 V3-r3 题面、工具契约和失败证据。`#archive` 继续
+保存旧 experiments/trajectory/compare/insights/replay/showcase/live/evaluation/evolution/taskbank/
+platforms/demo 深链；历史工件与当前分析测试组之间没有跨版本总计。
 
 ## 2026-09-14 工作区轨迹路径（P0.5首阶段）
 
@@ -87,7 +83,7 @@ name/reason/condition/count/selectedIds/evidenceIds；组内缩写只从本次�
 ## 当前任务库路径
 
 ```text
-React: WorkspaceWorkbench（数字员工 `/#home`） / CurrentEvidence（当前证据 `/#evidence`）
+React: WorkspaceWorkbench（数字员工 `/#home`） / DataAnalysis（数据分析 `/#analysis`）
        └─ Archive（`/#archive`）→ WorkpackExperimentPanel / CompareExperience / RsiInsights / TaskReplay
                  ↓ JSON API
 backend/app.py → WorkspaceManager（上传/预览/追问） / WorkpackExperiment / TaskRunner
@@ -150,7 +146,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173` 默认 `#home`，当前证据为 `#evidence`；旧 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>` 统一重定向到历史区域。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#experiments` 才读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，数据分析为 `#analysis`（旧 `#evidence` 兼容跳转）；旧 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>` 统一重定向到历史区域。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#analysis` 只读取分析清单固定的一个保存实验，历史 `#experiments` 在 archive 中保留完整控制台。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 
@@ -164,7 +160,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 `ReleaseEvidence` 对 `trajectory-plan` 发布返回 `taskReview`：六个业务契约、输入表字段、
 8个train题面变体、预检位置和公开来源。题面由 `request_for()` 生成后与冻结资产中的
-`requestHash` 逐项核对；数量、版本或题面不一致均失败关闭。`CurrentEvidence` 在候选未运行时
+`requestHash` 逐项核对；数量、版本或题面不一致均失败关闭。`CurrentEvidence` 在 archive 的候选审阅入口中
 展示该审阅清单，并把质量、成本与回放明确显示为“尚未运行”，不显示0/0 usage卡或空方法回放。
 该读取路径不创建实验、不加载私有答案、不调用模型。内容审计见
 [正式运行前任务审阅](trajectory-v3-run-approval-review-2026-09-14.md)，两臂实际工具面与报告

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "defaultDatasetId": "workpack-v17-48",
+  "datasets": [
+    {
+      "datasetId": "workpack-v17-48",
+      "displayName": "V17 · 48-task 严格串行对照",
+      "status": "formal",
+      "experimentId": "005ffeb9-964e-42ac-86e9-fb9e8f2212fe",
+      "runtimeRevision": "sha256:58a05bb656b493b013c825ab3180bab1de9a3fbe7c67e813e3af532325e87bc2",
+      "assetVersion": "workpacks-v1",
+      "artifactDigest": "sha256:2c9685685ab76a03abf0963be37aaab3bc5bde69dcab473cd671614d6b220adf",
+      "protocol": {
+        "id": "workspace-workpack-online-full-train-v15",
+        "runtimeLine": "V17",
+        "mode": "full_train_v15",
+        "experimentStatus": "completed",
+        "qualityGateStatus": "passed",
+        "taskCountPerArm": 48,
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "order": "4轮，每轮12个工作流；两臂任务顺序相同，臂间先后交替"
+      },
+      "createdAt": "2026-09-13T12:12:12.693Z",
+      "claims": [
+        "Baseline 与 RSI Agent 均在48个冻结train任务上48/48通过，usage完整。",
+        "同一实验内累计token为2,244,017与1,243,546，RSI Agent节省44.5839%。",
+        "同一实验内保存的串行duration为3,215,447ms与2,349,744.47ms。"
+      ],
+      "limitations": [
+        "这是V17历史正式实验，不代表当前P0.5/V3-r3候选runtime。",
+        "V17形成12个G0并有35次Fast复用，但没有G1/G2或匹配规则修订；不能据此主张递归结构进化。",
+        "durationMs是保存的端到端单任务时长串行求和，受模型服务波动影响；不等同纯推理耗时。"
+      ]
+    }
+  ]
+}

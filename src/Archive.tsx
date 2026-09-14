@@ -3,6 +3,7 @@ import { api } from "./api";
 import { ArchiveExperimentContext } from "./archiveContext";
 import type { Release } from "./releaseEvidence";
 const pages = {
+  candidate: lazy(() => import("./CurrentEvidence")),
   experiments: lazy(() => import("./WorkpackExperimentPanel")),
   trajectory: lazy(() => import("./TrajectoryPanel")),
   compare: lazy(() => import("./CompareExperience")),
@@ -17,6 +18,7 @@ const pages = {
   platforms: lazy(() => import("./PlatformPanel")),
 };
 const names: Record<string, string> = {
+  candidate: "当前候选审阅",
   experiments: "工作包历史实验",
   trajectory: "轨迹候选与失败预检",
   compare: "36-task 历史对比",
@@ -31,6 +33,7 @@ const names: Record<string, string> = {
   platforms: "平台只读开发",
 };
 const origins: Record<string, string> = {
+  candidate: "Release Manifest 当前候选 · 题面、工具与失败证据审阅",
   evaluation: "evaluations + taskbank/runs · 逐项选择的历史评测协议",
   evolution: "taskbank/evolution · 旧任务库经验协议",
   taskbank: "taskbank/manifest + tasks · 原任务库资产与工具契约",
@@ -83,11 +86,11 @@ export default function Archive() {
     <main className="archive-page">
       <header>
         <p className="eyebrow">开发与历史</p>
-        <h1>历史保留，当前证据独立</h1>
+        <h1>历史保留，数据分析独立</h1>
         <p>
-          这里的实验、候选和调试工具不进入当前发布的指标。原始记录不删除、不改写。
+          这里的实验、候选和调试工具不进入所选分析测试组的指标。原始记录不删除、不改写。
         </p>
-        <a href="#evidence">返回当前证据 →</a>
+        <a href="#analysis">返回数据分析 →</a>
       </header>
       {error && <p role="alert">{error}</p>}
       {!data && !error && <p>正在读取历史目录…</p>}

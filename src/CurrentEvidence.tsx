@@ -321,7 +321,7 @@ export default function CurrentEvidence() {
   return (
     <main className="evidence-page">
       <header className="evidence-heading">
-        <p className="eyebrow">当前证据</p>
+        <p className="eyebrow">当前候选审阅</p>
         <h1>{title}</h1>
         <p>每项成果、修订与成本均来自下方指定的同一发布上下文。</p>
       </header>
@@ -396,7 +396,7 @@ export default function CurrentEvidence() {
       )}
       {error && (
         <p className="evidence-error" role="alert">
-          {error}。当前证据不可用，不加载历史数据补足。
+          {error}。候选审阅不可用，不加载历史数据补足。
         </p>
       )}
       {!data && !error && <p>正在读取指定发布的保存证据…</p>}
