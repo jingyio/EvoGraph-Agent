@@ -7,6 +7,7 @@ import pytest
 from backend.releases import ReleaseEvidence, selection_csv
 from backend.config import ROOT
 from backend.trajectory_assets_v3_r2 import build as build_v3_r2
+from backend.trajectory_assets_v3_r3 import build as build_v3_r3
 from backend.graph_store import write_private
 from backend.workspace import WorkspaceManager
 from backend.trajectory_assets import request_for, task_plan
@@ -152,3 +153,15 @@ def test_v3_r2_frozen_asset_has_six_business_cohorts_without_delivery_contract_i
         request = (ROOT / 'artifacts/trajectory-review-v3-r2' / row['id'] / 'request.txt').read_text()
         assert hashlib.sha256(request.encode()).hexdigest() == row['requestHash']
         assert 'selectedIds' not in request and 'evidenceIds' not in request and 'metrics' not in request
+
+
+def test_current_release_is_the_unrun_v3_r3_candidate_with_one_asset_context():
+    build_v3_r3(ROOT)
+    store = ReleaseEvidence(ROOT)
+    result = store.evidence(store.manifest()['releaseId'])
+    assert result['release']['releaseId'] == 'trajectory-p05-v3-r3-candidate'
+    assert result['release']['assetVersion'] == 'trajectory-review-v3-r3'
+    assert result['experimentStatus'] == 'not_started'
+    assert result['plannedPairs'] == 48 and result['pairs'] == []
+    assert result['summary']['netTokenSaving'] is None
+    assert len(result['taskReview']) == 6

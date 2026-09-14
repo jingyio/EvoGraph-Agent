@@ -958,3 +958,23 @@ async def test_workspace_invalid_planner_does_not_inject_a_workpack_graph(tmp_pa
     assert not (run.get('evolution') or {}).get('workpackGraphPrefix')
     assert not any(row.get('selection') == 'workpack-schema-prefix' for row in run.get('graphSelection') or [])
     await runner.shutdown()
+
+
+async def test_reconcile_tool_explains_text_keys_and_rejects_text_aggregate_fields(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('finance')
+    manager.add_source(workspace['id'], 'orders.csv', b'order_id\no-1\n')
+    manager.add_source(workspace['id'], 'payments.csv', b'order_id,amount_cents\no-1,100\n')
+    task, _ = manager.create_task(workspace['id'], '核对当前订单金额。')
+    tables = {table['sheet']: table['id'] for table in manager.public_workspace(workspace['id'])['tables']}
+    tool = {tool.name: tool for tool in manager.tools(task['id'])}['workspace_reconcile_keyed_sums']
+    context = type('Context', (), {'run': {'id': 'manual'}, 'evidence': set()})()
+
+    assert 'keyField 可以是文本业务 ID' in tool.description
+    aggregate = tool.parameters['properties']['aggregates']['items']['properties']
+    assert '完整数值列' in aggregate['field']['description']
+    with pytest.raises(ValueError, match='keyField order_id 可以是文本业务 ID'):
+        await tool.execute({
+            'anchorTableId': tables['orders'], 'keyField': 'order_id',
+            'aggregates': [{'tableId': tables['payments'], 'keyField': 'order_id', 'field': 'order_id', 'alias': 'bad'}],
+        }, context)

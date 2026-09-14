@@ -140,7 +140,7 @@ class ReleaseEvidence:
                         reviews.append({'scenario': role, 'scenarioLabel': ROLE_LABELS[role], 'group': group, 'title': label,
                                         'counts': {split: sum(task['split'] == split for task in members) for split in ('train', 'validation', 'test')},
                                         'precheckPositions': [task['position'] for task in members if task.get('precheck')], 'inputTables': table_fields[role], 'variants': variants, 'source': assets.get('sources', {}).get(role, {})})
-            elif assets['version'] == 'trajectory-review-v3-r2':
+            elif assets['version'] in {'trajectory-review-v3-r2', 'trajectory-review-v3-r3'}:
                 # R2 presents its six sequential business cohorts as six review cards. Cohort
                 # labels are release/audit metadata only; request text remains the model input.
                 for role in ROLE_LABELS:
@@ -148,13 +148,13 @@ class ReleaseEvidence:
                     cohorts = []
                     for task in role_members:
                         cohort = task.get('cohort')
-                        if not isinstance(cohort, str): raise ValueError('V3-r2候选缺少冻结 cohort；拒绝显示')
+                        if not isinstance(cohort, str): raise ValueError('V3-r2/r3候选缺少冻结 cohort；拒绝显示')
                         if cohort not in cohorts: cohorts.append(cohort)
-                    if len(cohorts) != 2: raise ValueError('V3-r2每场景必须有两个 cohort；拒绝显示')
+                    if len(cohorts) != 2: raise ValueError('V3-r2/r3每场景必须有两个 cohort；拒绝显示')
                     for cohort in cohorts:
                         members = [task for task in role_members if task.get('cohort') == cohort]
                         train = sorted((task for task in members if task.get('split') == 'train'), key=lambda item: item['position'])
-                        if len(train) != 8: raise ValueError('V3-r2 cohort 训练任务数量不一致；拒绝显示')
+                        if len(train) != 8: raise ValueError('V3-r2/r3 cohort 训练任务数量不一致；拒绝显示')
                         variants = []
                         for task in train:
                             path = self.root / 'artifacts' / assets['version'] / task['id'] / 'request.txt'

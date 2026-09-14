@@ -938,7 +938,10 @@ class WorkspaceManager:
                         continue
                     value = row['values'].get(spec['field'])
                     if isinstance(value, bool) or not isinstance(value, (int, float)):
-                        raise ValueError('对账聚合字段必须是完整数值列')
+                        raise ValueError(
+                            f'聚合字段 {spec["field"]} 不是完整数值列；keyField {spec["keyField"]} 可以是文本业务 ID，'
+                            '但 field 必须选择当前表中的金额、数量或其他数值字段'
+                        )
                     operation = spec.get('operation', 'sum')
                     values[key] = (max(values.get(key, value), value) if operation == 'max' else
                                    min(values.get(key, value), value) if operation == 'min' else
@@ -1195,18 +1198,18 @@ class WorkspaceManager:
                 }, required=['segment', 'source']),
             }, required=['primaryTableId', 'primaryKey', 'sortField', 'measures']), ordered_partition,
                  outputs=['totalCount', 'priorCount', 'currentCount', 'metricValues', 'selectedIds']),
-            Tool('workspace_reconcile_keyed_sums', '按显式键在当前多张表上确定性汇总数值、派生总额并比较阈值；比例条件必须用 rightTerms 的显式别名和权重表达，例如 left >= 0.2×right 写为 leftAlias=left、rightTerms=[{alias:right,multiplier:0.2}]、operator=gte、threshold=0。comparisons 会返回命中键及 matchingTotals，报告需要命中项金额时必须使用 matchingTotals，不能手工累加 perKey。聚合支持 sum/max/min；省略右侧可直接比较阈值。缺失侧为 null 并排除相应比较，见 incompleteKeys；evidenceByKey 保留行证据。所有表、键、字段、运算和阈值按当前请求绑定。', 'compute', object_schema({
-                'anchorTableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1},
+            Tool('workspace_reconcile_keyed_sums', '按显式键在当前多张表上确定性汇总数值、派生总额并比较阈值。keyField 可以是文本业务 ID；每个 aggregates[].field 必须是当前表完整数值列，不能把 keyField 当作聚合字段。comparisons 必须传数组；阈值与聚合值使用资料字段的原始单位。比例条件必须用 rightTerms 的显式别名和权重表达，例如 left >= 0.2×right 写为 leftAlias=left、rightTerms=[{alias:right,multiplier:0.2}]、operator=gte、threshold=0。comparisons 会返回命中键及 matchingTotals，报告需要命中项金额时必须使用 matchingTotals，不能手工累加 perKey。聚合支持 sum/max/min；省略右侧可直接比较阈值。缺失侧为 null 并排除相应比较，见 incompleteKeys；evidenceByKey 保留行证据。所有表、键、字段、运算和阈值按当前请求绑定。', 'compute', object_schema({
+                'anchorTableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1, 'description': '用于对齐的字段；可为文本业务 ID。'},
                 'aggregates': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': object_schema({
-                    'tableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1},
-                    'field': {'type': 'string', 'minLength': 1}, 'alias': {'type': 'string', 'minLength': 1, 'maxLength': 80},
+                    'tableId': table_id_schema(), 'keyField': {'type': 'string', 'minLength': 1, 'description': '用于对齐的字段；可为文本业务 ID。'},
+                    'field': {'type': 'string', 'minLength': 1, 'description': '当前表完整数值列；不可使用文本 ID 或 keyField。'}, 'alias': {'type': 'string', 'minLength': 1, 'maxLength': 80},
                     'operation': {'type': 'string', 'enum': ['sum', 'max', 'min']},
                 }, required=['tableId', 'keyField', 'field', 'alias'])},
                 'derivedTotals': {'type': 'array', 'maxItems': 12, 'items': object_schema({
                     'name': {'type': 'string', 'minLength': 1, 'maxLength': 80},
                     'aliases': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': {'type': 'string', 'minLength': 1}},
                 })},
-                'comparisons': {'type': 'array', 'maxItems': 12, 'items': object_schema({
+                'comparisons': {'type': 'array', 'maxItems': 12, 'description': '比较规则数组；阈值沿用相关资料字段的原始单位。', 'items': object_schema({
                     'name': {'type': 'string', 'minLength': 1, 'maxLength': 80},
                     'leftAlias': {'type': 'string', 'minLength': 1},
                     'rightAliases': {'type': 'array', 'minItems': 0, 'maxItems': 12, 'items': {'type': 'string', 'minLength': 1}},

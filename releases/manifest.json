@@ -1,11 +1,60 @@
 {
   "schemaVersion": 1,
-  "currentReleaseId": "trajectory-p05-v3-r2-candidate",
+  "currentReleaseId": "trajectory-p05-v3-r3-candidate",
   "releases": [
     {
-      "releaseId": "trajectory-p05-v3-r2-candidate",
-      "displayName": "轨迹驱动数字员工 · P0.5 V3-r2",
+      "releaseId": "trajectory-p05-v3-r3-candidate",
+      "displayName": "轨迹驱动数字员工 · P0.5 V3-r3",
       "status": "candidate",
+      "experimentId": "not-started",
+      "runtimeRevision": "pending:recorded-at-experiment-start",
+      "assetVersion": "trajectory-review-v3-r3",
+      "assetManifest": "benchmarks/trajectory-review-v3-r3.json",
+      "protocol": {
+        "limits": {
+          "run": 1,
+          "model": 1,
+          "read": 1
+        },
+        "model": "qwen/qwen3.5-9b",
+        "planner": "qwen/qwen3.5-9b",
+        "runtimeProtocol": "trajectory-v3",
+        "maxModelRequestsPerRun": 24,
+        "runTimeoutSeconds": 180.0,
+        "maxToolCallsPerRun": 80,
+        "judge": "not_run",
+        "qualityPolicy": "stop expansion on first failing pair; retain all attempts",
+        "learning": "RSI empty library; prior successful normal train only; labels excluded from matching",
+        "windowSize": 4,
+        "targetTokenSaving": 0.3,
+        "fastReuseMinimumRate": 0.5,
+        "precheckPairs": 12,
+        "fullPairs": 48,
+        "assetCounts": {
+          "train": 48,
+          "validation": 6,
+          "test": 6
+        },
+        "size": "48 train = three scenarios × two sequential business cohorts × eight requests; 6 validation + 6 test reserved",
+        "precheckSize": "12 train = each scenario two fixed requests from each cohort",
+        "fastReusePolicy": "actual RSI Fast reuse must be at least 50% of completed RSI runs; otherwise this candidate cannot pass its release gate"
+      },
+      "createdAt": "2026-09-14",
+      "source": "trajectory-plan",
+      "claims": [
+        "任务资产已冻结为自然业务请求；财务题面仅增加一条订单、一对多与分/BRL口径。",
+        "尚未运行，因此没有业务、效率、可靠性或进化结论。"
+      ],
+      "limitations": [
+        "当前候选版本尚未完成正式对照。",
+        "尚未启动 12 对严格串行预检；不能用 V3-r2 或其它历史结果补足指标。",
+        "实际 Fast 命中率必须达到 50%，且质量、usage、维护门槛全部通过后才可扩大到 48 对正式对照。"
+      ]
+    },
+    {
+      "releaseId": "trajectory-p05-v3-r2-candidate",
+      "displayName": "轨迹驱动数字员工 · P0.5 V3-r2（失败预检）",
+      "status": "historical",
       "experimentId": "94620ba7-efd1-4fb9-b323-2bde8b22f78d",
       "runtimeRevision": "sha256:483fe0f70bea78bee638b4b5ea43bb163b395962cbaf2cdf663e841dc048f5f1",
       "assetVersion": "trajectory-review-v3-r2",
@@ -35,16 +84,13 @@
       "createdAt": "2026-09-14T09:39:14.052Z",
       "source": "trajectory",
       "claims": [
-        "已完成一条 F01 财务样例的真实 API 成对执行；两臂完整 usage、工具轨迹与失败报告均已保存。",
-        "预检按首对质量门槛停止，未继续消耗其余 11 对；本次记录可回放、下载和审计。",
-        "候选任务仍使用冻结的自然业务题面；机器检查字段未写入用户题面或匹配输入。"
+        "保留 F01 两臂的真实 API 运行、完整 usage、工具轨迹、报告和失败原因，供历史审计。"
       ],
       "limitations": [
-        "当前候选版本尚未完成正式对照，也未通过 12 对预检。",
-        "F01 Baseline 在 24 步上限后因 metrics 校验失败；RSI 在报告恢复后仍因 metrics、业务 ID 清单和原因分组校验失败。",
-        "两臂均未通过质量门槛；69.60% 的诊断性 token 差不构成同质量收益结论。",
-        "RSI 为冷启动 fallback，实际 Fast 命中 0/1，未达到 50% 门槛；没有 G/M 修订或后续使用证据。",
-        "其余 11 对预检、48 对正式对照、validation 和 test 均未运行。"
+        "首对真实 API 预检未通过质量门槛；后续 11 对没有启动。",
+        "Baseline 在 24 步上限后 metrics 校验失败；RSI 的 metrics、业务 ID 清单和原因分组校验失败。",
+        "两臂完整开销及失败回放仅供历史诊断；69.60% 的 token 差不构成同质量收益。",
+        "RSI 为冷启动 fallback，Fast 为 0/1；没有可主张的 G/M 修订或后续使用。"
       ]
     },
     {

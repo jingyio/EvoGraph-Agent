@@ -1,25 +1,17 @@
 # 项目状态快照
 
-## 2026-09-14 当前接力：V3-r2 任务审阅（未运行）
+## 2026-09-14 当前接力：V3-r3 候选修复（未运行）
 
-- 当前模型配置为 `qwen/qwen3.5-9b`（执行、规划、组合），thinking 关闭；`.env` 为本地未提交配置。
-- 已结束并保留 V3 9B 预检 `350cd048-9b15-4ead-bae5-073b03ca63ad`：F01 Baseline 超时未报告，RSI 的
-  `selectedIds/groups` 用了 rowId 而非业务 ID，整体 `quality_stopped`。不得重写、删除或合并其成本。
-- 已将未运行的 V3-r1 降为历史：它只修复业务 ID / evidence ID 契约，但题面仍含机器交付字段。
-- 当前 Release Manifest 指向 `trajectory-p05-v3-r2-candidate` / `trajectory-review-v3-r2`，尚未运行。
-  V3-r2 保留 V3 的 60 个公开记录选择、split 和私有评分边界，但重写所有用户题面为自然业务请求；
-  `metrics/groups/selectedIds/evidenceIds` 不出现在题面，且 `deliveryContract` 不进模型消息或轨迹匹配输入。
-- 48 个 train 固定为六个连续 cohort × 8 项。首项是合法冷启动，后七项才有 Fast 机会；完整最多 42/48、
-  预检最多 6/12。实际 RSI `planningPath=fast` 必须达到 `>=50%` 才能通过候选的发布门槛，机会/G0/partial
-  都不能代替实际命中。
-- 已新建 `backend/trajectory_assets_v3_r2.py`、冻结 `benchmarks/trajectory-review-v3-r2.json`，并让运行器使用 r2。
-  报告 ID 契约仍由动态工具 schema 执行；未启动付费实验。
-- 下一步：等待用户审核 F01/C01/T01 题面和工具表；明确同意后才从新的空 RSI 经验库启动一次 12 对严格预检。
+- 当前模型配置为 `qwen/qwen3.5-9b`（执行、规划、组合），thinking 关闭；`AGENT_MAX_STEPS=24`。
+- V3-r2 的真实 API F01 预检 `94620ba7-efd1-4fb9-b323-2bde8b22f78d` 已按质量门槛停止并转为 historical：Baseline 24 次模型请求、31 工具调用、609,579 token、144.346 秒，`metrics` 失败；RSI 13 次、20 调用/3错误、185,288 token、111.181 秒，`metrics/selectedIds/groups` 失败。RSI Fast 0/1。所有失败、费用和 trace 保留；69.60% token 差只能诊断。
+- 当前 Release Manifest 指向未运行的 `trajectory-p05-v3-r3-candidate` / `trajectory-review-v3-r3`。它保持同一 48 train、6 validation、6 test、公开记录与私有评分边界；财务题面仅增加一句订单主体、一对多、分/BRL业务口径。机器交付字段不进题面、模型初始消息或轨迹匹配。
+- 已修复：通用 prompt 的字段类型/单位/缺失原则；对账工具的文本键、数值字段、comparisons 数组与原始单位说明；模型上下文仅对字节完全相同的重复行观察压缩，ledger/trace完整保留。相关 Python 回归 40/40 通过；未再调用付费模型。
+- 下一步：向用户展示 V3-r3 的简短财务题面及工具契约供最终复核。明确启动后，才以新的空 RSI 经验库运行 12 对严格串行预检；质量、usage、维护和实际 Fast `>=50%` 全部通过后才可 48 对 full。
 
 
 
 - 下方关于 V2/V3-r1 的审阅、9 对预检和旧 current release 的文字是当时的历史快照；当前
-  执行基线以本文件顶部 V3-r2 条目、Release Manifest 与 `docs/trajectory-v3-run-approval-review-2026-09-14.md` 为准。
+  执行基线以本文件顶部 V3-r3 条目、Release Manifest 与 `docs/trajectory-v3-run-approval-review-2026-09-14.md` 为准。
 
 
 - 2026-09-14 执行阶段已推进P0.5，**未完成整体验收**。工作区现在从通过评分的真实
