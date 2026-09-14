@@ -1117,6 +1117,72 @@ class WorkpackExperiment:
             'coverage': deepcopy(item.get('coverage') or {}),
         }
 
+    def showcase_comparison(self, workpack_id: str) -> dict:
+        """Return one saved, quality-gated V17 pair for the interactive workspace.
+
+        The workspace must not download the full 48-pair dashboard merely to
+        show a loaded example's historical comparison.  This projection is
+        deliberately read-only: it contains the same frozen prompt/material
+        identity and compact arm accounting, while traces and reports remain
+        behind the existing per-run endpoints.
+        """
+        spec = next((row for row in list_workpacks(self.bank) if row['id'] == workpack_id), None)
+        if not spec:
+            raise KeyError(workpack_id)
+
+        candidates = []
+        for item in self.items.values():
+            if item.get('mode') != FULL_TRAIN_MODE_V15 or item.get('status') != 'completed':
+                continue
+            summary = item.get('summary') or self._summary(item)
+            if self._quality_gate(item, summary).get('status') != 'passed':
+                continue
+            pair = next((row for row in item.get('pairs') or [] if row.get('workpackId') == workpack_id), None)
+            if pair and pair.get('status') == 'completed':
+                candidates.append((item, pair, summary))
+
+        public_spec = {
+            key: deepcopy(spec.get(key)) for key in [
+                'id', 'workflowType', 'scenario', 'title', 'split', 'difficulty',
+                'sourceTaskId', 'sourceUrl', 'recordCount', 'task',
+                'deliveryContract', 'sourceProvenance',
+            ]
+        }
+        if not candidates:
+            return {
+                'available': False,
+                'reason': '该工作包没有保存的、同质量门槛通过的 V17 双臂运行；不会自动发起另一侧 Agent。',
+                'workpack': public_spec,
+            }
+
+        item, pair, summary = max(
+            candidates,
+            key=lambda row: row[0].get('finishedAt') or row[0].get('createdAt') or '',
+        )
+        baseline = (pair.get('runs') or {}).get('baseline') or {}
+        rsi = (pair.get('runs') or {}).get('rsi') or {}
+        baseline_tokens = _total(baseline.get('metrics'))
+        rsi_tokens = _total(rsi.get('metrics'))
+        return {
+            'available': True,
+            'workpack': public_spec,
+            'experiment': {
+                'id': item['id'],
+                'mode': item.get('mode'),
+                'finishedAt': item.get('finishedAt'),
+                'limits': deepcopy((item.get('protocol') or {}).get('limits') or {}),
+                'qualityGate': deepcopy((summary or {}).get('qualityGate') or self._quality_gate(item, summary)),
+            },
+            'pair': self._dashboard_pair(pair),
+            'comparison': {
+                'baselineTokens': baseline_tokens,
+                'rsiTokens': rsi_tokens,
+                'tokenSavingRate': round(1 - rsi_tokens / baseline_tokens, 6) if baseline_tokens else None,
+                'sameFrozenInput': True,
+                'note': '保存的 V17 串行双臂回放；不是当前工作区刚发起的实时 A/B 运行。',
+            },
+        }
+
     def list_summaries(self) -> list[dict]:
         """List experiments without downloading pair traces, reports, or raw events."""
         rows = []

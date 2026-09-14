@@ -38,6 +38,7 @@
 | D33 | 取消的 Workpack pair 不得进入配对成本或完成度曲线 | 2026-09-13。取消可发生在两个 arm 之间，甚至留下两条终态 run；这些尝试必须保留在各 arm 的失败、token、provider attempt 与 usage-incomplete 账本中，但仅 `pair.status=completed` 才可进入 `pairedCompleted`、累计 token 曲线和同任务成本差。旧 artifact 不改写，读取时重算展示摘要；缺少该字段的旧格式工件仅为兼容视作已完成。 |
 | D34 | 默认主页是交互式工作区，实验展示单列 | 2026-09-13。`#home` 不再只是 V4 的只读 DTO：上传、资料预览、澄清、真实 Agent、报告下载、导出、追问和历史工作必须共用同一 workspace/run ID。普通用户任务保持独立目录和 `learning_enabled=False`；公开父报告摘要仅可作为追问上下文，不能替代本次证据。`#experiments` 才显示冻结工作包、训练经验和成本曲线；不保留旧 benchmark 作为默认入口。 |
 | D35 | V17 Workpack full 作为独立的同质量在线工作包证据 | 2026-09-13。V17 运行时在 V16 基础上增加两臂共享的截止时间终态报告保护，因此建立全新 smoke/precheck/full 链。完整工件 `005ffeb9-964e-42ac-86e9-fb9e8f2212fe` 的 mode 名为 `full_train_v15`，但不得与旧 V15 cancelled full 混淆；它以 48 个冻结 train 工作包、独立空 RSI 经验和串行 1/1/1 形成独立结论。Judge 单列且尚未运行；Composition/G1/G2 未触发时不得宣称相应收益。 |
+| D36 | 工作台题库与同题对比只消费冻结资料及保存 pair | 2026-09-14。`#home` 按岗位展示 16 个可运行 train Workpack，不用 validation/test 填充题库。加载题库后，只有存在完成且质量门槛通过的 V17 pair 才显示 Plan + ReAct / Graph RSI 的保存双臂指标、报告和按需轨迹；不自动启动另一侧 Agent，不把当前工作区运行混入该 pair。用户更改资料或任务文本即撤销同题比较。 |
 | D15 | 将当前讨论 session 与用户将建立的执行 session 分工 | 文档承接设计和状态，不依赖聊天长上下文；不绑定具体型号的能力假设 |
 
 ## 明确没有确认成结论的说法

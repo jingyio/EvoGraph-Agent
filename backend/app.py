@@ -396,6 +396,14 @@ def create_app(service=None):
             raise HTTPException(404, '工作包在线实验运行不存在')
         return HTMLResponse(render_report(run, task), headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'self'"})
 
+    @app.get('/api/workpack-comparisons/{pack_id}')
+    def workpack_saved_comparison(pack_id: str):
+        """Small workspace-facing projection of an already completed V17 pair."""
+        try:
+            return workpack_experiment.showcase_comparison(pack_id)
+        except KeyError:
+            raise HTTPException(404, '工作包不存在')
+
     @app.post('/api/workpack-experiments/{key}/cancel')
     def workpack_experiment_cancel(key: str):
         try:

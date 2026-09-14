@@ -20,6 +20,12 @@
 > trace：列表约 29,869 B、V17 摘要约 290,393 B；点击单 run 才请求 DAG、观察、Plan 与报告。
 > 这是展示性能与关联正确性的交付验证，不是新的 Agent 成本或质量实验。
 
+> **2026-09-14 工作台题库与保存同题回放**：每个岗位在 `/#home` 提供 16 个冻结 train
+> Workpack，资料和问题经过与上传相同的解析路径。加载 `finance-reconciliation-01` 已验证
+> 同一工作包可同时显示其保存的 V17 Baseline/RSI pair、两侧报告和按需 RSI DAG/事件轨迹；
+> `finance-reconciliation-05` 没有 V17 train pair 时明确拒绝展示，且不会自动发起 Agent。
+> 这只改善可审计展示，不增加模型调用或改变 V17 实验数据。
+
 > 2026-09-12 工作区 Workpack 后续实验：V5 Smoke、V6 Smoke 均保留为
 > 诊断；V6 的 12-task 预检因 Baseline `tickets-triage-01` 发生共享
 > `evidence_coverage` 恢复缺陷而未通过同质量门槛，不能用于经济性结论。

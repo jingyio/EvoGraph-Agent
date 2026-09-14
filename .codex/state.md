@@ -1,6 +1,6 @@
 # 项目状态快照
 
-更新时间：2026-09-13。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
+更新时间：2026-09-14。功能基线 `9520ae7`；本快照所在的文档提交在其后，实际 HEAD 以 `git log -1` 为准。
 
 - 项目：RSI 数字员工 Lab。
 - 仓库：`/Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab`。
@@ -13,6 +13,12 @@
   Composition0。报告恢复、工具拒绝/错误和本地开销均保留，详情见
   `docs/workspace-workpack-v17-full-results-2026-09-13.md`。旧V15 full `6c56245b` 仍是
   pair2 transport retry usage未知的取消诊断，绝不覆盖或拼接。
+- 2026-09-14 工作台题库/同题回放已补齐：每个岗位显示16个冻结 train Workpack，按 A/B/C
+  筛选并明确实例、资料数、记录数和指标数。加载题库后按需调用
+  `GET /api/workpack-comparisons/{packId}`，只对完成且质量门槛通过的 V17 pair 展示保存的
+  Baseline/RSI token、LLM、工具、耗时、报告和原始轨迹；不启动新 Agent。浏览器实际验证
+  `finance-reconciliation-01` 返回 V17 pair 与 RSI 保存 DAG；`-05` 没有 train pair 时明确
+  不可比较。上传/删除资料或修改题目会撤销同题回放，避免混淆当前工作区与实验样本。
 - 2026-09-13 交付验收完成：默认 `/#home` 通过实际三岗位工作区运行验证了资料加载、任务、
   真实 Agent、同 run 轨迹、HTML 下载和同工作区追问。财务主任务/追问为
   `dfb877a2`/`136ef9c8`，客服为 `a2886561`/`4d307152`，技术工单为

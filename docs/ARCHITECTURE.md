@@ -39,7 +39,7 @@ backend/app.py → WorkspaceManager（上传/预览/追问） / WorkpackExperime
 | `backend/llm_judge.py` | 匿名双顺序报告评分、reward、独立裁判计量 | 不执行 Agent，不改写事实评分，不训练图 |
 | `backend/business_report.py` | 所有 Agent 共用 HTML 报告与实际工具证据展示；按场景标注岗位与简报名称 | 不读取 gold 来补写业务结果，也不生成 PPTX |
 | `backend/workspace.py` / `workpacks.py` | 隔离用户文件、受限只读资料工具、确定性澄清、同工作区报告/追问、公开来源工作包的相同解析入口 | 不把用户资料写入共享 RSI 经验、评测库或生产平台 |
-| `backend/workpack_experiment.py` | 用独立经验库串行运行冻结工作包的 Plan + ReAct / Graph RSI，对所有已启动尝试、恢复和 usage 做配对账本 | 不重写历史工件，不将私有校验或 Judge 反馈回写学习 |
+| `backend/workpack_experiment.py` | 用独立经验库串行运行冻结工作包的 Plan + ReAct / Graph RSI，对所有已启动尝试、恢复和 usage 做配对账本；按工作包返回精简的已保存 V17 pair | 不重写历史工件，不将私有校验或 Judge 反馈回写学习，也不因工作台查看而启动另一侧 Agent |
 | `backend/showcase.py` | 只读聚合最终严格串行 artifact，生成全量/三领域聚合、成对任务、保存事件时间步（模型/结构化/控制通道）、DAG/绑定回放和严格报告审计 DTO | 不运行 Agent/Judge，不写经验，不向前端泄漏 gold 或把有限摘要审计称为全面文字事实评分 |
 
 用户粘贴的架构示例中的 `Resolver`、`MotifContext` 是说明性概念，不是当前仓库类名。不要据此未经任务需要重建框架。
@@ -74,7 +74,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
-前端 `5173` 默认 `#home`，并提供 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>`。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，可上传 CSV/XLSX/JSON/TXT、预览资料、获得确定性澄清、确认费用并运行当前工作区 Agent；同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。普通用户运行使用独立目录且 `learning_enabled=False`，不会读取或更新正式实验经验。`#experiments` 读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本；它不写死结果数字。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
+前端 `5173` 默认 `#home`，并提供 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>`。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，可上传 CSV/XLSX/JSON/TXT、预览资料、获得确定性澄清、确认费用并运行当前工作区 Agent；同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个岗位还提供 16 个冻结 train Workpack 的题库入口，展示实例、资料数量、记录数、指标数量与 A/B/C 复杂度标签；加载时经过同一解析入口。仅当该 Workpack 在完成且同质量的 V17 工件中存在 pair，主页才按需读取 compact 双臂回放，并链接到两侧的保存轨迹和报告；它不是当前工作区新发起的实时 A/B。用户上传资料、删改资料或编辑问题后会撤销同题标识。普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。`#experiments` 读取独立 Workpack 工件，展示冻结 manifest、同族 G0/Fast 链、同任务累计 token、质量门槛和完整恢复账本；它不写死结果数字。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 
