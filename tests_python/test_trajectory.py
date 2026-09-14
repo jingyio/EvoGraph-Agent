@@ -90,7 +90,9 @@ async def test_induction_never_plan_answers_and_current_nested_slots(tmp_path):
     assert len(resolved['nodes'])==1
     assert resolved['nodes'][0]['arguments']['comparisons'][0]['threshold']==10
     assert resolved['nodes'][0]['arguments']['aggregates'][0]['tableId']==new['tableBindings']['payments']
-    assert 'poison' not in json.dumps(trajectory.selection_prompt(new,[g]))
+    prompt = json.dumps(trajectory.selection_prompt(new,[g]))
+    assert 'poison' not in prompt
+    assert 'sourceValue' not in prompt and 'sourceQuote' not in prompt
     choice['bindings'][0]['quote']='missing text'
     with pytest.raises(ValueError,match='来源'):
         trajectory.bind_selection(choice,[g],new,list(newtools.values()))
@@ -360,20 +362,30 @@ async def test_reconcile_fragment_dependency_closure_and_missing_clause(tmp_path
     version = dict(proposal, id='closure-g0', generation=0, matchVersion=0)
     derived = next(node for node in proposal['nodes'] if node.get('fragmentType') == 'derivedTotal')
     comparison = next(node for node in proposal['nodes'] if node.get('fragmentType') == 'comparison')
-    with pytest.raises(ValueError, match='依赖'):
-        trajectory.bind_selection({'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [derived['id']],
-                                   'bindings': [], 'reason': '缺少依赖', 'uncovered': []},
-                                  [version], task, list(tools.values()))
-    with pytest.raises(ValueError, match='依赖'):
-        trajectory.bind_selection({'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [comparison['id']],
-                                   'bindings': [], 'reason': '缺少依赖', 'uncovered': []},
-                                  [version], task, list(tools.values()))
+    derived_selected = trajectory.bind_selection({
+        'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [derived['id']],
+        'bindings': [], 'reason': '运行时补齐只读计算依赖', 'uncovered': [],
+    }, [version], task, list(tools.values()))
+    assert len(derived_selected['nodes']) == 1
+    assert len(derived_selected['nodes'][0]['arguments']['aggregates']) == 2
+    assert len(derived_selected['nodes'][0]['arguments']['derivedTotals']) == 1
+
+    comparison_bindings = [
+        {'slot': name, 'value': slot['sourceValue'], 'quote': task['task']}
+        for name, slot in proposal['descriptor']['slots'].items() if slot['nodeId'] == comparison['id']
+    ]
+    comparison_selected = trajectory.bind_selection({
+        'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [comparison['id']],
+        'bindings': comparison_bindings, 'reason': '运行时补齐比较依赖', 'uncovered': [],
+    }, [version], task, list(tools.values()))
+    assert len(comparison_selected['nodes']) == 1
+    assert len(comparison_selected['nodes'][0]['arguments']['comparisons']) == 1
 
     paid_missing = next(node for node in proposal['nodes']
                         if node.get('fragmentType') == 'missing' and node['arguments']['alias']['$literal'] == 'paid')
     selected = trajectory.bind_selection({
         'graphId': 'closure-g0', 'decision': 'partial',
-        'nodeIds': dependency_closure(proposal, paid_missing['id']), 'bindings': [],
+        'nodeIds': [paid_missing['id']], 'bindings': [],
         'reason': '只复用支付缺失检查', 'uncovered': ['other clauses', 'report'],
     }, [version], task, list(tools.values()))
     assert len(selected['nodes']) == 1
