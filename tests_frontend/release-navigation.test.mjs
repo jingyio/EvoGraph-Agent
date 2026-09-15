@@ -342,6 +342,9 @@ test('analysis presentation is split into logical replay tabs', async()=>{
   assert.match(source,new RegExp(`label: "${label}"`));
  }
  assert.doesNotMatch(source,/label: "报告与轨迹"/);
+ assert.match(source,/大模型调用与任务通过率/);
+ assert.match(source,/累计任务通过率/);
+ assert.doesNotMatch(source,/大模型调用与任务准确率|累计任务准确率/);
  assert.match(source,/role="tablist"/);
  assert.match(source,/role="tab"/);
  assert.match(source,/aria-selected=\{analysisView === view\.id\}/);

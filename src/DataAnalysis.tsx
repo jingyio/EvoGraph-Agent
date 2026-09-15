@@ -805,7 +805,7 @@ function PolylineChart({
                 : metric === "requests"
                   ? "累计大模型调用次数曲线"
                   : metric === "accuracy"
-                    ? "累计结构化准确率曲线"
+                    ? "累计任务通过率曲线"
                     : "累计 token 与 latency 节省率曲线"
         }
       >
@@ -1189,7 +1189,7 @@ export default function DataAnalysis() {
           }
         : {
             title: "在线 RSI 尚未完成当前范围全部任务",
-            detail: "保留两臂绝对成本、准确率和失败，暂不绘制效率变化。",
+            detail: "保留两臂绝对成本、任务通过率和失败，暂不绘制效率变化。",
           };
 
   return (
@@ -1373,7 +1373,7 @@ export default function DataAnalysis() {
           {analysisView === "results" && points.length > 0 && (
             <section id="analysis-view-results" role="tabpanel" className="analysis-view-panel">
               <div className="analysis-primary-kpis" aria-label="当前筛选核心指标">
-                <article className="quality"><ShieldCheck size={20} /><small>业务质量</small><strong>{number(scopeBaselinePassed)}/{curve.length} → {number(scopeRsiPassed)}/{curve.length}</strong><span>结构化任务准确率 {percent(scopeBaselineAccuracy)} → {percent(scopeRsiAccuracy)}</span></article>
+                <article className="quality"><ShieldCheck size={20} /><small>业务质量</small><strong>{number(scopeBaselinePassed)}/{curve.length} → {number(scopeRsiPassed)}/{curve.length}</strong><span>结构化任务通过率 {percent(scopeBaselineAccuracy)} → {percent(scopeRsiAccuracy)}</span></article>
                 <article className="efficiency"><Activity size={20} /><small>执行效率</small><dl>
                   <div><dt>累计 token</dt><dd>{number(scopeBaselineTokens)} → {number(scopeRsiTokens)}</dd></div>
                   <div><dt>大模型调用次数</dt><dd>{number(scopeBaselineRequests)} → {number(scopeRsiRequests)}</dd></div>
@@ -1588,12 +1588,12 @@ export default function DataAnalysis() {
             <section id="analysis-view-operations" role="tabpanel" className="analysis-section analysis-view-panel">
               <header>
                 <div>
-                  <p className="eyebrow">MODEL CALLS / TASK ACCURACY</p>
-                  <h2>大模型调用与任务准确率</h2>
+                  <p className="eyebrow">MODEL CALLS / TASK PASS RATE</p>
+                  <h2>大模型调用与任务通过率</h2>
                 </div>
                 <p>
-                  准确率按当前范围内结构化校验通过数除以已评测任务数计算，失败保留在分母；它不是
-                  Judge 分数或模型置信度。
+                  任务通过率按当前范围内结构化校验通过数除以已评测任务数计算，失败保留在分母；它不代表
+                  Judge 分数、模型置信度或全部业务质量。
                 </p>
               </header>
               <div className="analysis-chart-grid">
@@ -1607,7 +1607,7 @@ export default function DataAnalysis() {
                   />
                 </article>
                 <article>
-                  <h3>累计任务准确率</h3>
+                  <h3>累计任务通过率</h3>
                   <PolylineChart
                     points={curve}
                     metric="accuracy"
