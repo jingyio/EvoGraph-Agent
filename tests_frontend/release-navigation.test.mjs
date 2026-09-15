@@ -288,3 +288,48 @@ test('timeline highlights only auditable G or M revisions and marks later valida
  assert.match(css,/path-badge\.graph-revision/);
  assert.match(css,/path-badge\.matching-revision/);
 });
+
+test('saved-result replay reveals only a bounded task prefix', async()=>{
+ const { replayPrefix }=await import('../src/dataAnalysisMath.ts');
+ const points=[{index:1},{index:2},{index:3}];
+ assert.deepEqual(replayPrefix(points,null),points);
+ assert.deepEqual(replayPrefix(points,1),[{index:1}]);
+ assert.deepEqual(replayPrefix(points,2),[{index:1},{index:2}]);
+ assert.deepEqual(replayPrefix(points,99),points);
+ assert.deepEqual(replayPrefix(points,-1),[]);
+});
+
+test('memory activation is highlighted on the first later task that reuses the created version', async()=>{
+ const { firstMemoryReuseIndex }=await import('../src/dataAnalysisMath.ts');
+ const chain=[
+  {index:1,workpackId:'FX01',generatedVersionIds:['g0'],generatedMatchVersions:[0]},
+  {index:2,workpackId:'FX02',usedVersionId:'g0',usedMatchVersion:0},
+  {index:3,workpackId:'FX03',usedVersionId:'g0',usedMatchVersion:0},
+ ];
+ assert.equal(firstMemoryReuseIndex(chain),2);
+ assert.equal(firstMemoryReuseIndex(chain.slice(0,1)),null);
+ assert.equal(firstMemoryReuseIndex([
+  chain[0],
+  {index:2,workpackId:'FX02',usedVersionId:'other',usedMatchVersion:9},
+ ]),null);
+});
+
+test('analysis replays saved evidence without presenting it as a live model run', async()=>{
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ const css=await readFile(new URL('../src/data-analysis.css',import.meta.url),'utf8');
+ for(const label of ['保存结果回放','播放保存结果','暂停回放','重播保存结果','回放速度','最终结果']) {
+  assert.match(source,new RegExp(label));
+ }
+ assert.match(source,/不会重新调用模型/);
+ assert.match(source,/replayPrefix\(visible, replayCount\)/);
+ assert.match(source,/scopedRevisionEvidence\(revisions, replayVisible\)/);
+ assert.match(source,/cumulativePoints\(replayVisible\)/);
+ assert.match(source,/window\.clearTimeout\(timer\)/);
+ assert.match(source,/memory-activated/);
+ assert.match(source,/记忆已构建 · 首次复用/);
+ assert.doesNotMatch(source,/initialCreation/);
+ assert.doesNotMatch(source,/initial-creation/);
+ assert.match(css,/li\.memory-activated/);
+ assert.match(css,/analysis-replay/);
+ assert.doesNotMatch(css,/initial-creation/);
+});

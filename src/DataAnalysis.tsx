@@ -9,6 +9,9 @@ import {
   GitBranch,
   Layers3,
   LoaderCircle,
+  Pause,
+  Play,
+  RotateCcw,
   Route,
   ShieldCheck,
   Sparkles,
@@ -18,8 +21,10 @@ import {
   attributionTimelineHeading,
   cumulativePoints,
   evolutionSignals,
+  firstMemoryReuseIndex,
   normalizedRevisionEvidence,
   releaseAllowsCostClaims,
+  replayPrefix,
   revisionIsAuditable,
   revisionVisualState,
   scopeAllowsCostClaims,
@@ -877,6 +882,9 @@ export default function DataAnalysis() {
   const [scenario, setScenario] = useState("all");
   const [workflow, setWorkflow] = useState("all");
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [replayCount, setReplayCount] = useState<number | null>(null);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replayIntervalMs, setReplayIntervalMs] = useState(1500);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
@@ -920,6 +928,8 @@ export default function DataAnalysis() {
     setScenario("all");
     setWorkflow("all");
     setSelectedIndex(null);
+    setReplayCount(null);
+    setReplayPlaying(false);
     void api<Detail>(`/api/analysis/datasets/${encodeURIComponent(datasetId)}`)
       .then((payload) => active && setDetail(payload))
       .catch((reason) => active && setError(reason.message))
@@ -969,20 +979,53 @@ export default function DataAnalysis() {
       ),
     [points, scenario, workflow],
   );
+  const replayVisible = useMemo(
+    () => replayPrefix(visible, replayCount),
+    [visible, replayCount],
+  );
   const visibleIndexes = new Set(visible.map((point) => point.index));
+  const replayByIndex = new Map(
+    replayVisible.map((point) => [point.index, point] as const),
+  );
   const timelineEntries = plan.length
     ? plan
         .filter((task) => visibleIndexes.has(task.index))
-        .map(
-          (task) => points.find((point) => point.index === task.index) || task,
-        )
-    : visible;
-  const scopedRevisions = scopedRevisionEvidence(revisions, visible);
-  const curve = useMemo(() => cumulativePoints(visible), [visible]);
+        .map((task) => replayByIndex.get(task.index) || task)
+    : replayVisible;
+  const scopedRevisions = scopedRevisionEvidence(revisions, replayVisible);
+  const curve = useMemo(() => cumulativePoints(replayVisible), [replayVisible]);
+  const memoryReuseIndex = firstMemoryReuseIndex(
+    points.map((point) => ({
+      index: point.index,
+      pairId: point.pairId,
+      workpackId: point.workpackId,
+      generatedVersionIds: point.rsi.generatedVersionIds,
+      generatedMatchVersions: point.rsi.generatedMatchVersions,
+      usedVersionId: point.rsi.usedVersionId,
+      usedMatchVersion: point.rsi.usedMatchVersion,
+    })),
+  );
   const selected =
     curve.find((point) => point.index === selectedIndex) ||
     curve.at(-1) ||
     null;
+  useEffect(() => {
+    if (!replayPlaying || replayCount == null || !visible.length) return;
+    if (replayCount >= visible.length) {
+      setReplayPlaying(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setReplayCount((current) =>
+        Math.min((current ?? 0) + 1, visible.length),
+      );
+    }, replayIntervalMs);
+    return () => window.clearTimeout(timer);
+  }, [replayPlaying, replayCount, replayIntervalMs, visible.length]);
+  useEffect(() => {
+    if (replayCount == null || !replayVisible.length) return;
+    setSelectedIndex(replayVisible.at(-1)?.index ?? null);
+  }, [replayCount, replayVisible]);
   useEffect(() => {
     let active = true;
     setTaskDetail(null);
@@ -1052,29 +1095,29 @@ export default function DataAnalysis() {
   const scopeCostSaving =
     scopeLast?.costSavingRate ??
     (curve.length ? null : detail?.summary?.costSaving);
-  const scopeBaselinePassed = visible.filter(
+  const scopeBaselinePassed = replayVisible.filter(
     (point) => point.baseline.passed,
   ).length;
-  const scopeRsiPassed = visible.filter((point) => point.rsi.passed).length;
+  const scopeRsiPassed = replayVisible.filter((point) => point.rsi.passed).length;
   const sumKnown = (values: Array<number | null | undefined>) =>
     values.some((value) => value == null)
       ? null
       : values.reduce<number>((total, value) => total + (value as number), 0);
   const scopeBaselineRequests =
     scopeLast?.baselineCumulativeRequests ??
-    sumKnown(visible.map((point) => point.baseline.modelRequests));
+    sumKnown(replayVisible.map((point) => point.baseline.modelRequests));
   const scopeRsiRequests =
     scopeLast?.rsiCumulativeRequests ??
-    sumKnown(visible.map((point) => point.rsi.modelRequests));
+    sumKnown(replayVisible.map((point) => point.rsi.modelRequests));
   const scopeRequestSaving = scopeLast?.requestSavingRate ?? null;
-  const scopeBaselineTools = sumKnown(visible.map((point) => point.baseline.toolCalls));
-  const scopeRsiTools = sumKnown(visible.map((point) => point.rsi.toolCalls));
+  const scopeBaselineTools = sumKnown(replayVisible.map((point) => point.baseline.toolCalls));
+  const scopeRsiTools = sumKnown(replayVisible.map((point) => point.rsi.toolCalls));
   const scopeBaselineAccuracy = scopeLast?.baselineCumulativeAccuracy ?? null;
   const scopeRsiAccuracy = scopeLast?.rsiCumulativeAccuracy ?? null;
-  const scopeFast = visible.filter(
+  const scopeFast = replayVisible.filter(
     (point) => point.rsi.planningPath === "fast",
   ).length;
-  const scopeFastRate = visible.length ? scopeFast / visible.length : null;
+  const scopeFastRate = replayVisible.length ? scopeFast / replayVisible.length : null;
   const executionStageRows = [
     ["read_selection_and_binding", "读取选择", "选择当前资料、字段或检索范围"],
     ["compute_selection_and_binding", "计算选择", "选择聚合、关联、比较与参数绑定"],
@@ -1084,7 +1127,7 @@ export default function DataAnalysis() {
   const aggregateExecutionStages = (arm: "baseline" | "rsi") => {
     const totals: Record<string, ExecutionStageMetric> = {};
     executionStageRows.forEach(([key]) => {
-      const rows = visible.map((point) => point[arm].executionStages?.[key]);
+      const rows = replayVisible.map((point) => point[arm].executionStages?.[key]);
       totals[key] = {
         requests: rows.reduce((sum, row) => sum + (row?.requests || 0), 0),
         inputTokens: rows.reduce((sum, row) => sum + (row?.inputTokens || 0), 0),
@@ -1094,10 +1137,10 @@ export default function DataAnalysis() {
     });
     return totals;
   };
-  const baselineExecutionStages = visible.length
+  const baselineExecutionStages = replayVisible.length
     ? aggregateExecutionStages("baseline")
     : baseline.executionStages || {};
-  const rsiExecutionStages = visible.length
+  const rsiExecutionStages = replayVisible.length
     ? aggregateExecutionStages("rsi")
     : rsi.executionStages || {};
   const executionRequests = (stages: Record<string, ExecutionStageMetric>) =>
@@ -1114,19 +1157,19 @@ export default function DataAnalysis() {
       ? null
       : Math.max(0, scopeRsiRequests - executionRequests(rsiExecutionStages));
 
-  const scopeG0 = visible.reduce(
+  const scopeG0 = replayVisible.reduce(
     (total, point) => total + (point.rsi.generatedVersionIds?.length || 0),
     0,
   );
-  const scopeM0 = visible.reduce(
+  const scopeM0 = replayVisible.reduce(
     (total, point) => total + (point.rsi.generatedMatchVersions?.length || 0),
     0,
   );
   const actualGraphUse = detail?.summary?.actualGraphUse;
-  const scopeActualGraphUse = visible.length === points.length
+  const scopeActualGraphUse = replayVisible.length === points.length
     ? actualGraphUse
     : null;
-  const scopeVersionUses = visible.filter(
+  const scopeVersionUses = replayVisible.filter(
     (point) => Boolean(point.rsi.usedVersionId),
   ).length;
   const graphRevisions = scopedRevisions.filter((revision) =>
@@ -1141,16 +1184,16 @@ export default function DataAnalysis() {
         revisionIsAuditable(revision, "matching")) &&
       Boolean(revision.subsequentUses?.some((use) => use.runId)),
   );
-  const completedPairs = visible.filter(
+  const completedPairs = replayVisible.filter(
     (point) => point.baseline.runId && point.rsi.runId,
   ).length;
-  const failedBaseline = visible.filter(
+  const failedBaseline = replayVisible.filter(
     (point) => point.baseline.runId && !point.baseline.passed,
   ).length;
-  const failedRsi = visible.filter(
+  const failedRsi = replayVisible.filter(
     (point) => point.rsi.runId && !point.rsi.passed,
   ).length;
-  const incompleteUsage = visible.filter(
+  const incompleteUsage = replayVisible.filter(
     (point) =>
       point.baseline.usageComplete === false ||
       point.rsi.usageComplete === false,
@@ -1159,8 +1202,8 @@ export default function DataAnalysis() {
     ? undefined
     : cohortSummaries.find((cohort) => cohort.cohortId === workflow);
   const scopeQualityKnown =
-    visible.length > 0 &&
-    visible.every(
+    replayVisible.length > 0 &&
+    replayVisible.every(
       (point) =>
         typeof point.baseline.passed === "boolean" &&
         typeof point.rsi.passed === "boolean" &&
@@ -1168,9 +1211,9 @@ export default function DataAnalysis() {
         point.rsi.usageComplete === true,
     );
   const scopeRsiQualityPassed =
-    scopeQualityKnown && scopeRsiPassed === visible.length;
+    scopeQualityKnown && scopeRsiPassed === replayVisible.length;
   const scopeCostConclusionAllowed = scopeAllowsCostClaims(
-    visible,
+    replayVisible,
     releaseCostConclusionAllowed,
     isAttribution && selectedCohort?.costConclusionAllowed === true,
   );
@@ -1384,6 +1427,8 @@ export default function DataAnalysis() {
                     setScenario(event.target.value);
                     setWorkflow("all");
                     setSelectedIndex(null);
+                    setReplayCount(null);
+                    setReplayPlaying(false);
                   }}
                 >
                   <option value="all">全部场景</option>
@@ -1402,6 +1447,8 @@ export default function DataAnalysis() {
                   onChange={(event) => {
                     setWorkflow(event.target.value);
                     setSelectedIndex(null);
+                    setReplayCount(null);
+                    setReplayPlaying(false);
                   }}
                 >
                   <option value="all">全部任务类型</option>
@@ -1412,7 +1459,77 @@ export default function DataAnalysis() {
                   ))}
                 </select>
               </label>
-              <span>{curve.length} 个成对任务 · 按真实到达顺序累计</span>
+              <span>{visible.length} 个成对任务 · 按真实到达顺序累计</span>
+            </section>
+          )}
+
+          {points.length > 0 && (
+            <section className="analysis-replay" aria-label="保存结果回放">
+              <div aria-live="polite">
+                <span>保存结果回放</span>
+                <strong>第 {replayVisible.length} / {visible.length} 项</strong>
+                <small>按真实任务顺序播放已保存运行，不会重新调用模型。</small>
+              </div>
+              <progress max={Math.max(visible.length, 1)} value={replayVisible.length} aria-label="回放进度" />
+              <div className="analysis-replay-controls">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (replayCount == null || replayCount >= visible.length)
+                      setReplayCount(1);
+                    setReplayPlaying(true);
+                  }}
+                  disabled={!visible.length || replayPlaying}
+                  aria-label="播放保存结果"
+                >
+                  <Play size={14} />播放
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReplayPlaying(false)}
+                  disabled={!replayPlaying}
+                  aria-label="暂停回放"
+                >
+                  <Pause size={14} />暂停
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!visible.length) return;
+                    setReplayCount(1);
+                    setReplayPlaying(true);
+                  }}
+                  disabled={!visible.length}
+                  aria-label="重播保存结果"
+                >
+                  <RotateCcw size={14} />重播
+                </button>
+                <label>
+                  速度
+                  <select
+                    aria-label="回放速度"
+                    value={replayIntervalMs}
+                    onChange={(event) =>
+                      setReplayIntervalMs(Number(event.target.value))
+                    }
+                  >
+                    <option value={800}>快 · 0.8 秒</option>
+                    <option value={1500}>标准 · 1.5 秒</option>
+                    <option value={2500}>慢 · 2.5 秒</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplayPlaying(false);
+                    setReplayCount(null);
+                    setSelectedIndex(visible.at(-1)?.index ?? null);
+                  }}
+                  disabled={!visible.length || (replayCount == null && !replayPlaying)}
+                >
+                  最终结果
+                </button>
+              </div>
             </section>
           )}
 
@@ -1541,6 +1658,9 @@ export default function DataAnalysis() {
                         scopedRevisions,
                       )
                     : null;
+                  const memoryActivated = Boolean(
+                    point && point.index === memoryReuseIndex,
+                  );
                   const evidence = signals
                     ? ([
                         signals.createdGraph && "保存 G 版本",
@@ -1559,6 +1679,7 @@ export default function DataAnalysis() {
                     : [];
                   const timelineClassName = [
                     point ? "recorded" : "pending",
+                    memoryActivated ? "memory-activated" : "",
                     revisionState?.graphRevision ? "graph-evolution" : "",
                     revisionState?.matchingRevision ? "matching-evolution" : "",
                     revisionState?.verifiedLaterUse ? "verified-use" : "",
@@ -1603,7 +1724,9 @@ export default function DataAnalysis() {
                         </p>
                       </div>
                       <em>
-                        {revisionState?.verifiedLaterUse
+                        {memoryActivated
+                          ? "记忆已构建 · 首次复用"
+                          : revisionState?.verifiedLaterUse
                           ? "已验证使用"
                           : point
                             ? point.baseline.runId && point.rsi.runId
@@ -1825,7 +1948,7 @@ export default function DataAnalysis() {
                 <ShieldCheck size={18} />
                 <span>已完成配对</span>
                 <strong>
-                  {completedPairs}/{visible.length}
+                  {completedPairs}/{replayVisible.length}
                 </strong>
               </div>
               <div>
@@ -1841,7 +1964,7 @@ export default function DataAnalysis() {
                 <strong>{incompleteUsage}</strong>
               </div>
               <p>
-                {visible.length === points.length && detail?.summary?.reliability?.note
+                {replayVisible.length === points.length && detail?.summary?.reliability?.note
                   ? detail.summary.reliability.note
                   : `当前筛选保留 ${completedPairs} 个已运行配对、全部失败、工具错误和串行耗时；未知 token 不按 0 补齐。`}
               </p>

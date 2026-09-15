@@ -207,6 +207,35 @@ export function evolutionSignals(
   };
 }
 
+export function replayPrefix<T>(points: T[], count: number | null): T[] {
+  if (count == null) return points;
+  const bounded = Math.max(0, Math.min(Math.floor(count), points.length));
+  return points.slice(0, bounded);
+}
+
+export function firstMemoryReuseIndex<T extends LearningEvidencePoint & { index: number }>(
+  points: T[],
+): number | null {
+  const sourcePosition = points.findIndex(
+    (point) =>
+      Boolean(point.generatedVersionIds?.length) ||
+      Boolean(point.generatedMatchVersions?.length),
+  );
+  if (sourcePosition < 0) return null;
+  const source = points[sourcePosition];
+  const graphVersions = new Set(source.generatedVersionIds || []);
+  const matchingVersions = new Set(
+    (source.generatedMatchVersions || []).map((version) => String(version)),
+  );
+  const reused = points.slice(sourcePosition + 1).find(
+    (point) =>
+      (Boolean(point.usedVersionId) && graphVersions.has(point.usedVersionId!)) ||
+      (point.usedMatchVersion != null &&
+        matchingVersions.has(String(point.usedMatchVersion))),
+  );
+  return reused?.index ?? null;
+}
+
 export function cumulativePoints<T extends PairedMeasures>(
   points: T[],
 ): Array<T & CumulativeMeasures> {
