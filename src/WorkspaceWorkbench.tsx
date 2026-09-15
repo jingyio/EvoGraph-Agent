@@ -136,6 +136,24 @@ type WorkspaceComparison = {
   executionPolicy: 'strict_serial';
   arms: ComparisonArm[];
 };
+type StoredComparisonRef = { comparisonId: string; taskId: string };
+
+const COMPARISON_STORAGE_KEY = 'rsi-workspace-comparisons-v1';
+const LAST_WORKSPACE_STORAGE_KEY = 'rsi-last-workspace-v1';
+const storedComparisonRefs = (): Record<string, StoredComparisonRef> => {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(window.localStorage.getItem(COMPARISON_STORAGE_KEY) || '{}') as Record<string, StoredComparisonRef>; }
+  catch { return {}; }
+};
+const rememberComparison = (workspaceId: string, comparison: WorkspaceComparison) => {
+  if (!workspaceId || comparison.id.startsWith('history:')) return;
+  const current = storedComparisonRefs();
+  current[workspaceId] = { comparisonId: comparison.id, taskId: comparison.taskId };
+  window.localStorage.setItem(COMPARISON_STORAGE_KEY, JSON.stringify(current));
+};
+const rememberWorkspace = (workspaceId: string) => {
+  if (workspaceId) window.localStorage.setItem(LAST_WORKSPACE_STORAGE_KEY, workspaceId);
+};
 
 const comparisonArm = (comparison: WorkspaceComparison | null, strategy: ComparisonArm['strategy']) =>
   comparison?.arms.find(arm => arm.strategy === strategy) || null;
@@ -288,7 +306,14 @@ export default function WorkspaceWorkbench() {
   const requestArea = useRef<HTMLTextAreaElement>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [savedWorkspaces, setSavedWorkspaces] = useState<Workspace[]>([]);
-  useEffect(() => { void api<Workspace[]>('/api/workspaces').then(setSavedWorkspaces).catch(() => {}); }, []);
+  useEffect(() => {
+    void api<Workspace[]>('/api/workspaces').then(items => {
+      setSavedWorkspaces(items);
+      const lastWorkspaceId = window.localStorage.getItem(LAST_WORKSPACE_STORAGE_KEY);
+      const lastWorkspace = items.find(item => item.id === lastWorkspaceId);
+      if (lastWorkspace) void activateWorkspace(lastWorkspace);
+    }).catch(() => {});
+  }, []);
   const [role, setRole] = useState<Role>('finance');
   const [tableId, setTableId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -326,7 +351,7 @@ export default function WorkspaceWorkbench() {
     }
     try {
       const item = await api<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ role: nextRole, label: `${ROLES.find(roleItem => roleItem.key === nextRole)?.label || nextRole}工作区` }) });
-      setWorkspace(item); setTableId(item.tables[0]?.id || ''); setPreview(null); setRuns([]);
+      setWorkspace(item); setTableId(item.tables[0]?.id || ''); setPreview(null); setRuns([]); rememberWorkspace(item.id);
       return item;
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(''); }
@@ -343,6 +368,26 @@ export default function WorkspaceWorkbench() {
     setRuns(history.runs);
   }
 
+  async function restoreComparison(workspaceId: string, workspaceSnapshot?: Workspace) {
+    const saved = storedComparisonRefs()[workspaceId];
+    if (!saved) { setComparison(null); return; }
+    try {
+      const restored = await api<WorkspaceComparison>(`/api/workspaces/comparison-runs/${saved.comparisonId}`);
+      setComparison(restored);
+      const task = (workspaceSnapshot || workspace)?.tasks.find(item => item.id === saved.taskId);
+      if (task) { setReadyTask(task); setRequest(task.task); }
+    } catch (reason) {
+      setError(`无法恢复已保存的双轨执行：${(reason as Error).message}`);
+    }
+  }
+
+  async function activateWorkspace(item: Workspace) {
+    setRole(item.role); setWorkspace(item); setTableId(item.tables[0]?.id || ''); setComparison(null);
+    setReadyTask(null); setRequest(''); setClarifications([]); setCostConfirmed(false); rememberWorkspace(item.id);
+    await refreshWorkspace(item.id);
+    await restoreComparison(item.id, item);
+  }
+
   useEffect(() => {
     if (!workspace || !tableId) { setPreview(null); return; }
     api<Preview>(`/api/workspaces/${workspace.id}/tables/${encodeURIComponent(tableId)}/preview`).then(setPreview).catch(reason => setError(reason.message));
@@ -356,6 +401,7 @@ export default function WorkspaceWorkbench() {
         const current = await api<WorkspaceComparison>(`/api/workspaces/comparison-runs/${comparison.id}`);
         if (disposed) return;
         setComparison(current);
+        if (workspace?.id) rememberComparison(workspace.id, current);
         if (!['queued', 'running'].includes(current.status)) void refreshWorkspace();
       } catch (reason) {
         if (!disposed) setError((reason as Error).message);
@@ -364,7 +410,7 @@ export default function WorkspaceWorkbench() {
     void poll();
     const timer = window.setInterval(() => void poll(), 800);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [comparison?.id, comparison?.status]);
+  }, [comparison?.id, comparison?.status, workspace?.id]);
 
   function chooseRole(nextRole: Role) {
     if (nextRole === role) return;
@@ -417,6 +463,7 @@ export default function WorkspaceWorkbench() {
         body: JSON.stringify({ confirmCost: true }),
       });
       setComparison(result);
+      if (workspace?.id) rememberComparison(workspace.id, result);
     } catch (reason) {
       setError((reason as Error).message);
     } finally { setBusy(''); }
@@ -427,7 +474,11 @@ export default function WorkspaceWorkbench() {
     const activeArms = comparison.arms.filter(arm => ['queued', 'running'].includes(arm.status));
     await Promise.allSettled(activeArms.map(arm => api(`/api/workspaces/runs/${arm.runId}/cancel`, { method: 'POST', body: '{}' })));
     if (!comparison.id.startsWith('history:')) {
-      try { setComparison(await api<WorkspaceComparison>(`/api/workspaces/comparison-runs/${comparison.id}`)); }
+      try {
+        const current = await api<WorkspaceComparison>(`/api/workspaces/comparison-runs/${comparison.id}`);
+        setComparison(current);
+        if (workspace?.id) rememberComparison(workspace.id, current);
+      }
       catch (reason) { setError((reason as Error).message); }
     }
   }
@@ -473,7 +524,7 @@ export default function WorkspaceWorkbench() {
 
   return <main className="workspace-shell">
     <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>上传资料，交给两个数字员工对照分析</span></div><div className="workspace-topbar-status"><span><i />本次资料独立保存</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span></div></header>
-    <details className="workspace-return"><summary>继续之前的工作</summary><select aria-label="选择已保存工作区" value={workspace?.id || ''} disabled={active} onChange={event => { const id = event.target.value; const old = savedWorkspaces.find(w => w.id === id); if (!old) return; setRole(old.role); setWorkspace(old); setTableId(old.tables[0]?.id || ''); setComparison(null); setReadyTask(null); setRequest(''); setClarifications([]); setCostConfirmed(false); void refreshWorkspace(id); }}><option value="">选择已保存的业务工作</option>{savedWorkspaces.filter(w => w.sources.length > 0 || w.tasks.length > 0).map(w => <option key={w.id} value={w.id}>{w.label} · {w.tasks.length} 次请求</option>)}</select></details>
+    <details className="workspace-return"><summary>继续之前的工作</summary><select aria-label="选择已保存工作区" value={workspace?.id || ''} disabled={active} onChange={event => { const old = savedWorkspaces.find(w => w.id === event.target.value); if (old) void activateWorkspace(old); }}><option value="">选择已保存的业务工作</option>{savedWorkspaces.filter(w => w.sources.length > 0 || w.tasks.length > 0).map(w => <option key={w.id} value={w.id}>{w.label} · {w.tasks.length} 次请求</option>)}</select></details>
     <section className="workspace-header"><div><p>选择业务能力 · 输入问题与附件</p><h1>{selectedRole.label}</h1><span>{selectedRole.caption}</span></div><div className="workspace-role-picker">{ROLES.map(item => <button key={item.key} className={item.key === role ? 'selected' : ''} onClick={() => chooseRole(item.key)} disabled={active || busy === 'workspace'}><small>{item.key === 'finance' ? 'FINANCE' : item.key === 'support' ? 'SUPPORT' : 'ENGINEERING'}</small>{item.label}</button>)}</div></section>
 
     {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
@@ -490,16 +541,16 @@ export default function WorkspaceWorkbench() {
       <section className="workspace-center">
         <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask?.followupRunId ? '已准备追问任务' : readyTask ? '已准备双轨任务' : '输入业务需求'}</strong></div><span>{active ? '双轨执行中' : readyTask?.followupRunId ? '追问等待启动' : readyTask ? '等待启动' : '未运行'}</span></header>
           <textarea ref={requestArea} value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={active} placeholder={role === 'finance' ? '例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。' : role === 'support' ? '例如：按投诉渠道、企业响应与公开叙述生成跟进队列，并标出待核查项。' : '例如：按未分派、里程碑和活动记录形成工程分诊清单，给出每项依据。'} />
-          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-dual-protocol"><strong>一次启动，两臂真实对照</strong><span>后端同时登记两臂，并按严格串行策略执行</span></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>我确认启动 2 次真实 Agent 运行并产生模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始双轨对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消两臂</button>}</footer>
+          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-dual-protocol"><strong>两个 run 同时创建</strong><span>模型请求严格串行，排队臂等待模型槽</span></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>我确认启动 2 次真实 Agent 运行并产生模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始双轨对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消两臂</button>}</footer>
         </div>
 
         {clarifications.length > 0 && <section className="workspace-clarify"><header><MessageSquareText size={17} /><div><small>需要确认</small><strong>补齐影响结论的资料范围</strong></div></header>{clarifications.map(item => <label key={item.id}><span>{item.question}</span><input value={answers[item.id] || ''} onChange={event => setAnswers(current => ({ ...current, [item.id]: event.target.value }))} placeholder="填写说明或上传相应资料" /></label>)}<button className="workspace-secondary" onClick={() => void prepareTask()} disabled={busy === 'prepare'}><RefreshCw size={14} />提交确认</button></section>}
 
         <section className="workspace-data"><header><div><small>资料预览</small><strong>{preview?.table.sheet || '尚未选择数据表'}</strong></div>{preview && <span>{formatCount(preview.table.rowCount)} 行 · {preview.table.fields.length} 列</span>}</header>{preview ? <><details className="employee-audit"><summary>字段类型与缺失值</summary><div className="workspace-fields">{preview.table.fields.map(field => <span key={field}><b>{field}</b><small>{preview.table.types[field]} · 缺失 {preview.table.missing[field] || 0}</small></span>)}</div></details><div className="workspace-table-scroll"><table><thead><tr>{columns.slice(0, 6).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{preview.records.map((row, index) => <tr key={String(row.rowId || index)}>{columns.slice(0, 6).map(field => <td key={field}>{String(row[field] ?? '—')}</td>)}</tr>)}</tbody></table></div></> : <div className="workspace-empty"><FolderOpen size={20} /><span>上传资料后显示解析预览</span></div>}</section>
 
-        {(comparison || readyTask) && <section className="workspace-comparison"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件。页面只展示后端保存的状态、事件、用量与报告；串行等待不会伪造成执行进度。</p></header><div className="workspace-agent-grid">
-          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已登记，等待串行执行' : '后端未返回传统 run') : '等待点击启动'} />
-          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已登记，等待串行执行' : '后端未返回 RSI run') : '等待点击启动'} />
+        {(comparison || readyTask) && <section className="workspace-comparison"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件。两个 run 同时创建，模型请求严格串行。页面只展示后端保存的状态、事件、用量与报告。</p></header><div className="workspace-agent-grid">
+          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回传统 run') : '等待点击启动'} />
+          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回 RSI run') : '等待点击启动'} />
         </div></section>}
       </section>
 

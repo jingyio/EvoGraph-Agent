@@ -10,7 +10,8 @@ test('one confirmed action creates the native paired comparison', () => {
   assert.match(source, /body: JSON\.stringify\(\{ confirmCost: true \}\)/);
   assert.match(source, /开始双轨对照/);
   assert.match(source, /我确认启动 2 次真实 Agent 运行/);
-  assert.match(source, /后端同时登记两臂，并按严格串行策略执行/);
+  assert.match(source, /两个 run 同时创建/);
+  assert.match(source, /模型请求严格串行，排队臂等待模型槽/);
   assert.doesNotMatch(source, /rsiStartTask/);
   assert.doesNotMatch(source, /startRsiRun/);
   assert.doesNotMatch(source, /awaitingRsi/);
@@ -32,6 +33,20 @@ test('both lanes use one comparison poll and expose real events metrics and repo
   assert.match(source, /页面只展示后端保存的状态、事件、用量与报告/);
   assert.doesNotMatch(source, /Math\.random/);
   assert.doesNotMatch(source, /模拟进度/);
+});
+
+
+test('comparison and last workspace survive refresh and terminal runs remain restorable', () => {
+  assert.match(source, /COMPARISON_STORAGE_KEY = 'rsi-workspace-comparisons-v1'/);
+  assert.match(source, /LAST_WORKSPACE_STORAGE_KEY = 'rsi-last-workspace-v1'/);
+  assert.match(source, /current\[workspaceId\] = \{ comparisonId: comparison\.id, taskId: comparison\.taskId \}/);
+  assert.match(source, /rememberComparison\(workspace\.id, result\)/);
+  assert.match(source, /rememberComparison\(workspace\.id, current\)/);
+  assert.match(source, /window\.localStorage\.getItem\(LAST_WORKSPACE_STORAGE_KEY\)/);
+  assert.match(source, /if \(lastWorkspace\) void activateWorkspace\(lastWorkspace\)/);
+  assert.match(source, /restoreComparison\(item\.id, item\)/);
+  assert.match(source, /api<WorkspaceComparison>\(`\/api\/workspaces\/comparison-runs\/\$\{saved\.comparisonId\}`\)/);
+  assert.doesNotMatch(source, /if \(!\['queued', 'running'\]\.includes\(restored\.status\)\) return/);
 });
 
 test('long task text grows to its real scroll height and mobile lanes stack', () => {
