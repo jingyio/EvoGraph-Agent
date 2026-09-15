@@ -1415,7 +1415,7 @@ export default function DataAnalysis() {
               <header className="analysis-evolution-heading">
                 <h2>{attributionTimelineHeading(timelineEntries.length)}</h2>
                 <div aria-label="进化状态图例">
-                  <span>首次复用</span><span>结构修订</span><span>新版本使用</span>
+                  <span>记忆已构建 · 首次复用</span><span>结构修订</span><span>新版本使用</span>
                 </div>
               </header>
               <ol className="analysis-timeline">
@@ -1465,7 +1465,7 @@ export default function DataAnalysis() {
                             : revisionState?.verifiedLaterUse
                               ? "已验证使用"
                               : memoryActivated
-                                ? "首次复用"
+                                ? "记忆已构建 · 首次复用"
                                 : routineReuse
                                   ? "持续复用"
                                   : entry.index === 1
