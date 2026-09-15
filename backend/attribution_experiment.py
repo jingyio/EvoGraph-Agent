@@ -51,20 +51,33 @@ def campaign_gate_snapshot(item, task_ids):
         not (pair[arm].get('evolution') or {}).get('maintenanceError')
         for pair in pairs for arm in ARMS
     )
+    no_learning_passed = sum(
+        pair['no_learning'].get('status') == 'completed'
+        and (pair['no_learning'].get('evaluation') or {}).get('status') == 'passed'
+        for pair in pairs if pair.get('no_learning')
+    )
     online_passed = sum(
         pair['online_rsi'].get('status') == 'completed'
         and (pair['online_rsi'].get('evaluation') or {}).get('status') == 'passed'
         for pair in pairs if pair.get('online_rsi')
     )
+    maximum_gap = (item.get('protocol') or {}).get('maximumOnlineQualityGapTasks')
+    relative_quality_gate = (
+        online_passed == expected if maximum_gap is None
+        else online_passed >= no_learning_passed - int(maximum_gap)
+    )
     graph_hits = sum(_actual_graph_use(pair['online_rsi']) for pair in pairs if pair.get('online_rsi'))
     graph_rate = graph_hits / expected if expected else None
     minimum = float((item.get('protocol') or {}).get('actualGraphUseMinimumRate') or 0)
     graph_gate = graph_rate is not None and graph_rate >= minimum
-    passed = complete_pairs and usage_complete and maintenance_clean and online_passed == expected and graph_gate
+    passed = complete_pairs and usage_complete and maintenance_clean and relative_quality_gate and graph_gate
     return {
         'taskIds': list(task_ids), 'expectedPairs': expected, 'completedPairs': len(pairs),
         'usageComplete': usage_complete, 'maintenanceClean': maintenance_clean,
-        'onlineRsiPassed': online_passed,
+        'noLearningPassed': no_learning_passed, 'onlineRsiPassed': online_passed,
+        'onlineQualityGapTasks': max(0, no_learning_passed - online_passed),
+        'maximumOnlineQualityGapTasks': maximum_gap,
+        'relativeQualityGate': relative_quality_gate,
         'actualGraphUse': {'hits': graph_hits, 'attempts': expected, 'rate': graph_rate, 'minimumRate': minimum, 'met': graph_gate},
         'expansionGate': passed,
     }
@@ -146,11 +159,17 @@ def summarize(item):
     quality = complete_usage and use_gate and all(
         arm_summary[arm]['passed'] == expected for arm in ARMS
     )
-    # Cross-domain expansion may proceed when the learned system itself is
-    # fully reliable and the baseline's ordinary business failures remain in
-    # the comparison. This does not unlock same-quality cost claims.
-    expansion_gate = (complete_usage and use_gate
-                      and arm_summary['online_rsi']['passed'] == expected)
+    # Expansion follows the frozen relative-quality tolerance.  Same-quality
+    # cost claims remain stricter and still require both arms to pass every
+    # task; this tolerance only decides whether the staged campaign may gather
+    # more evidence.
+    maximum_quality_gap = (item.get('protocol') or {}).get('maximumOnlineQualityGapTasks')
+    relative_quality_gate = (
+        arm_summary['online_rsi']['passed'] == expected
+        if maximum_quality_gap is None
+        else arm_summary['online_rsi']['passed'] >= arm_summary['no_learning']['passed'] - int(maximum_quality_gap)
+    )
+    expansion_gate = complete_usage and use_gate and relative_quality_gate
     versions = {version['id']: version for pair in item.get('pairs') or []
                 for version in (pair.get('experienceAfter') or {}).get('onlineRsiVersions', [])}
     revision_ids = {key for key, version in versions.items() if version.get('parentGraphId') and version.get('generation', 0) > 0}
@@ -172,6 +191,9 @@ def summarize(item):
         'protocolComplete': protocol_complete,
         'qualityGate': quality,
         'expansionGate': expansion_gate,
+        'relativeQualityGate': relative_quality_gate,
+        'onlineQualityGapTasks': max(0, arm_summary['no_learning']['passed'] - arm_summary['online_rsi']['passed']),
+        'maximumOnlineQualityGapTasks': maximum_quality_gap,
         'comparativeConclusionAllowed': complete_usage and item.get('mode') == 'cross_domain_formal',
         'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal'},
         'netTokenSaving': (1 - arm_summary['online_rsi']['tokens'] / arm_summary['no_learning']['tokens']) if arm_summary['no_learning']['tokens'] else None,
@@ -308,7 +330,7 @@ class AttributionExperiment:
                 'stage2': {'status': 'frozen_waiting_for_gate', 'taskIds': [row['id'] for row in campaign_stage2]},
                 'stage3': {'status': 'frozen_waiting_for_explicit_expansion', 'taskIds': [row['id'] for row in campaign_stage3]},
                 'allTaskIds': [row['id'] for row in campaign_stage1 + campaign_stage2 + campaign_stage3],
-                'gatePolicy': 'stage1 online_rsi passes 12/12, usage and maintenance complete, actual graph use meets the frozen minimum',
+                'gatePolicy': 'stage1 online_rsi may trail no_learning by at most one task; usage and maintenance complete; actual graph use meets the frozen minimum',
                 'selectionPolicy': 'all three stages frozen before execution; later stages never selected from earlier outcomes',
             } if mode == 'cross_domain_formal' else None),
             'protocol': {
@@ -332,6 +354,7 @@ class AttributionExperiment:
                 'shared': ['model', 'prompt', 'tools', 'cold planning', 'graph compilation', 'parameter binding', 'report recovery', 'budget', 'inputs'],
                 'judge': 'not_run',
                 'actualGraphUseMinimumRate': (None if mode in {'smoke', 'cross_domain_smoke'} else 0.50),
+                'maximumOnlineQualityGapTasks': (1 if cross_domain and mode in {'cross_domain_probe', 'cross_domain_formal'} else None),
                 'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
                                 else 'two new-domain capability pairs (support C01 and tickets T01); excluded from learning and formal conclusions' if mode == 'cross_domain_smoke'

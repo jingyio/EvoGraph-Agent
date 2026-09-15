@@ -115,6 +115,40 @@ def test_cross_domain_expansion_gate_allows_more_reliable_online_arm_without_cos
     assert result['comparativeConclusionAllowed'] is False
 
 
+def test_cross_domain_campaign_gate_allows_one_task_relative_quality_gap():
+    from backend.attribution_experiment import campaign_gate_snapshot
+
+    def run(passed=True, used=False):
+        return {
+            'status': 'completed' if passed else 'limited',
+            'evaluation': {'status': 'passed' if passed else 'failed'},
+            'metrics': {'usageComplete': True},
+            'evolution': {'usedVersionId': 'g0' if used else None},
+            'toolTrace': ([{'ok': True, 'executor': 'graph'}] if used else []),
+        }
+
+    task_ids = ['one', 'two', 'three']
+    item = {
+        'protocol': {'actualGraphUseMinimumRate': .5, 'maximumOnlineQualityGapTasks': 1},
+        'pairs': [
+            {'status': 'completed', 'spec': {'id': task_id}, 'no_learning': run(),
+             'online_rsi': run(passed=index != 2, used=index < 2)}
+            for index, task_id in enumerate(task_ids)
+        ],
+    }
+    gate = campaign_gate_snapshot(item, task_ids)
+    assert gate['noLearningPassed'] == 3
+    assert gate['onlineRsiPassed'] == 2
+    assert gate['onlineQualityGapTasks'] == 1
+    assert gate['relativeQualityGate'] is True
+    assert gate['expansionGate'] is True
+
+    item['protocol']['maximumOnlineQualityGapTasks'] = 0
+    strict_gate = campaign_gate_snapshot(item, task_ids)
+    assert strict_gate['relativeQualityGate'] is False
+    assert strict_gate['expansionGate'] is False
+
+
 @pytest.mark.asyncio
 async def test_cross_domain_probe_selects_twelve_frozen_precheck_pairs(tmp_path, monkeypatch):
     from backend import attribution_experiment as module
