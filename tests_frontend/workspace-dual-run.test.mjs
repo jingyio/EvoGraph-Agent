@@ -60,7 +60,7 @@ test('long task text grows to its real scroll height and mobile lanes stack', ()
   assert.match(source, /area\.style\.height = 'auto'/);
   assert.match(source, /Math\.max\(122, area\.scrollHeight\)/);
   assert.match(css, /workspace-request textarea\{[^}]*overflow-y:hidden[^}]*height:auto/);
-  assert.match(css, /@media\(max-width:1120px\)\{\.workspace-agent-grid\{grid-template-columns:1fr\}/);
+  assert.match(css, /@media\(max-width:920px\)\{\.workspace-agent-grid\{grid-template-columns:1fr\}/);
   assert.match(css, /@media\(max-width:420px\)/);
 });
 
@@ -82,4 +82,32 @@ test('the whole data preview is collapsed by default and can be expanded', () =>
   assert.doesNotMatch(source, /<details className="workspace-data workspace-data-collapsible" open/);
   assert.match(css, /workspace-data-collapsible\[open\]>summary:before/);
   assert.match(css, /workspace-data-body/);
+});
+
+
+test('paired comparison spans the workspace width and shows the full task once', () => {
+  const layoutIndex = source.indexOf('<section className="workspace-layout">');
+  const historyIndex = source.indexOf('<aside className="workspace-history">', layoutIndex);
+  const comparisonIndex = source.indexOf('<section className="workspace-comparison workspace-comparison-wide">', layoutIndex);
+  assert.ok(layoutIndex >= 0 && historyIndex > layoutIndex && comparisonIndex > historyIndex);
+  assert.match(source, /className="workspace-comparison-task" aria-label="本次完整问题"/);
+  assert.match(source, /readyTask\?\.task \|\| request \|\| '当前历史任务未返回完整题面。'/);
+  assert.match(css, /\.workspace-shell\{max-width:1720px/);
+  assert.match(css, /grid-template-columns:minmax\(190px,220px\) minmax\(0,1fr\) minmax\(190px,220px\)/);
+  assert.match(css, /\.workspace-comparison-task p\{[^}]*white-space:pre-wrap[^}]*overflow-wrap:anywhere/);
+});
+
+test('live execution uses an auto-dismissing two-arm overlay while history stays collapsed', () => {
+  assert.match(source, /function WorkspaceLiveOverlay/);
+  assert.match(source, /className="workspace-live-overlay" role="status" aria-live="polite"/);
+  assert.match(source, /traditionalRun=\{traditionalRun\} rsiRun=\{rsiRun\} active=\{active\}/);
+  assert.match(source, /run\?\.events\.at\(-1\)/);
+  assert.match(source, /window\.setTimeout\(\(\) => \{/);
+  assert.match(source, /\}, 3000\)/);
+  assert.match(source, /window\.clearTimeout\(timer\)/);
+  assert.match(source, /<details className="workspace-event-history">/);
+  assert.doesNotMatch(source, /<details className="workspace-event-history" open/);
+  assert.match(css, /\.workspace-live-overlay\{position:fixed/);
+  assert.match(css, /grid-template-columns:1fr 1fr/);
+  assert.match(css, /\.workspace-event-history>summary/);
 });

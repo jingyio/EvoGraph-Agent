@@ -206,6 +206,64 @@ const runExports = (run?: Run | null) => (run?.events || []).flatMap(event =>
     : [],
 );
 
+function WorkspaceLiveOverlay({
+  traditionalRun,
+  rsiRun,
+  active,
+}: {
+  traditionalRun: Run | null;
+  rsiRun: Run | null;
+  active: boolean;
+}) {
+  const comparisonKey = `${traditionalRun?.id || ''}:${rsiRun?.id || ''}`;
+  const [visible, setVisible] = useState(active);
+  const activePreviously = useRef(active);
+  const previousKey = useRef(comparisonKey);
+
+  useEffect(() => {
+    if (previousKey.current !== comparisonKey) {
+      previousKey.current = comparisonKey;
+      activePreviously.current = active;
+      setVisible(active);
+      return;
+    }
+    if (active) {
+      activePreviously.current = true;
+      setVisible(true);
+      return;
+    }
+    if (!activePreviously.current) {
+      setVisible(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setVisible(false);
+      activePreviously.current = false;
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [active, comparisonKey]);
+
+  if (!visible || (!traditionalRun && !rsiRun)) return null;
+  const arms = [
+    { id: 'traditional', label: '传统 Agent', run: traditionalRun },
+    { id: 'rsi', label: '在线 RSI Agent', run: rsiRun },
+  ] as const;
+
+  return <aside className="workspace-live-overlay" role="status" aria-live="polite" aria-label="双轨实时执行弹窗">
+    <button type="button" className="workspace-live-overlay-close" onClick={() => { setVisible(false); activePreviously.current = false; }} aria-label="关闭执行弹窗"><X size={14} /></button>
+    {arms.map(({ id, label, run }) => {
+      const latest = run?.events.at(-1);
+      const lines = latest ? eventDetailLines(latest).slice(0, 2) : [];
+      return <article key={id} className={id}>
+        <header><span>{label}</span><small>{activeRun(run) ? '实时执行中' : '已完成 · 即将收起'}</small></header>
+        <strong>{latest ? eventTitle(latest) : '等待后端返回首个真实事件'}</strong>
+        <p>{run ? `${run.events.length} 个真实事件 · ${optionalCount(run.metrics.modelRequests)} 次 LLM 请求` : '真实 run 正在创建'}</p>
+        {lines.length > 0 && <ul>{lines.map((line, index) => <li key={`${id}-${latest?.seq}-${index}`}>{line}</li>)}</ul>}
+      </article>;
+    })}
+  </aside>;
+}
+
 function WorkspaceRunLane({
   arm,
   run,
@@ -259,28 +317,31 @@ function WorkspaceRunLane({
 
     {error && <p className="workspace-run-error">{error}</p>}
 
-    <div className="workspace-lane-events" aria-label={`${isRsi ? '在线 RSI Agent' : '传统 Agent'}真实事件`}>
-      {events.map(event => <button
-        key={event.seq}
-        className={`${eventChannel(event)} ${selectedEvent?.seq === event.seq ? 'selected' : ''}`}
-        onClick={() => setSelectedEventSeq(event.seq)}
-      >
-        <i>{eventChannel(event) === 'model' ? 'M' : eventChannel(event) === 'rsi' ? 'R' : eventChannel(event) === 'tool' ? 'T' : 'C'}</i>
-        <span><strong>{eventTitle(event)}</strong><small>{event.elapsedMs == null ? '时间未返回' : formatMs(event.elapsedMs)}</small></span>
-        {event.type === 'observation' && event.detail?.ok === false && <em>错误</em>}
-      </button>)}
-      {!events.length && <p>{error ? '该臂没有可回放事件。' : waiting}</p>}
-    </div>
+    <details className="workspace-event-history">
+      <summary><span>完整执行记录</span><small>{events.length} 个真实事件 · 点击展开审计</small></summary>
+      <div className="workspace-lane-events" aria-label={`${isRsi ? '在线 RSI Agent' : '传统 Agent'}真实事件`}>
+        {events.map(event => <button
+          key={event.seq}
+          className={`${eventChannel(event)} ${selectedEvent?.seq === event.seq ? 'selected' : ''}`}
+          onClick={() => setSelectedEventSeq(event.seq)}
+        >
+          <i>{eventChannel(event) === 'model' ? 'M' : eventChannel(event) === 'rsi' ? 'R' : eventChannel(event) === 'tool' ? 'T' : 'C'}</i>
+          <span><strong>{eventTitle(event)}</strong><small>{event.elapsedMs == null ? '时间未返回' : formatMs(event.elapsedMs)}</small></span>
+          {event.type === 'observation' && event.detail?.ok === false && <em>错误</em>}
+        </button>)}
+        {!events.length && <p>{error ? '该臂没有可回放事件。' : waiting}</p>}
+      </div>
 
-    {selectedEvent && <div className={`workspace-event-detail ${eventChannel(selectedEvent)}`}>
-      <header>
-        <span>{eventChannel(selectedEvent) === 'model' ? 'LLM' : eventChannel(selectedEvent) === 'rsi' ? 'RSI RUNTIME' : eventChannel(selectedEvent) === 'tool' ? 'TOOL' : 'CONTROL'}</span>
-        <strong>{eventTitle(selectedEvent)}</strong>
-      </header>
-      {eventDetailLines(selectedEvent).length > 0
-        ? <ul>{eventDetailLines(selectedEvent).map((line, index) => <li key={`${selectedEvent.seq}-${index}`}>{line}</li>)}</ul>
-        : <p>该真实事件没有返回额外展示字段。</p>}
-    </div>}
+      {selectedEvent && <div className={`workspace-event-detail ${eventChannel(selectedEvent)}`}>
+        <header>
+          <span>{eventChannel(selectedEvent) === 'model' ? 'LLM' : eventChannel(selectedEvent) === 'rsi' ? 'RSI RUNTIME' : eventChannel(selectedEvent) === 'tool' ? 'TOOL' : 'CONTROL'}</span>
+          <strong>{eventTitle(selectedEvent)}</strong>
+        </header>
+        {eventDetailLines(selectedEvent).length > 0
+          ? <ul>{eventDetailLines(selectedEvent).map((line, index) => <li key={`${selectedEvent.seq}-${index}`}>{line}</li>)}</ul>
+          : <p>该真实事件没有返回额外展示字段。</p>}
+      </div>}
+    </details>
 
     <details className="workspace-agent-audit">
       <summary>技术审计 · 图、参数与完整轨迹</summary>
@@ -572,13 +633,18 @@ export default function WorkspaceWorkbench() {
 
         <details className="workspace-data workspace-data-collapsible"><summary><div><small>资料预览</small><strong>{preview?.table.sheet || '尚未选择数据表'}</strong></div>{preview && <span>{formatCount(preview.table.rowCount)} 行 · {preview.table.fields.length} 列</span>}</summary><div className="workspace-data-body">{preview ? <><details className="employee-audit"><summary>字段类型与缺失值</summary><div className="workspace-fields">{preview.table.fields.map(field => <span key={field}><b>{field}</b><small>{preview.table.types[field]} · 缺失 {preview.table.missing[field] || 0}</small></span>)}</div></details><div className="workspace-table-scroll"><table><thead><tr>{columns.slice(0, 6).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{preview.records.map((row, index) => <tr key={String(row.rowId || index)}>{columns.slice(0, 6).map(field => <td key={field}>{String(row[field] ?? '—')}</td>)}</tr>)}</tbody></table></div></> : <div className="workspace-empty"><FolderOpen size={20} /><span>上传资料后显示解析预览</span></div>}</div></details>
 
-        {(comparison || readyTask) && <section className="workspace-comparison"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件，均使用 qwen/qwen3.5-27b；主 Key 与 Secondary Key 并行执行。页面只展示后端保存的状态、事件、用量与报告。</p></header><div className="workspace-agent-grid">
-          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回传统 run') : '等待点击启动'} />
-          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回 RSI run') : '等待点击启动'} />
-        </div></section>}
       </section>
 
       <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次 run</strong></div><button className="workspace-clear-history" onClick={clearHistory} disabled={!runs.length || active} title="清空当前页面的历史记录"><Trash2 size={13} />清空历史记录</button></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); const selected = item.taskId === comparison?.taskId; return <button key={item.id} className={selected ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{item.strategy === 'graph_rsi' ? 'RSI · ' : '传统 · '}{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{optionalTokens(item.metrics)} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始双轨工作后，两臂真实轨迹会保存在这里。</span></div>}</div></aside>
     </section>
+
+    {(comparison || readyTask) && <section className="workspace-comparison workspace-comparison-wide"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件，均使用 qwen/qwen3.5-27b；主 Key 与 Secondary Key 并行执行。页面只展示后端保存的状态、事件、用量与报告。</p></header>
+      <div className="workspace-comparison-task" aria-label="本次完整问题"><small>本次完整问题</small><p>{readyTask?.task || request || '当前历史任务未返回完整题面。'}</p></div>
+      <div className="workspace-agent-grid">
+        <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回传统 run') : '等待点击启动'} />
+        <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回 RSI run') : '等待点击启动'} />
+      </div>
+    </section>}
+    <WorkspaceLiveOverlay traditionalRun={traditionalRun} rsiRun={rsiRun} active={active} />
   </main>;
 }
