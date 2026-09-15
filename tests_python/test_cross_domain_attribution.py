@@ -412,3 +412,100 @@ async def test_cross_domain_campaign_gate_failure_stops_before_stage2(tmp_path, 
     assert saved['campaign']['stage2']['status'] == 'blocked_by_stage1_gate'
     assert len(saved['pairs']) == 12
     assert len(Runner.starts) == 24
+
+
+def test_two_domain_manifest_freezes_twelve_finance_and_twelve_ticket_tasks():
+    from backend.attribution_experiment import two_domain_manifest
+
+    manifest = assets.build(ROOT)
+    selected = two_domain_manifest(manifest['tasks'])
+    assert len(selected) == 24
+    assert [row['id'] for row in selected[:12]] == [f'F{index:02d}' for index in range(1, 13)]
+    assert [row['id'] for row in selected[12:]] == [f'T{index:02d}' for index in range(1, 13)]
+    assert {row['scenario'] for row in selected} == {'finance', 'tickets'}
+    assert [row['id'] for row in two_domain_manifest(manifest['tasks'], probe=True)] == [
+        'F01', 'F02', 'T01', 'T02',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_two_domain_probe_runs_paired_arms_in_parallel_with_isolated_learning(tmp_path, monkeypatch):
+    from backend import attribution_experiment as module
+
+    fake_tasks = [
+        {
+            'id': f'{prefix}{index:02d}', 'position': offset + index,
+            'title': f'{scenario}-{index}', 'opportunity': 'test',
+            'sourceTaskId': f'{prefix}{index:02d}', 'scenario': scenario,
+            'scenarioPosition': index,
+        }
+        for offset, scenario, prefix in ((0, 'finance', 'F'), (32, 'tickets', 'T'))
+        for index in range(1, 13)
+    ]
+    monkeypatch.setattr(assets, 'build', lambda root: {'version': assets.VERSION, 'tasks': deepcopy(fake_tasks)})
+    monkeypatch.setattr(assets, 'install', lambda manager, root, spec: (
+        {'id': 'workspace-' + spec['id']}, {'id': 'task-' + spec['id']},
+    ))
+    monkeypatch.setattr(module, 'fingerprint', lambda root: {'files': {}, 'digest': 'runtime'})
+    monkeypatch.setattr(AttributionExperiment, '_validate_model', lambda self: None)
+    monkeypatch.setattr(module.config, 'API_KEY', 'primary')
+    monkeypatch.setattr(module.config, 'SECONDARY_API_KEY', 'secondary')
+    events = []
+
+    class Evolution:
+        def __init__(self):
+            self.versions = []
+
+    class Runner:
+        def __init__(self, bank, provider_factory=None, run_limit=None, model_limit=None, read_limit=None,
+                     run_directory=None, evolution_path=None, learning_enabled=True):
+            self.learning_enabled = learning_enabled
+            self.provider_factory = provider_factory
+            self.evolution = Evolution()
+            self.tasks = {}
+
+        async def start(self, request, *, evaluation_context=None):
+            task_id = request.taskId.removeprefix('task-')
+            arm = 'online' if self.learning_enabled else 'baseline'
+            events.append(('start', task_id, arm))
+            used = self.learning_enabled and bool(self.evolution.versions)
+            run_id = f'{arm}-{task_id}'
+            run = {
+                'id': run_id, 'taskId': request.taskId, 'status': 'completed',
+                'evaluation': {'status': 'passed'},
+                'metrics': {'usageComplete': True, 'inputTokens': 10, 'outputTokens': 2,
+                            'modelRequests': 1, 'toolCalls': 1, 'toolErrors': 0, 'durationMs': 10},
+                'evolution': {'usedVersionId': self.evolution.versions[-1]['id'] if used else None},
+                'toolTrace': ([{'ok': True, 'executor': 'graph'}] if used else []),
+            }
+            if self.learning_enabled:
+                self.evolution.versions.append({
+                    'id': 'graph-' + task_id, 'generation': 0, 'matchVersion': 0,
+                    'sourceRunId': run_id, 'patches': [], 'matchPatches': [],
+                })
+
+            async def finish():
+                await asyncio.sleep(0)
+                events.append(('done', task_id, arm))
+
+            self.tasks[run_id] = asyncio.create_task(finish())
+            return run
+
+        async def shutdown(self):
+            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+
+    monkeypatch.setattr(module, 'TaskRunner', Runner)
+    experiment = AttributionExperiment(tmp_path)
+    started = await experiment.start('finance_tickets_probe')
+    await experiment.tasks[started['id']]
+    saved = experiment.get(started['id'])
+    assert saved['status'] == 'completed'
+    assert saved['protocol']['executionPolicy'] == 'parallel_dual_key'
+    assert saved['protocol']['armOrder'].startswith('parallel dual-key')
+    assert [row['id'] for row in saved['manifest']] == ['F01', 'F02', 'T01', 'T02']
+    assert saved['summary']['qualityGate'] is True
+    for task_id in ['F01', 'F02', 'T01', 'T02']:
+        starts = [index for index, event in enumerate(events) if event[:2] == ('start', task_id)]
+        dones = [index for index, event in enumerate(events) if event[:2] == ('done', task_id)]
+        assert len(starts) == 2 and len(dones) == 2
+        assert max(starts) < min(dones)

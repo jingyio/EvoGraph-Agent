@@ -10,6 +10,7 @@ from .attribution_assets import VERSION, build, install
 from . import cross_domain_attribution_assets
 from .domain import now
 from .graph_store import write_private
+from .model_client import ModelClient, ModelOptions
 from .task_runner import TaskRunRequest, TaskRunner
 from .trajectory_experiment import fingerprint
 from .workspace import WorkspaceBank, WorkspaceManager
@@ -17,6 +18,8 @@ from .workspace import WorkspaceBank, WorkspaceManager
 
 MODEL = 'qwen/qwen3.5-27b'
 ARMS = ('no_learning', 'online_rsi')
+TWO_DOMAIN_SCENARIOS = ('finance', 'tickets')
+TWO_DOMAIN_TASKS_PER_SCENARIO = 12
 
 
 def _tokens(run):
@@ -33,6 +36,32 @@ def _actual_graph_use(run):
         any(trace.get('ok') and trace.get('executor') == 'graph' for trace in run.get('toolTrace', []))
         or any(state in {'done', 'completed'} for state in (run.get('graph') or {}).get('nodeStates', {}).values())
     )
+
+
+def two_domain_manifest(tasks, *, probe=False):
+    """Freeze finance and ticket tasks without post-result task selection."""
+    by_scenario = {scenario: [] for scenario in TWO_DOMAIN_SCENARIOS}
+    for row in tasks:
+        scenario = row.get('scenario')
+        if scenario in by_scenario and 1 <= int(row.get('scenarioPosition') or 0) <= TWO_DOMAIN_TASKS_PER_SCENARIO:
+            by_scenario[scenario].append(row)
+    for scenario, rows in by_scenario.items():
+        rows.sort(key=lambda row: int(row.get('scenarioPosition') or 0))
+        expected = list(range(1, TWO_DOMAIN_TASKS_PER_SCENARIO + 1))
+        actual = [int(row.get('scenarioPosition') or 0) for row in rows]
+        if actual != expected:
+            raise ValueError(f'{scenario} 两场景任务清单不完整')
+    if probe:
+        positions = {1, 2}
+        return [deepcopy(row) for scenario in TWO_DOMAIN_SCENARIOS
+                for row in by_scenario[scenario] if row['scenarioPosition'] in positions]
+    return [deepcopy(row) for scenario in TWO_DOMAIN_SCENARIOS for row in by_scenario[scenario]]
+
+
+def dual_key_provider(api_key):
+    def factory(_role):
+        return ModelClient(ModelOptions(config.BASE_URL, api_key, MODEL, config.MODEL_TIMEOUT))
+    return factory
 
 
 def campaign_gate_snapshot(item, task_ids):
@@ -194,8 +223,8 @@ def summarize(item):
         'relativeQualityGate': relative_quality_gate,
         'onlineQualityGapTasks': max(0, arm_summary['no_learning']['passed'] - arm_summary['online_rsi']['passed']),
         'maximumOnlineQualityGapTasks': maximum_quality_gap,
-        'comparativeConclusionAllowed': complete_usage and item.get('mode') == 'cross_domain_formal',
-        'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal'},
+        'comparativeConclusionAllowed': complete_usage and item.get('mode') in {'cross_domain_formal', 'finance_tickets_formal'},
+        'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal', 'finance_tickets_formal'},
         'netTokenSaving': (1 - arm_summary['online_rsi']['tokens'] / arm_summary['no_learning']['tokens']) if arm_summary['no_learning']['tokens'] else None,
         'netLatencySaving': (1 - arm_summary['online_rsi']['durationMs'] / arm_summary['no_learning']['durationMs']) if arm_summary['no_learning']['durationMs'] else None,
         'actualGraphUse': {
@@ -261,16 +290,19 @@ class AttributionExperiment:
             raise ValueError(f'归因实验要求执行、规划和组合统一使用 {MODEL}')
 
     async def start(self, mode='smoke'):
-        allowed = {'smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal'}
+        allowed = {'smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal'}
         if mode not in allowed:
             raise ValueError('unknown attribution stage')
         if self.tasks:
             raise ValueError('已有归因实验在途')
         self._validate_model()
         cross_domain = mode.startswith('cross_domain_')
-        asset_version = cross_domain_attribution_assets.VERSION if cross_domain else VERSION
-        asset_builder = cross_domain_attribution_assets.build if cross_domain else build
-        asset_installer = cross_domain_attribution_assets.install if cross_domain else install
+        two_domain = mode.startswith('finance_tickets_')
+        if two_domain and (not config.API_KEY or not config.SECONDARY_API_KEY):
+            raise ValueError('财务与技术工单双臂并行实验需要主、Secondary两个API Key')
+        asset_version = cross_domain_attribution_assets.VERSION if (cross_domain or two_domain) else VERSION
+        asset_builder = cross_domain_attribution_assets.build if (cross_domain or two_domain) else build
+        asset_installer = cross_domain_attribution_assets.install if (cross_domain or two_domain) else install
         asset = asset_builder(self.root)
         runtime = fingerprint(self.root)
         predecessor = None
@@ -278,8 +310,8 @@ class AttributionExperiment:
             cross_domain_attribution_assets.campaign_plan(asset['tasks'])
             if cross_domain else ([], [], [])
         )
-        formal_mode = 'cross_domain_formal' if cross_domain else 'formal'
-        probe_mode = 'cross_domain_probe' if cross_domain else 'probe'
+        formal_mode = ('cross_domain_formal' if cross_domain else 'finance_tickets_formal' if two_domain else 'formal')
+        probe_mode = ('cross_domain_probe' if cross_domain else 'finance_tickets_probe' if two_domain else 'probe')
         if mode == formal_mode and not cross_domain:
             predecessor = next((
                 item for item in reversed(list(self.items.values()))
@@ -288,8 +320,12 @@ class AttributionExperiment:
                 and summarize(item)['qualityGate']
             ), None)
             if not predecessor:
-                raise ValueError('同一 runtime 与资产的双任务预检未通过，禁止启动正式归因实验')
-        if mode == 'repair_probe':
+                raise ValueError('同一 runtime 与资产的预检未通过，禁止启动正式归因实验')
+        if mode == 'finance_tickets_probe':
+            manifest = two_domain_manifest(asset['tasks'], probe=True)
+        elif mode == 'finance_tickets_formal':
+            manifest = two_domain_manifest(asset['tasks'])
+        elif mode == 'repair_probe':
             # Minimal natural chain: create the order-review parent, recover the
             # payment-period coverage extension, then test its later use.
             manifest = deepcopy([asset['tasks'][index] for index in (0, 8, 9)])
@@ -334,7 +370,9 @@ class AttributionExperiment:
                 'selectionPolicy': 'all three stages frozen before execution; later stages never selected from earlier outcomes',
             } if mode == 'cross_domain_formal' else None),
             'protocol': {
-                'id': ('finance-graph-rsi-error-recovery-probe-v1' if mode == 'repair_probe'
+                'id': ('finance-tickets-graph-rsi-learning-attribution-v1-probe' if mode == 'finance_tickets_probe'
+                       else 'finance-tickets-graph-rsi-learning-attribution-v1-24' if mode == 'finance_tickets_formal'
+                       else 'finance-graph-rsi-error-recovery-probe-v1' if mode == 'repair_probe'
                        else 'cross-domain-graph-rsi-learning-attribution-v2-staged-24' if mode == 'cross_domain_formal'
                        else 'cross-domain-graph-rsi-learning-attribution-v1' if cross_domain
                        else 'finance-graph-rsi-learning-attribution-v5-12'),
@@ -345,25 +383,29 @@ class AttributionExperiment:
                 'computeInterface': 'granular-compute-v1',
                 'maxModelRequestsPerRun': config.MAX_STEPS,
                 'runTimeoutSeconds': config.RUN_TIMEOUT,
-                'limits': {'run': 1, 'model': 1, 'read': 1},
+                'limits': ({'run': 2, 'model': 2, 'read': 1} if two_domain else {'run': 1, 'model': 1, 'read': 1}),
+                'perArmLimits': {'run': 1, 'model': 1, 'read': 1},
                 'taskCountPerArm': len(manifest),
                 'taskOrder': [row['id'] for row in manifest],
-                'armOrder': 'alternating per pair; same task order in each arm',
+                'armOrder': ('parallel dual-key per pair; same task order in each arm' if two_domain else 'alternating per pair; same task order in each arm'),
                 'noLearning': 'graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task',
                 'onlineRsi': 'same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment',
                 'shared': ['model', 'prompt', 'tools', 'cold planning', 'graph compilation', 'parameter binding', 'report recovery', 'budget', 'inputs'],
                 'judge': 'not_run',
                 'actualGraphUseMinimumRate': (None if mode in {'smoke', 'cross_domain_smoke'} else 0.50),
-                'maximumOnlineQualityGapTasks': (1 if cross_domain and mode in {'cross_domain_probe', 'cross_domain_formal'} else None),
+                'maximumOnlineQualityGapTasks': (1 if (cross_domain or two_domain) and mode in {'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal'} else None),
                 'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
                                 else 'two new-domain capability pairs (support C01 and tickets T01); excluded from learning and formal conclusions' if mode == 'cross_domain_smoke'
+                                else 'finance and ticket cold-start plus first reuse; excluded from formal metrics' if mode == 'finance_tickets_probe'
+                                else 'frozen finance 12 plus tickets 12; dual-key paired execution' if mode == 'finance_tickets_formal'
                                 else 'cold-start plus first reuse/rebind pair; excluded from formal metrics' if mode == 'probe'
                                 else 'twelve frozen pairs across finance, support and tickets; excluded from formal metrics' if mode == 'cross_domain_probe'
                                 else 'FX01 creates the parent; FX09 exercises the coverage extension and bounded report recovery; FX10 tests later use; excluded from formal metrics' if mode == 'repair_probe'
                                 else 'one campaign: frozen 12-pair gate followed by 12 frozen demo pairs; optional explicit continuation uses the remaining 24 frozen pairs without rerunning earlier work' if cross_domain
                                 else 'formal frozen twelve-task finance chain'),
-                'failurePolicy': ('retain all attempts; cross-domain probe/formal continue ordinary business failures and stop only on runtime mutation, usage loss or maintenance failure' if cross_domain else 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure'),
+                'failurePolicy': ('retain all attempts; selected-domain formal continues ordinary business failures and stops only on runtime mutation, usage loss or maintenance failure' if (cross_domain or two_domain) else 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure'),
+                'executionPolicy': ('parallel_dual_key' if two_domain else 'strict_serial'),
             },
         }
         self.items[key] = item
@@ -376,13 +418,19 @@ class AttributionExperiment:
             manager = WorkspaceManager(directory)
             bank = WorkspaceBank(manager)
             runners = {
-                'no_learning': TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1,
+                'no_learning': TaskRunner(bank, provider_factory=(dual_key_provider(config.API_KEY) if two_domain else None),
+                                          run_limit=1, model_limit=1, read_limit=1,
                                           learning_enabled=False, run_directory=directory / 'no_learning' / 'runs',
                                           evolution_path=directory / 'no_learning' / 'experience.json'),
-                'online_rsi': TaskRunner(bank, run_limit=1, model_limit=1, read_limit=1,
+                'online_rsi': TaskRunner(bank, provider_factory=(dual_key_provider(config.SECONDARY_API_KEY) if two_domain else None),
+                                        run_limit=1, model_limit=1, read_limit=1,
                                         learning_enabled=True, run_directory=directory / 'online_rsi' / 'runs',
                                         evolution_path=directory / 'online_rsi' / 'experience.json'),
             }
+            if two_domain:
+                shared_read_slots = asyncio.Semaphore(1)
+                for runner in runners.values():
+                    runner.read_slots = shared_read_slots
             try:
                 for index, spec in enumerate(manifest):
                     if fingerprint(self.root) != runtime:
@@ -394,16 +442,29 @@ class AttributionExperiment:
                             'workspaceId': workspace['id'], 'taskId': task['id'], 'status': 'running'}
                     item['pairs'].append(pair)
                     self.save(item)
-                    order = ARMS if index % 2 == 0 else tuple(reversed(ARMS))
-                    for arm in order:
-                        runner = runners[arm]
-                        run = await runner.start(TaskRunRequest(taskId=task['id'], strategy='graph_rsi'))
-                        pair[arm] = run
+                    if two_domain:
+                        started_runs = await asyncio.gather(*(
+                            runners[arm].start(TaskRunRequest(taskId=task['id'], strategy='graph_rsi'))
+                            for arm in ARMS
+                        ))
+                        for arm, run in zip(ARMS, started_runs):
+                            pair[arm] = run
                         self.save(item)
-                        await runner.tasks[run['id']]
+                        await asyncio.gather(*(runners[arm].tasks[pair[arm]['id']] for arm in ARMS))
                         self.save(item)
-                        if arm == 'no_learning' and runner.evolution.versions:
+                        if runners['no_learning'].evolution.versions:
                             raise ValueError('关闭学习臂写入了跨任务经验')
+                    else:
+                        order = ARMS if index % 2 == 0 else tuple(reversed(ARMS))
+                        for arm in order:
+                            runner = runners[arm]
+                            run = await runner.start(TaskRunRequest(taskId=task['id'], strategy='graph_rsi'))
+                            pair[arm] = run
+                            self.save(item)
+                            await runner.tasks[run['id']]
+                            self.save(item)
+                            if arm == 'no_learning' and runner.evolution.versions:
+                                raise ValueError('关闭学习臂写入了跨任务经验')
                     pair['status'] = 'completed'
                     pair['experienceAfter'] = {
                         'noLearningVersions': len(runners['no_learning'].evolution.versions),
@@ -420,7 +481,7 @@ class AttributionExperiment:
                         or (pair[arm].get('evolution') or {}).get('maintenanceError')
                         for arm in ARMS
                     )
-                    if mode in {'smoke', 'probe', 'repair_probe', 'cross_domain_smoke'} and any(
+                    if mode in {'smoke', 'probe', 'repair_probe', 'cross_domain_smoke', 'finance_tickets_probe'} and any(
                         pair[arm].get('status') != 'completed' or (pair[arm].get('evaluation') or {}).get('status') != 'passed'
                         for arm in ARMS
                     ):
