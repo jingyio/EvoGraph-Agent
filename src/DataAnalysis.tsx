@@ -875,6 +875,16 @@ function PolylineChart({
   );
 }
 
+type AnalysisView = "results" | "evolution" | "cost" | "operations" | "audit";
+
+const analysisViews: Array<{ id: AnalysisView; label: string; description: string }> = [
+  { id: "results", label: "业务结果", description: "质量、累计结果与当前播放任务" },
+  { id: "evolution", label: "记忆进化", description: "首次复用、结构修订与后续使用" },
+  { id: "cost", label: "成本曲线", description: "token、成本、串行延迟与累计变化" },
+  { id: "operations", label: "请求与可靠性", description: "模型调用、执行阶段、失败和恢复" },
+  { id: "audit", label: "报告与轨迹", description: "业务报告、结构化清单和逐任务审计" },
+];
+
 export default function DataAnalysis() {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState("");
@@ -885,6 +895,7 @@ export default function DataAnalysis() {
   const [replayCount, setReplayCount] = useState<number | null>(null);
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [replayIntervalMs, setReplayIntervalMs] = useState(1500);
+  const [analysisView, setAnalysisView] = useState<AnalysisView>("results");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
@@ -930,6 +941,7 @@ export default function DataAnalysis() {
     setSelectedIndex(null);
     setReplayCount(null);
     setReplayPlaying(false);
+    setAnalysisView("results");
     void api<Detail>(`/api/analysis/datasets/${encodeURIComponent(datasetId)}`)
       .then((payload) => active && setDetail(payload))
       .catch((reason) => active && setError(reason.message))
@@ -1534,7 +1546,28 @@ export default function DataAnalysis() {
           )}
 
           {points.length > 0 && (
-            <section className="analysis-kpis" aria-label="当前筛选核心指标">
+            <nav className="analysis-view-tabs" aria-label="分析演示标签页" role="tablist">
+              {analysisViews.map((view, index) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisView === view.id}
+                  aria-controls={`analysis-view-${view.id}`}
+                  className={analysisView === view.id ? "active" : ""}
+                  onClick={() => setAnalysisView(view.id)}
+                >
+                  <span>{index + 1}</span>
+                  <strong>{view.label}</strong>
+                  <small>{view.description}</small>
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {analysisView === "results" && points.length > 0 && (
+            <section id="analysis-view-results" role="tabpanel" className="analysis-view-panel">
+              <div className="analysis-kpis" aria-label="当前筛选核心指标">
               <article>
                 <ShieldCheck size={18} />
                 <small>任务准确率</small>
@@ -1608,11 +1641,27 @@ export default function DataAnalysis() {
                     : "当前筛选范围"}
                 </span>
               </article>
+              </div>
+              {selected && (
+                <article className="analysis-current-task">
+                  <div>
+                    <small>当前播放任务 · 第 {selected.index} 项</small>
+                    <h2>{selected.title || selected.workflowType.replaceAll("-", " ")}</h2>
+                    <p>{selected.opportunity || scenarioNames[selected.scenario] || selected.scenario}</p>
+                  </div>
+                  <dl>
+                    <div><dt>{labels.baseline}</dt><dd>{selected.baseline.passed ? "通过" : "未通过"} · {number(selected.baseline.modelRequests)} 次请求</dd></div>
+                    <div><dt>{labels.rsi}</dt><dd>{selected.rsi.passed ? "通过" : "未通过"} · {number(selected.rsi.modelRequests)} 次请求</dd></div>
+                    <div><dt>本任务 token</dt><dd>{number(selected.baseline.tokens)} → {number(selected.rsi.tokens)}</dd></div>
+                  </dl>
+                  <button type="button" onClick={() => setAnalysisView("audit")}>查看报告与真实轨迹</button>
+                </article>
+              )}
             </section>
           )}
 
-          {isAttribution && (
-            <section className="analysis-section analysis-attribution">
+          {analysisView === "evolution" && isAttribution && (
+            <section id="analysis-view-evolution" role="tabpanel" className="analysis-section analysis-attribution analysis-view-panel">
               <header>
                 <div>
                   <p className="eyebrow">LEARNING ATTRIBUTION</p>
@@ -1741,8 +1790,46 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {points.length > 0 && (
-            <section className="analysis-section">
+          {analysisView === "evolution" && points.length > 0 && (
+            <section id={!isAttribution ? "analysis-view-evolution" : undefined} role={!isAttribution ? "tabpanel" : undefined} className="analysis-section analysis-mechanism analysis-mechanism-panel">
+              <Route size={20} />
+              <p className="eyebrow">MECHANISM BOUNDARY</p>
+              <h2>
+                {isAttribution
+                  ? "学习贡献与修订证据"
+                  : `${metadata?.displayName || "该测试组"}展示 G0 形成与 Fast 复用`}
+              </h2>
+              {isAttribution ? (
+                <>
+                  <p>
+                    当前保存结果包含 {number(scopeG0)} 个 G 版本、
+                    {number(scopeM0)} 个 M 版本；
+                    {scopeActualGraphUse
+                      ? <>历史图实际执行 {number(scopeActualGraphUse.hits)}/{number(scopeActualGraphUse.attempts)}（{percent(scopeActualGraphUse.rate)}）</>
+                      : <>当前回放前缀有 {number(scopeVersionUses)} 项历史版本选择记录；版本选择不等于严格图执行，执行状态请从“报告与轨迹”审计</>}
+                    ；确认 {graphRevisions.length} 次 G 实质修订、
+                    {matchingRevisions.length} 次 M 实质修订，其中 {usedRevisions.length} 个修订具有后续实际使用记录。
+                  </p>
+                  <dl>
+                    <div><dt>G 修订</dt><dd>{graphRevisions.length}</dd></div>
+                    <div><dt>M 修订</dt><dd>{matchingRevisions.length}</dd></div>
+                    <div><dt>修订后使用</dt><dd>{usedRevisions.length}</dd></div>
+                  </dl>
+                </>
+              ) : (
+                <>
+                  <p>当前回放前缀记录 {number(scopeG0)} 次 G0 形成和 {number(scopeFast)} 次 Fast 使用；没有实质结构 diff 时不称为递归进化。</p>
+                  <dl>
+                    <div><dt>Composition</dt><dd>{number(learning.composition)}</dd></div>
+                    <div><dt>Fallback</dt><dd>{number(learning.fallback)}</dd></div>
+                  </dl>
+                </>
+              )}
+            </section>
+          )}
+
+          {analysisView === "cost" && points.length > 0 && (
+            <section id="analysis-view-cost" role="tabpanel" className="analysis-section analysis-view-panel">
               <header>
                 <div>
                   <p className="eyebrow">TASK GROWTH / ABSOLUTE COST</p>
@@ -1785,8 +1872,8 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {points.length > 0 && (
-            <section className="analysis-section">
+          {analysisView === "operations" && points.length > 0 && (
+            <section id="analysis-view-operations" role="tabpanel" className="analysis-section analysis-view-panel">
               <header>
                 <div>
                   <p className="eyebrow">MODEL CALLS / TASK ACCURACY</p>
@@ -1820,7 +1907,7 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {isAttribution && points.length > 0 && (
+          {analysisView === "operations" && isAttribution && points.length > 0 && (
             <section className="analysis-section analysis-decision-stages" aria-label="模型决策请求分解">
               <header>
                 <div>
@@ -1857,8 +1944,8 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {points.length > 0 && (
-            <section className="analysis-section analysis-saving-layout">
+          {analysisView === "cost" && points.length > 0 && (
+            <section className="analysis-section analysis-saving-layout analysis-saving-single">
               <article>
                 <header>
                   <p className="eyebrow">EFFICIENCY CHANGE</p>
@@ -1884,65 +1971,10 @@ export default function DataAnalysis() {
                   </div>
                 )}
               </article>
-              <article className="analysis-mechanism">
-                <Route size={20} />
-                <p className="eyebrow">MECHANISM BOUNDARY</p>
-                <h2>
-                  {isAttribution
-                    ? "学习贡献与修订证据"
-                    : `${metadata?.displayName || "该测试组"}展示 G0 形成与 Fast 复用`}
-                </h2>
-                {isAttribution ? (
-                  <>
-                    <p>
-                      当前保存结果包含 {number(scopeG0)} 个 G 版本、
-                      {number(scopeM0)} 个 M 版本；
-                      {scopeActualGraphUse
-                        ? <>历史图实际执行 {number(scopeActualGraphUse.hits)}/{number(scopeActualGraphUse.attempts)}（{percent(scopeActualGraphUse.rate)}）</>
-                        : <>当前筛选有 {number(scopeVersionUses)} 项历史版本选择记录；版本选择不等于严格图执行，执行状态请从下方逐任务轨迹审计</>}
-                      ；确认 {graphRevisions.length}{" "}
-                      次 G 实质修订、{matchingRevisions.length} 次 M
-                      实质修订，其中 {usedRevisions.length}{" "}
-                      个修订具有后续实际使用记录。只有复用而没有修订时，本页明确只支持经验复用结论。
-                    </p>
-                    <dl>
-                      <div>
-                        <dt>G 修订</dt>
-                        <dd>{graphRevisions.length}</dd>
-                      </div>
-                      <div>
-                        <dt>M 修订</dt>
-                        <dd>{matchingRevisions.length}</dd>
-                      </div>
-                    </dl>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      当前筛选范围记录了 {number(scopeG0)} 次 G0 形成和{" "}
-                      {number(scopeFast)} 次 Fast 使用；完整测试组为{" "}
-                      {number(learning.workflowCreated)} 次 G0 与{" "}
-                      {number(learning.fastReuse)} 次 Fast。它没有
-                      G1/G2，也没有真实图结构修订，因此这里不把 Fast
-                      命中描述为递归结构进化。
-                    </p>
-                    <dl>
-                      <div>
-                        <dt>Composition</dt>
-                        <dd>{number(learning.composition)}</dd>
-                      </div>
-                      <div>
-                        <dt>Fallback</dt>
-                        <dd>{number(learning.fallback)}</dd>
-                      </div>
-                    </dl>
-                  </>
-                )}
-              </article>
             </section>
           )}
 
-          {points.length > 0 && (
+          {analysisView === "operations" && points.length > 0 && (
             <section className="analysis-reliability" aria-label="可靠性与失败">
               <div>
                 <ShieldCheck size={18} />
@@ -1971,8 +2003,8 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {selected && (
-            <section className="analysis-focus" aria-live="polite">
+          {analysisView === "audit" && selected && (
+            <section id="analysis-view-audit" role="tabpanel" className="analysis-focus analysis-view-panel" aria-live="polite">
               <header>
                 <div>
                   <p className="eyebrow">SELECTED TASK</p>
@@ -2104,7 +2136,7 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {points.length > 0 && (
+          {analysisView === "audit" && points.length > 0 && (
             <section className="analysis-section analysis-task-ledger">
               <header>
                 <div>
@@ -2272,7 +2304,7 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {metadata.limitations?.length || detail?.limitations?.length ? (
+          {analysisView === "audit" && (metadata.limitations?.length || detail?.limitations?.length) ? (
             <details className="analysis-limitations">
               <summary>数据限制与解释边界</summary>
               <ul>

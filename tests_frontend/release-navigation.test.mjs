@@ -333,3 +333,23 @@ test('analysis replays saved evidence without presenting it as a live model run'
  assert.match(css,/analysis-replay/);
  assert.doesNotMatch(css,/initial-creation/);
 });
+
+test('analysis presentation is split into logical replay tabs', async()=>{
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ const css=await readFile(new URL('../src/data-analysis.css',import.meta.url),'utf8');
+ for(const label of ['业务结果','记忆进化','成本曲线','请求与可靠性','报告与轨迹']) {
+  assert.match(source,new RegExp(`label: "${label}"`));
+ }
+ assert.match(source,/role="tablist"/);
+ assert.match(source,/role="tab"/);
+ assert.match(source,/aria-selected=\{analysisView === view\.id\}/);
+ assert.match(source,/analysisView === "results"/);
+ assert.match(source,/analysisView === "evolution"/);
+ assert.match(source,/analysisView === "cost"/);
+ assert.match(source,/analysisView === "operations"/);
+ assert.match(source,/analysisView === "audit"/);
+ assert.match(source,/setAnalysisView\("audit"\)/);
+ assert.match(css,/analysis-view-tabs/);
+ assert.match(css,/position:sticky/);
+ assert.match(css,/overflow-x:auto/);
+});
