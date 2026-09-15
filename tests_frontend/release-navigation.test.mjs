@@ -151,14 +151,14 @@ test('cumulative model cost keeps a per-arm unknown value as a gap', async()=>{
  assert.equal(rows[2].costSavingRate,null);
 });
 
-test('post-release maintenance is visibly isolated from current release KPI curves', async()=>{
+test('presentation omits maintenance diagnostics and keeps the saved run audit links', async()=>{
  const { readFile }=await import('node:fs/promises');
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
- assert.match(source,/发布后维护验证/);
- assert.match(source,/跨 runtime · 独立诊断/);
- assert.match(source,/不进入当前发布 KPI、累计曲线、成功率或收益/);
- assert.match(source,/不能作为正式收益率或普遍性能结论/);
- assert.match(source,/首个配置失败诊断与解释边界/);
+ assert.doesNotMatch(source,/analysis-maintenance/);
+ assert.doesNotMatch(source,/analysis-task-ledger/);
+ for(const label of ['查看完整报告正文','业务报告','结构化清单','真实轨迹','技术审计：真实工具调用']) {
+  assert.match(source,new RegExp(label));
+ }
 });
 
 test('formal cost claims remain gated while candidate observations stay dynamic', async()=>{
@@ -173,12 +173,11 @@ test('formal cost claims remain gated while candidate observations stay dynamic'
  assert.match(source,/extension_threshold_rebind: "扩展任务阈值重绑"/);
 });
 
-test('analysis explains execution decisions and shows the fixed-scope candidate observation', async()=>{
+test('analysis keeps the fixed-scope candidate observation without internal request taxonomy', async()=>{
  const { readFile }=await import('node:fs/promises');
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
- for(const label of ['模型决策请求分解','读取选择','计算选择','混合决策','报告组合']) assert.match(source,new RegExp(label));
- assert.match(source,/四类合计只覆盖 execute 阶段/);
- assert.match(source,/在线 RSI 在本组质量更高/);
+ for(const label of ['模型决策请求分解','读取选择','计算选择','混合决策','报告组合']) assert.doesNotMatch(source,new RegExp(label));
+ assert.match(source,/在线 RSI 通过更多任务/);
  assert.match(source,/累计效率变化/);
  assert.match(source,/在线 RSI 在当前固定范围全部通过/);
  assert.match(source,/不代表跨场景普遍收益/);
@@ -210,7 +209,7 @@ test('current attribution evidence normalizes stored arms and presents RSI quali
  assert.match(evidence,/查看修订后实际使用 · \{u\.pairId\}/);
  assert.doesNotMatch(evidence,/当前候选证据 · 质量受限/);
  const analysis=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
- assert.match(analysis,/在线 RSI 在本组质量更高/);
+ assert.match(analysis,/在线 RSI 通过更多任务/);
  assert.match(analysis,/累计效率变化/);
  assert.doesNotMatch(analysis,/当前候选结果已完成，质量门槛未通过/);
 });
@@ -236,9 +235,8 @@ test('analysis uses stable cohort ids and avoids fixed experiment counts', async
  assert.match(source,/cohortId:\s*asString\(row\.cohortId\)/);
  assert.match(source,/asString\(spec\.cohort\)/);
  assert.match(source,/\(point\.cohortId \|\| point\.workflowType\) === workflow/);
- assert.match(source,/setWorkflow\(cohort\.cohortId\)/);
- assert.match(source,/scenarioNames\[cohortScenario\]/);
- assert.match(source,/cohort\.pairIds\.length/);
+ assert.match(source,/cohortSummaries\.find\(\(cohort\) => cohort\.cohortId === workflow\)/);
+ assert.match(source,/options\.set\(point\.cohortId \|\| point\.workflowType/);
  assert.doesNotMatch(source,/全量十二任务/);
  assert.doesNotMatch(source,/双方都通过的 11 项/);
  assert.doesNotMatch(source,/正式六任务/);
@@ -247,7 +245,8 @@ test('analysis uses stable cohort ids and avoids fixed experiment counts', async
 test('filtered graph wording separates version selection from strict graph execution', async()=>{
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  assert.match(source,/版本选择不等于严格图执行/);
- assert.match(source,/记录选择 G .*严格图执行见真实轨迹/);
+ assert.match(source,/实际图执行/);
+ assert.match(source,/真实轨迹/);
  assert.doesNotMatch(source,/当前筛选有 .*项记录使用历史版本，严格图执行状态/);
 });
 

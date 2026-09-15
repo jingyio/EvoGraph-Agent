@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   BadgeDollarSign,
-  ArrowUpRight,
   Clock3,
   FileDown,
   Gauge,
@@ -246,6 +245,20 @@ const number = (value?: number | null) =>
     : new Intl.NumberFormat("zh-CN").format(Math.round(value));
 const percent = (value?: number | null) =>
   value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+const changeText = (label: string, saving?: number | null) =>
+  saving == null
+    ? `${label}变化不可用`
+    : Math.abs(saving) < 0.0005
+      ? `${label}基本持平`
+      : saving > 0
+        ? `${label}减少 ${percent(saving)}`
+        : `${label}增加 ${percent(Math.abs(saving))}`;
+const changeClass = (saving?: number | null) =>
+  saving == null || Math.abs(saving) < 0.0005
+    ? "neutral"
+    : saving > 0
+      ? "improved"
+      : "regressed";
 const money = (value?: number | null) => {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-US", {
@@ -1053,21 +1066,6 @@ export default function DataAnalysis() {
     }
     return () => { active = false; };
   }, [selected?.detailUrl, metadata?.experimentId, metadata?.releaseId]);
-  const selectedTokenSaving =
-    selected?.baseline.tokens && selected.rsi.tokens != null
-      ? (selected.baseline.tokens - selected.rsi.tokens) /
-        selected.baseline.tokens
-      : null;
-  const selectedLatencySaving =
-    selected?.baseline.durationMs && selected.rsi.durationMs != null
-      ? (selected.baseline.durationMs - selected.rsi.durationMs) /
-        selected.baseline.durationMs
-      : null;
-  const selectedCostSaving =
-    selected?.baseline.costUsd && selected.rsi.costUsd != null
-      ? (selected.baseline.costUsd - selected.rsi.costUsd) /
-        selected.baseline.costUsd
-      : null;
   const baseline =
     detail?.summary?.baseline || detail?.summary?.arms?.no_learning || {};
   const rsi = detail?.summary?.rsi || detail?.summary?.arms?.online_rsi || {};
@@ -1130,50 +1128,6 @@ export default function DataAnalysis() {
     (point) => point.rsi.planningPath === "fast",
   ).length;
   const scopeFastRate = replayVisible.length ? scopeFast / replayVisible.length : null;
-  const executionStageRows = [
-    ["read_selection_and_binding", "读取选择", "选择当前资料、字段或检索范围"],
-    ["compute_selection_and_binding", "计算选择", "选择聚合、关联、比较与参数绑定"],
-    ["mixed_tool_decision", "混合决策", "同次响应包含多类工具或无法单独归类"],
-    ["report_composition", "报告组合", "组织并提交有证据的业务报告"],
-  ] as const;
-  const aggregateExecutionStages = (arm: "baseline" | "rsi") => {
-    const totals: Record<string, ExecutionStageMetric> = {};
-    executionStageRows.forEach(([key]) => {
-      const rows = replayVisible.map((point) => point[arm].executionStages?.[key]);
-      totals[key] = {
-        requests: rows.reduce((sum, row) => sum + (row?.requests || 0), 0),
-        inputTokens: rows.reduce((sum, row) => sum + (row?.inputTokens || 0), 0),
-        outputTokens: rows.reduce((sum, row) => sum + (row?.outputTokens || 0), 0),
-        usageComplete: rows.every((row) => row?.usageComplete !== false),
-      };
-    });
-    return totals;
-  };
-  const baselineExecutionStages = replayVisible.length
-    ? aggregateExecutionStages("baseline")
-    : baseline.executionStages || {};
-  const rsiExecutionStages = replayVisible.length
-    ? aggregateExecutionStages("rsi")
-    : rsi.executionStages || {};
-  const executionRequests = (stages: Record<string, ExecutionStageMetric>) =>
-    executionStageRows.reduce(
-      (total, [key]) => total + (stages[key]?.requests || 0),
-      0,
-    );
-  const visibleExecutionStageRows = executionStageRows.filter(
-    ([key]) =>
-      (baselineExecutionStages[key]?.requests || 0) > 0 ||
-      (rsiExecutionStages[key]?.requests || 0) > 0,
-  );
-  const baselineOtherRequests =
-    scopeBaselineRequests == null
-      ? null
-      : Math.max(0, scopeBaselineRequests - executionRequests(baselineExecutionStages));
-  const rsiOtherRequests =
-    scopeRsiRequests == null
-      ? null
-      : Math.max(0, scopeRsiRequests - executionRequests(rsiExecutionStages));
-
   const scopeG0 = replayVisible.reduce(
     (total, point) => total + (point.rsi.generatedVersionIds?.length || 0),
     0,
@@ -1236,7 +1190,12 @@ export default function DataAnalysis() {
   );
   const scopeEfficiencyVisible =
     scopeCostConclusionAllowed || scopeRsiQualityPassed;
-  const efficiencyPrefix = scopeCostConclusionAllowed ? "节省" : "本组减少";
+  const qualityComparison =
+    scopeRsiPassed > scopeBaselinePassed
+      ? "在线 RSI 通过更多任务"
+      : scopeRsiPassed < scopeBaselinePassed
+        ? "在线 RSI 通过任务更少"
+        : "两臂通过任务相同";
   const claimRestriction =
     incompleteUsage > 0
       ? {
@@ -1291,7 +1250,7 @@ export default function DataAnalysis() {
               <div className="analysis-release-result">
                 <strong>在线 RSI {number(rsi.passed)}/{number(rsi.attempts)}</strong>
                 <span>不学习臂 {number(baseline.passed)}/{number(baseline.attempts)}</span>
-                <small>在线 RSI 在本组质量更高 · 成本包含全部失败与恢复</small>
+                <small>{qualityComparison} · 成本包含全部失败与恢复</small>
               </div>
             ) : (
               <div className="analysis-release-result"><strong>尚未产生保存结果</strong></div>
@@ -1316,7 +1275,39 @@ export default function DataAnalysis() {
           )}
 
           {points.length > 0 && (
-            <section className="analysis-replay" aria-label="保存结果回放" title="按真实任务顺序播放保存结果，不会重新调用模型">
+            <section className="analysis-arm-contrast" aria-label="不使用 RSI 与使用在线 RSI 的核心对比">
+              <article className="baseline">
+                <div><span>A</span><small>不使用跨任务学习</small></div>
+                <strong>{labels.baseline}</strong>
+                <dl>
+                  <div><dt>通过</dt><dd>{number(scopeBaselinePassed)}/{curve.length}</dd></div>
+                  <div><dt>Token</dt><dd>{number(scopeBaselineTokens)}</dd></div>
+                  <div><dt>模型请求</dt><dd>{number(scopeBaselineRequests)}</dd></div>
+                  <div><dt>串行时间</dt><dd>{duration(scopeBaselineLatency)}</dd></div>
+                </dl>
+              </article>
+              <div className="analysis-arm-delta" aria-label="RSI 相对变化">
+                <strong>RSI 相对变化</strong>
+                <span className={changeClass(scopeTokenSaving)}>{changeText("Token", scopeTokenSaving)}</span>
+                <span className={changeClass(scopeRequestSaving)}>{changeText("请求", scopeRequestSaving)}</span>
+                <span className={changeClass(scopeLatencySaving)}>{changeText("串行时间", scopeLatencySaving)}</span>
+              </div>
+              <article className="rsi">
+                <div><span>B</span><small>使用在线 RSI</small></div>
+                <strong>{labels.rsi}</strong>
+                <dl>
+                  <div><dt>通过</dt><dd>{number(scopeRsiPassed)}/{curve.length}</dd></div>
+                  <div><dt>Token</dt><dd>{number(scopeRsiTokens)}</dd></div>
+                  <div><dt>模型请求</dt><dd>{number(scopeRsiRequests)}</dd></div>
+                  <div><dt>串行时间</dt><dd>{duration(scopeRsiLatency)}</dd></div>
+                </dl>
+              </article>
+            </section>
+          )}
+
+          {points.length > 0 && (
+            <div className="analysis-presentation-shell">
+              <aside className="analysis-replay" aria-label="保存结果回放" title="按真实任务顺序播放保存结果，不会重新调用模型">
               <div aria-live="polite"><span>保存结果回放</span><strong>{replayVisible.length} / {visible.length}</strong></div>
               <progress max={Math.max(visible.length, 1)} value={replayVisible.length} aria-label="回放进度" />
               <div className="analysis-replay-controls">
@@ -1378,18 +1369,15 @@ export default function DataAnalysis() {
                   最终结果
                 </button>
               </div>
-            </section>
-          )}
-
-          {points.length > 0 && (
-            <nav className="analysis-view-tabs" aria-label="分析演示标签页" role="tablist">
+              </aside>
+              <div className="analysis-presentation-main">
+                <nav className="analysis-view-tabs" aria-label="分析演示标签页" role="tablist">
               {analysisViews.map((view) => (
                 <button key={view.id} type="button" role="tab" title={view.description} aria-label={`${view.label}：${view.description}`} aria-selected={analysisView === view.id} aria-controls={`analysis-view-${view.id}`} className={analysisView === view.id ? "active" : ""} onClick={() => setAnalysisView(view.id)}>
                   <strong>{view.label}</strong>
                 </button>
               ))}
-            </nav>
-          )}
+                </nav>
 
           {analysisView === "results" && points.length > 0 && (
             <section id="analysis-view-results" role="tabpanel" className="analysis-view-panel">
@@ -1398,7 +1386,7 @@ export default function DataAnalysis() {
                 <article className="efficiency"><Activity size={20} /><small>执行效率</small><dl>
                   <div><dt>累计 token</dt><dd>{number(scopeBaselineTokens)} → {number(scopeRsiTokens)}</dd></div>
                   <div><dt>大模型调用次数</dt><dd>{number(scopeBaselineRequests)} → {number(scopeRsiRequests)}</dd></div>
-                </dl><span>{scopeEfficiencyVisible ? `Token ${efficiencyPrefix} ${percent(scopeTokenSaving)} · 请求${efficiencyPrefix} ${percent(scopeRequestSaving)}` : claimRestriction.title}</span></article>
+                </dl><span>{scopeEfficiencyVisible ? `${changeText("Token", scopeTokenSaving)} · ${changeText("请求", scopeRequestSaving)}` : claimRestriction.title}</span></article>
                 <article className="evolution"><Sparkles size={20} /><small>{isAttribution ? "递归进化证据" : "经验复用"}</small><strong>{isAttribution ? `${graphRevisions.length} 次 G · ${matchingRevisions.length} 次 M 修订` : `${number(scopeFast)} 次复用`}</strong><span>{isAttribution ? `${usedRevisions.length} 个修订已有后续任务实际使用` : `当前范围命中 ${percent(scopeFastRate)}`}</span></article>
               </div>
               <dl className="analysis-secondary-kpis" aria-label="补充计量">
@@ -1635,6 +1623,28 @@ export default function DataAnalysis() {
                     onSelect={(point) => setSelectedIndex(point.index)}
                   />
                 </article>
+                <article>
+                  <h3>累计效率变化</h3>
+                  {scopeEfficiencyVisible ? (
+                    <>
+                      <PolylineChart
+                        points={curve}
+                        metric="saving"
+                        labels={labels}
+                        onSelect={(point) => setSelectedIndex(point.index)}
+                      />
+                      {!scopeCostConclusionAllowed && (
+                        <p className="analysis-observation-note">在线 RSI 在当前固定范围全部通过；曲线展示本组真实变化，不代表跨场景普遍收益。</p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="analysis-empty analysis-chart-empty">
+                      <ShieldCheck size={20} />
+                      <strong>{claimRestriction.title}</strong>
+                      <p>{claimRestriction.detail}</p>
+                    </div>
+                  )}
+                </article>
               </div>
               <details className="analysis-cost-detail">
                 <summary>查看累计模型成本估算（USD） · {money(scopeBaselineCost)} → {money(scopeRsiCost)}</summary>
@@ -1675,73 +1685,6 @@ export default function DataAnalysis() {
                   />
                 </article>
               </div>
-            </section>
-          )}
-
-          {analysisView === "operations" && isAttribution && points.length > 0 && (
-            <section className="analysis-section analysis-decision-stages" aria-label="模型决策请求分解">
-              <header>
-                <div>
-                  <p className="eyebrow">MODEL DECISION BREAKDOWN</p>
-                  <h2>模型决策请求分解</h2>
-                </div>
-                <p>
-                  按保存模型响应实际选择的工具类型归类。这里只展示请求绝对值；失败重试和最终报告请求均保留。
-                </p>
-              </header>
-              <div className="analysis-stage-grid">
-                {visibleExecutionStageRows.map(([key, label, description]) => (
-                  <article key={key}>
-                    <small>{label}</small>
-                    <div>
-                      <span>{labels.baseline}</span>
-                      <strong>{number(baselineExecutionStages[key]?.requests)}</strong>
-                    </div>
-                    <div>
-                      <span>{labels.rsi}</span>
-                      <strong>{number(rsiExecutionStages[key]?.requests)}</strong>
-                    </div>
-                    <p>{description}</p>
-                  </article>
-                ))}
-              </div>
-              <p className="analysis-stage-note">
-                四类合计只覆盖 execute 阶段。计划、匹配及其他模型请求另有 {number(baselineOtherRequests)} / {number(rsiOtherRequests)} 次，
-                已包含在页面顶部的总请求数中。
-                {metadata.status === "candidate"
-                  ? " 当前仍是候选结果；在线 RSI 完成当前范围全部任务时，页面展示本固定测试组的实际效率变化，不外推到其他场景。"
-                  : " 该分解用于解释请求发生在哪里，不把某一类别数量直接换算为收益。"}
-              </p>
-            </section>
-          )}
-
-          {analysisView === "cost" && points.length > 0 && (
-            <section className="analysis-section analysis-saving-layout analysis-saving-single">
-              <article>
-                <header>
-                  <p className="eyebrow">EFFICIENCY CHANGE</p>
-                  <h2>累计效率变化</h2>
-                </header>
-                {scopeEfficiencyVisible ? (
-                  <>
-                    <PolylineChart
-                      points={curve}
-                      metric="saving"
-                      labels={labels}
-                      onSelect={(point) => setSelectedIndex(point.index)}
-                    />
-                    {!scopeCostConclusionAllowed && (
-                      <p className="analysis-observation-note">在线 RSI 在当前固定范围全部通过；曲线展示本组真实变化，不代表跨场景普遍收益。</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="analysis-empty">
-                    <ShieldCheck size={20} />
-                    <strong>{claimRestriction.title}</strong>
-                    <p>{claimRestriction.detail}</p>
-                  </div>
-                )}
-              </article>
             </section>
           )}
 
@@ -1795,8 +1738,11 @@ export default function DataAnalysis() {
                       const trace = traceUrl(metadata, arm, run);
                       return (
                         <article key={arm} className={arm}>
-                          <header><div><small>{labels[arm]}</small><h3>保存业务成果</h3></div><em>{run.passed ? "结构化校验通过" : run.status || "未通过"}</em></header>
-                          <p>{taskDetail.runs[arm]?.submission?.summary || "未交付业务报告"}</p>
+                          <header><div><small>{labels[arm]}</small><h3>业务报告</h3></div><em>{run.passed ? "结构化校验通过" : run.status || "未通过"}</em></header>
+                          <details className="analysis-report-body">
+                            <summary>查看完整报告正文</summary>
+                            <div>{taskDetail.runs[arm]?.submission?.summary || "未交付业务报告"}</div>
+                          </details>
                           <dl>
                             <div><dt>Token</dt><dd>{number(run.tokens)}</dd></div><div><dt>模型请求</dt><dd>{number(run.modelRequests)}</dd></div>
                             <div><dt>串行时间</dt><dd>{duration(run.durationMs)}</dd></div><div><dt>工具错误</dt><dd>{number(run.toolErrors)}</dd></div>
@@ -1815,11 +1761,6 @@ export default function DataAnalysis() {
                   </div>
                 </div>
               )}
-              <article className="analysis-audit-learning">
-                <div><small>{isAttribution ? "本任务学习证据" : "RSI 执行路径"}</small><strong>{scopeEfficiencyVisible ? `token ${percent(selectedTokenSaving)} · latency ${percent(selectedLatencySaving)}` : "当前范围暂不展示效率变化"}</strong></div>
-                <p>{selected.rsi.usedVersionId ? `记录选择 G ${selected.rsi.usedVersionId}；严格图执行见真实轨迹` : "未记录图版本选择"} · {selected.rsi.usedMatchVersion != null ? `记录选择 M ${selected.rsi.usedMatchVersion}` : "未记录匹配版本选择"}</p>
-                <code>{selected.workpackId}</code>
-              </article>
               {isAttribution && scopedRevisions.some((revision) => revision.sourcePairId === selected.pairId || revision.sourceTaskId === selected.workpackId) && (
                 <details className="analysis-revision-audit"><summary>技术审计：本任务产生的 G / M diff</summary>
                   {scopedRevisions.filter((revision) => revision.sourcePairId === selected.pairId || revision.sourceTaskId === selected.workpackId).map((revision, index) => (
@@ -1830,221 +1771,9 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {analysisView === "audit" && isAttribution && cohortSummaries.length > 0 && (
-            <details className="analysis-section analysis-cohorts analysis-audit-section">
-              <summary><span>技术审计：冻结业务子簇</span><small>{cohortSummaries.length} 个预先固定子簇</small></summary>
-              <div className="analysis-cohort-grid">
-                {cohortSummaries.map((cohort) => {
-                  const cohortScenario = points.find((point) => cohort.pairIds.includes(point.pairId || point.workpackId))?.scenario || "";
-                  return (
-                    <button type="button" key={cohort.cohortId} className={workflow === cohort.cohortId ? "selected" : ""} aria-pressed={workflow === cohort.cohortId} onClick={() => { setScenario(cohortScenario || "all"); setWorkflow(cohort.cohortId); setSelectedIndex(null); }}>
-                      <span>{scenarioNames[cohortScenario] || "未标注场景"} · {cohort.pairIds.length} 项 · {cohort.pairIds.at(0) || "—"}–{cohort.pairIds.at(-1) || "—"}</span>
-                      <strong>{cohort.label}</strong><b>{cohort.baseline.passed}/{cohort.baseline.attempts} → {cohort.rsi.passed}/{cohort.rsi.attempts}</b>
-                      <dl><div><dt>Token</dt><dd>{number(cohort.baseline.tokens)} → {number(cohort.rsi.tokens)}</dd></div><div><dt>模型请求</dt><dd>{number(cohort.baseline.modelRequests)} → {number(cohort.rsi.modelRequests)}</dd></div><div><dt>串行时间</dt><dd>{duration(cohort.baseline.durationMs)} → {duration(cohort.rsi.durationMs)}</dd></div><div><dt>工具错误</dt><dd>{number(cohort.baseline.toolErrors)} → {number(cohort.rsi.toolErrors)}</dd></div></dl>
-                      <em>{cohort.costConclusionAllowed ? `同质量子簇：token 减少 ${percent(cohort.tokenSaving)}` : "保留质量差异和绝对开销"}</em>
-                    </button>
-                  );
-                })}
               </div>
-            </details>
+            </div>
           )}
-
-          {analysisView === "audit" && detail?.maintenanceDiagnostics && (
-            <details className="analysis-section analysis-maintenance analysis-audit-section">
-              <summary><span>技术审计：发布后维护验证</span><small>跨 runtime · 独立诊断 · 不进入当前 KPI</small></summary>
-              <div className="analysis-maintenance-boundary"><ShieldCheck size={17} /><p>该诊断仅验证阻塞修复，不进入当前发布 KPI、累计曲线、成功率或收益，不能作为正式收益率或普遍性能结论。</p></div>
-              <div className="analysis-maintenance-grid">
-                {([
-                  ["原正式运行", detail.maintenanceDiagnostics.formal, "formal"],
-                  ["修复后诊断", detail.maintenanceDiagnostics.validated, "validated"],
-                ] as const).map(([title, run, kind]) => (
-                  <article key={kind} className={kind}><small>{title}</small><strong>{run.evaluationStatus === "passed" ? "结构化评测通过" : run.status || "状态未知"}</strong>
-                    <dl><div><dt>请求</dt><dd>{number(run.modelRequests)}</dd></div><div><dt>Token</dt><dd>{number(run.tokens)}</dd></div><div><dt>串行时间</dt><dd>{duration(run.latencyMs)}</dd></div><div><dt>工具错误</dt><dd>{number(run.toolErrors)}</dd></div></dl>
-                    <code>{run.runtimeRevision}</code><div className="analysis-run-links">{run.reportUrl && <a href={run.reportUrl} target="_blank" rel="noreferrer"><FileDown size={13} />报告</a>}{run.runUrl && <a href={run.runUrl} target="_blank" rel="noreferrer"><GitBranch size={13} />轨迹</a>}{run.artifactUrl && <a href={run.artifactUrl} target="_blank" rel="noreferrer"><ArrowUpRight size={13} />诊断收据</a>}</div>
-                  </article>
-                ))}
-              </div>
-              <details className="analysis-maintenance-audit"><summary>首个配置失败诊断与解释边界</summary><p>首次诊断错误关闭跨任务学习，相关请求、token、延迟和工具错误均保留在独立诊断工件中。</p></details>
-            </details>
-          )}
-
-          {analysisView === "audit" && points.length > 0 && (
-            <details className="analysis-section analysis-task-ledger">
-              <summary>
-                <span>技术审计：逐任务真实运行与报告</span>
-                <small>{curve.length} 个任务 · 失败和空用量完整保留</small>
-              </summary>
-              <div className="analysis-table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>序号 / 任务</th>
-                      <th>机会</th>
-                      <th>{labels.baseline}</th>
-                      <th>{labels.rsi}</th>
-                      <th>G / M 证据</th>
-                      <th>报告 / 轨迹</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {curve.map((point) => {
-                      const signals = evolutionSignals(
-                        {
-                          pairId: point.pairId,
-                          workpackId: point.workpackId,
-                          generatedVersionIds: point.rsi.generatedVersionIds,
-                          generatedMatchVersions:
-                            point.rsi.generatedMatchVersions,
-                          usedVersionId: point.rsi.usedVersionId,
-                          usedMatchVersion: point.rsi.usedMatchVersion,
-                        },
-                        scopedRevisions,
-                      );
-                      const revisionState = revisionVisualState(
-                        {
-                          pairId: point.pairId,
-                          workpackId: point.workpackId,
-                        },
-                        scopedRevisions,
-                      );
-                      const evidence = revisionState.graphRevision
-                        ? revisionState.verifiedLaterUse
-                          ? "G 实质修订 · 已验证使用"
-                          : "G 结构实质修订"
-                        : revisionState.matchingRevision
-                          ? revisionState.verifiedLaterUse
-                            ? "M 实质修订 · 已验证使用"
-                            : "M 匹配实质修订"
-                          : revisionState.usesGraphRevision ||
-                              revisionState.usesMatchingRevision
-                            ? "后续实际使用修订"
-                            : signals.usedGraph || signals.usedMatching
-                              ? "复用已有经验"
-                              : signals.createdGraph || signals.createdMatching
-                                ? "创建经验"
-                                : "尚无修订证据";
-                      const baselineTrace = traceUrl(
-                          metadata,
-                          "baseline",
-                          point.baseline,
-                        ),
-                        rsiTrace = traceUrl(metadata, "rsi", point.rsi);
-                      return (
-                        <tr
-                          key={point.index}
-                          className={
-                            selectedIndex === point.index ? "selected" : ""
-                          }
-                          onClick={() => setSelectedIndex(point.index)}
-                        >
-                          <td>
-                            <strong>#{point.index}</strong>
-                            <small>{point.title || point.workpackId}</small>
-                          </td>
-                          <td>
-                            {point.opportunity ||
-                              scenarioNames[point.scenario] ||
-                              point.scenario}
-                            <small>
-                              {point.workflowType.replaceAll("-", " ")}
-                            </small>
-                          </td>
-                          <td>
-                            {number(point.baseline.tokens)} ·{" "}
-                            {money(point.baseline.costUsd)}
-                            <small>
-                              {duration(point.baseline.durationMs)} ·{" "}
-                              {point.baseline.passed ? "通过" : "未通过"}
-                            </small>
-                          </td>
-                          <td>
-                            {number(point.rsi.tokens)} ·{" "}
-                            {money(point.rsi.costUsd)}
-                            <small>
-                              {duration(point.rsi.durationMs)} ·{" "}
-                              {point.rsi.passed ? "通过" : "未通过"}
-                            </small>
-                          </td>
-                          <td>
-                            <span
-                              className={`path-badge ${revisionState.graphRevision ? "graph-revision" : revisionState.matchingRevision ? "matching-revision" : revisionState.usesGraphRevision || revisionState.usesMatchingRevision ? "revision-use" : point.rsi.planningPath || "unknown"}`}
-                            >
-                              {evidence}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="analysis-ledger-links">
-                              {reportUrl(
-                                metadata,
-                                "baseline",
-                                point.baseline,
-                              ) && (
-                                <a
-                                  href={reportUrl(
-                                    metadata,
-                                    "baseline",
-                                    point.baseline,
-                                  )}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={`${labels.baseline}报告`}
-                                >
-                                  <FileDown size={12} />不学习报告
-                                </a>
-                              )}
-                              {reportUrl(metadata, "rsi", point.rsi) && (
-                                <a
-                                  href={reportUrl(metadata, "rsi", point.rsi)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={`${labels.rsi}报告`}
-                                >
-                                  <FileDown size={12} />RSI 报告
-                                </a>
-                              )}
-                              {baselineTrace && (
-                                <a
-                                  href={baselineTrace}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={`${labels.baseline}轨迹`}
-                                >
-                                  <GitBranch size={12} />不学习轨迹
-                                </a>
-                              )}
-                              {rsiTrace && (
-                                <a
-                                  href={rsiTrace}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={`${labels.rsi}轨迹`}
-                                >
-                                  <GitBranch size={12} />RSI 轨迹
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          )}
-
-          {analysisView === "audit" && (metadata.limitations?.length || detail?.limitations?.length) ? (
-            <details className="analysis-limitations">
-              <summary>数据限制与解释边界</summary>
-              <ul>
-                {(metadata.limitations || detail?.limitations || []).map(
-                  (item) => (
-                    <li key={item}>{item}</li>
-                  ),
-                )}
-              </ul>
-            </details>
-          ) : null}
         </>
       )}
 
