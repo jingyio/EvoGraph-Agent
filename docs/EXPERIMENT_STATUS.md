@@ -1,8 +1,10 @@
-## 2026-09-15 · 新runtime待运行
+## 2026-09-15 · 双Key工作台冒烟与campaign停止状态
 
-- 跨场景候选将直接启动一个冻结的24对campaign：stage1 12对达到 `expansionGate` 后，同一实验自动继续stage2 12对，不重复运行stage1。
-- 24对覆盖财务、客服、技术工单各8项；48项全量只作为同campaign的可选stage3续跑。运行前不根据结果换题，旧7对诊断不进入新曲线。
-- 数字员工双轨API和前端已实现，但尚未用它额外发起付费演示run；当前Release/Analysis Manifest仍指向金融12项candidate。
+- 工作台27B双Key冒烟 comparison `c762fcdc-e08e-422b-80b0-5ea6968968e6` 已完成。传统 `plan_react` run `d9e4deba-6180-4633-98e2-fe41fe891994` 和在线 `graph_rsi` run `5fed857f-ac7d-49c3-9019-7ec24438b8a8` 均通过结构化事实/证据评分，usage完整、0传输重试、0工具错误。
+- 两run创建相差6ms，首次模型请求相差14ms，调度峰值 `runs=2/models=2/reads=1`；两臂都实际使用 `qwen/qwen3.5-27b`。传统臂34,410 token、4请求、5工具、72.960秒；在线臂32,386 token、3请求、5工具、66.250秒。
+- 在线臂为冷启动fallback，结束后从成功轨迹创建G0/M0；没有后续run使用该版本。这一对只证明双轨产品链、真实并行和经验创建，不用于正式学习收益、Fast命中率或修订后使用结论。此前01:42的9B失败双轨记录继续保留，不与本次27B冒烟拼接。
+- 跨场景campaign `4cfbc988-fab0-4537-b7e2-e509c5cfd76a` 已在stage1完成10对后标记 `infrastructure_stopped`。不学习/在线RSI均8/10，双方usage均不完整；stage2和stage3未启动。C11、T01、T05等失败与全部开销保留，不能剔除坏点或把10对外推为24/48对。
+- 当前Release/Analysis Manifest仍指向金融12项candidate；工作台冒烟和停止campaign都不替换发布证据。
 
 ## 2026-09-15 · 三场景归因扩展继续验证
 

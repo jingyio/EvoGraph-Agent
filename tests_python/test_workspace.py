@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from io import BytesIO
 import json
 import shutil
@@ -990,6 +991,8 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             pass
 
     monkeypatch.setattr('backend.app.TaskBank', Bank)
+    monkeypatch.setattr('backend.app.config.API_KEY', 'primary-secret')
+    monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', '')
     app = create_app(RunService(tmp_path / 'legacy'))
     async with app.router.lifespan_context(app):
         manager = app.state.workspace_manager
@@ -1006,18 +1009,31 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             denied = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': False})
             assert denied.status_code == 400
 
+            missing_secondary = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
+            assert missing_secondary.status_code == 503
+            assert not app.state.workspace_runner.runs and not app.state.workspace_runner.tasks
+            monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', 'secondary-secret')
+
             started = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
             assert started.status_code == 202
             payload = started.json()
             assert payload['taskId'] == task['id']
             assert payload['status'] == 'queued'
-            assert payload['executionPolicy'] == 'strict_serial'
+            assert payload['executionPolicy'] == 'parallel_dual_key'
             assert [(arm['label'], arm['strategy']) for arm in payload['arms']] == [
                 ('传统 Agent · 每次规划', 'plan_react'),
-                ('Graph RSI · 历史图执行', 'graph_rsi'),
+                ('Graph RSI · 在线学习', 'graph_rsi'),
             ]
+            assert payload['model'] == 'qwen/qwen3.5-27b'
+            assert payload['limits'] == {'runs': 2, 'models': 2, 'reads': 1}
             assert len({arm['runId'] for arm in payload['arms']}) == 2
             assert {arm['taskId'] for arm in payload['arms']} == {task['id']}
+            assert [(arm['providerProfile'], arm['learningEnabled'], arm['model']) for arm in payload['arms']] == [
+                ('primary', False, 'qwen/qwen3.5-27b'),
+                ('secondary', True, 'qwen/qwen3.5-27b'),
+            ]
+            assert all(app.state.workspace_runner.runs[arm['runId']]['comparison']['id'] == payload['id']
+                       for arm in payload['arms'])
 
             first = payload['arms'][0]
             saved = app.state.workspace_runner.runs[first['runId']]
@@ -1043,3 +1059,40 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
 
             conflict = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
             assert conflict.status_code == 409
+
+
+def test_explicit_workspace_online_learning_creates_only_unreviewed_candidate(monkeypatch):
+    import backend.trajectory as trajectory_module
+
+    proposal = {
+        'protocol': trajectory_module.PROTOCOL,
+        'nodes': [{'id': 't0', 'tool': 'workspace_preview_rows', 'arguments': {},
+                   'dependencies': [], 'effect': 'read', 'sourceTraceIndex': 0, 'paginate': False}],
+        'descriptor': {'purpose': '核对订单', 'schema': {'tables': []}, 'slots': {},
+                       'operations': [], 'coverage': 'partial'},
+        'sourceRunId': 'graph-run', 'sourceSplit': 'user', 'contractHash': 'contract',
+        'sourceTraceDigest': 'trace', 'artifactBoundaries': [],
+    }
+    monkeypatch.setattr(trajectory_module, 'induce', lambda run, task, tools: deepcopy(proposal))
+    evolution = type('Evolution', (), {'versions': []})()
+    task = {'id': 'task', 'workspaceId': 'workspace', 'split': 'user'}
+    run = {
+        'id': 'graph-run', 'status': 'completed', 'workspaceOnlineLearning': True,
+        'evaluation': {'status': 'user_review_required'}, 'evolution': {},
+    }
+
+    trajectory_module.maintain(evolution, run, task, [])
+    assert len(evolution.versions) == 1
+    version = evolution.versions[0]
+    assert version['status'] == 'probation' and version['reviewed'] is False
+    assert version['candidateOnly'] is True
+    assert version['sourceEvaluationStatus'] == 'user_review_required'
+    assert version['sourceSplit'] == 'user'
+    assert '尚待人工复核' in version['scope']
+    assert run['evolution']['generatedVersionIds'] == [version['id']]
+
+    ordinary = {'id': 'ordinary', 'status': 'completed',
+                'evaluation': {'status': 'user_review_required'}, 'evolution': {}}
+    trajectory_module.maintain(evolution, ordinary, task, [])
+    assert len(evolution.versions) == 1
+    assert ordinary['evolution']['note'] == '冻结/用户任务不修改经验'

@@ -256,25 +256,38 @@ class TaskRunner:
             except (ValueError, KeyError, OSError):
                 continue
 
-    def providers(self):
-        if self.provider_factory:
-            return self.provider_factory('planner'), self.provider_factory('executor')
+    def providers(self, provider_factory=None):
+        factory = provider_factory or self.provider_factory
+        if factory:
+            return factory('planner'), factory('executor')
         return (ModelClient(ModelOptions(config.PLANNER_BASE_URL, config.PLANNER_API_KEY, config.PLANNER_MODEL, config.MODEL_TIMEOUT)),
                 ModelClient(ModelOptions(config.BASE_URL, config.API_KEY, config.MODEL, config.MODEL_TIMEOUT)))
 
-    def composition_provider(self):
-        if self.provider_factory:
-            return self.provider_factory('composition')
+    def composition_provider(self, provider_factory=None):
+        factory = provider_factory or self.provider_factory
+        if factory:
+            return factory('composition')
         return ModelClient(ModelOptions(config.COMPOSITION_BASE_URL, config.COMPOSITION_API_KEY, config.COMPOSITION_MODEL, config.MODEL_TIMEOUT))
 
-    async def start(self, request, *, evaluation_context=None):
+    async def start(self, request, *, evaluation_context=None, provider_factory=None, learning_enabled=None,
+                    workspace_online_learning=False, comparison_context=None):
         if len(self.tasks) >= 32:
             raise ValueError('任务队列已满（32），请等待或取消')
         task = deepcopy(self.bank.task(request.taskId))
         tools = self.bank.tools(task['id'])
-        planner, executor = self.providers()
-        composition = self.composition_provider()
+        resolved_learning = self.learning_enabled if learning_enabled is None else bool(learning_enabled)
+        if workspace_online_learning and (request.strategy != 'graph_rsi' or not resolved_learning):
+            raise ValueError('工作区在线学习只允许显式启用学习的 graph_rsi run')
+        if comparison_context is not None:
+            if (not isinstance(comparison_context, dict)
+                    or set(comparison_context) != {'id', 'arm', 'providerProfile'}
+                    or not all(isinstance(comparison_context[key], str) and comparison_context[key]
+                               for key in comparison_context)):
+                raise ValueError('comparison_context 必须包含有效 id、arm 和 providerProfile')
+        planner, executor = self.providers(provider_factory)
+        composition = self.composition_provider(provider_factory)
         run = dict(id=str(uuid4()), taskId=task['id'], scenario=task['scenario'], split=task['split'], strategy=request.strategy,
+                   learningEnabled=resolved_learning, workspaceOnlineLearning=bool(workspace_online_learning),
                    status='queued', phase='排队', createdAt=now(), events=[], toolTrace=[], plan=None, graph=None, retrieval=[], graphSelection=[],
                    models=dict(planner=planner.model, composition=composition.model, executor=executor.model,
                                distinctModels=planner.model != executor.model, compositionDistinct=composition.model != planner.model),
@@ -293,6 +306,8 @@ class TaskRunner:
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute', 'match', 'compile']},
                    executionStageMetrics={},
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
+        if comparison_context is not None:
+            run['comparison'] = deepcopy(comparison_context)
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
         self.runs[run['id']] = run
@@ -314,7 +329,7 @@ class TaskRunner:
             except Exception as error:
                 run.update(status='failed', error=str(error)[:1200])
             finally:
-                if self.learning_enabled and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
+                if run['learningEnabled'] and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
                     try:
                         self.evolution.observe(run, task, tools)
                     except Exception as error:
@@ -970,7 +985,7 @@ class TaskRunner:
 
         async def replay_trajectory():
             nonlocal current_intent, trajectory_residual_complete
-            rows, lookup_ms = trajectory.candidates(self.evolution.versions, task, tools, readonly=not self.learning_enabled)
+            rows, lookup_ms = trajectory.candidates(self.evolution.versions, task, tools, readonly=not run['learningEnabled'])
             run['evolution'] = dict(lookupMs=lookup_ms, planningPath='fallback', protocol=trajectory.PROTOCOL)
             if not rows:
                 return False

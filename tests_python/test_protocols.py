@@ -118,3 +118,30 @@ def test_required_tool_choice_is_opt_in_and_never_applied_without_tools():
     options = ModelOptions('https://openrouter.ai/api/v1', 'key', 'qwen')
     assert request_body(options, [], [Tool('read', 'read', 'read', object_schema(), lambda a, c: {})], require_tool=True)['tool_choice'] == 'required'
     assert request_body(options, [], [], require_tool=True)['tool_choice'] == 'auto'
+
+
+async def test_parallel_workspace_clients_keep_primary_and_secondary_authorization_isolated():
+    observed = []
+
+    def transport(expected):
+        def handler(request):
+            observed.append((expected, request.headers['Authorization'], json.loads(request.content)))
+            return httpx.Response(200, json={
+                'choices': [{'message': {'role': 'assistant', 'content': 'done'}, 'finish_reason': 'stop'}],
+                'usage': {'prompt_tokens': 3, 'completion_tokens': 1},
+            })
+        return httpx.MockTransport(handler)
+
+    primary = ModelClient(ModelOptions('https://openrouter.ai/api/v1', 'primary-secret', 'qwen/qwen3.5-27b'), transport('primary'))
+    secondary = ModelClient(ModelOptions('https://openrouter.ai/api/v1', 'secondary-secret', 'qwen/qwen3.5-27b'), transport('secondary'))
+    results = await __import__('asyncio').gather(primary.complete([], []), secondary.complete([], []))
+
+    assert [(name, authorization) for name, authorization, _body in observed] == [
+        ('primary', 'Bearer primary-secret'),
+        ('secondary', 'Bearer secondary-secret'),
+    ]
+    assert all(body['model'] == 'qwen/qwen3.5-27b' for _name, _authorization, body in observed)
+    assert all(body['enable_thinking'] is False and body['reasoning'] == {'enabled': False}
+               for _name, _authorization, body in observed)
+    serialized = json.dumps(results)
+    assert 'primary-secret' not in serialized and 'secondary-secret' not in serialized

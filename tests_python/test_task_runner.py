@@ -752,3 +752,84 @@ async def test_completed_scope_prevents_evidence_rereads_without_leaking_private
     assert 'privateValidation' not in model_text
     assert 'requiredEvidenceIds' not in model_text
     assert '_evidenceRef' not in model_text
+
+
+async def test_run_level_providers_use_two_model_slots_and_only_graph_run_learns(tmp_path):
+    active_profiles, reached, release = set(), asyncio.Event(), asyncio.Event()
+    created = []
+
+    class DualKeyModel(Model):
+        def __init__(self, profile, role):
+            super().__init__(role, [])
+            self.profile = profile
+            self.model = f'{profile}-{role}-qwen/qwen3.5-27b'
+
+        async def complete(self, messages, tools):
+            if self.role == 'planner' and self.profile not in active_profiles:
+                active_profiles.add(self.profile)
+                if len(active_profiles) == 2:
+                    reached.set()
+                await asyncio.wait_for(release.wait(), timeout=2)
+            return await super().complete(messages, tools)
+
+    def factory(profile):
+        def create(role):
+            created.append((profile, role))
+            return DualKeyModel(profile, role)
+        return create
+
+    runner = TaskRunner(Bank(tmp_path), lambda _role: (_ for _ in ()).throw(AssertionError('runner default provider used')),
+                        run_limit=2, model_limit=2, read_limit=1, learning_enabled=False)
+    observed = []
+    runner.evolution.observe = lambda run, task, tools: observed.append((run['id'], task['id']))
+
+    traditional = await runner.start(
+        TaskRunRequest(taskId='shared', strategy='plan_react'),
+        provider_factory=factory('primary'), learning_enabled=False,
+        comparison_context={'id': 'comparison', 'arm': 'plan_react', 'providerProfile': 'primary'},
+    )
+    graph = await runner.start(
+        TaskRunRequest(taskId='shared', strategy='graph_rsi'),
+        provider_factory=factory('secondary'), learning_enabled=True, workspace_online_learning=True,
+        comparison_context={'id': 'comparison', 'arm': 'graph_rsi', 'providerProfile': 'secondary'},
+    )
+    await asyncio.wait_for(reached.wait(), timeout=2)
+    assert runner.active_runs == 2 and runner.active_models == 2
+    release.set()
+    await asyncio.gather(*list(runner.tasks.values()))
+
+    assert runner.peaks['runs'] == 2 and runner.peaks['models'] == 2
+    assert traditional['models'] == {
+        'planner': 'primary-planner-qwen/qwen3.5-27b',
+        'composition': 'primary-composition-qwen/qwen3.5-27b',
+        'executor': 'primary-executor-qwen/qwen3.5-27b',
+        'distinctModels': True,
+        'compositionDistinct': True,
+    }
+    assert graph['models']['planner'].startswith('secondary-')
+    assert graph['models']['executor'].startswith('secondary-')
+    assert graph['models']['composition'].startswith('secondary-')
+    assert traditional['learningEnabled'] is False and graph['learningEnabled'] is True
+    assert graph['workspaceOnlineLearning'] is True
+    assert observed == [(graph['id'], 'shared')]
+    assert sorted(created) == sorted([
+        ('primary', 'planner'), ('primary', 'executor'), ('primary', 'composition'),
+        ('secondary', 'planner'), ('secondary', 'executor'), ('secondary', 'composition'),
+    ])
+    await runner.shutdown()
+
+
+async def test_comparison_metadata_is_in_first_saved_run_and_invalid_learning_mode_fails_closed(tmp_path):
+    runner = TaskRunner(Bank(tmp_path), lambda role: Model(role, []), run_limit=1, learning_enabled=False)
+    runner.run_slots = asyncio.Semaphore(0)
+    run = await runner.start(
+        TaskRunRequest(taskId='queued', strategy='plan_react'),
+        comparison_context={'id': 'pair-1', 'arm': 'plan_react', 'providerProfile': 'primary'},
+    )
+    saved = json.loads((tmp_path / 'artifacts/taskbank-runs' / f"{run['id']}.json").read_text())
+    assert saved['comparison'] == {'id': 'pair-1', 'arm': 'plan_react', 'providerProfile': 'primary'}
+    assert saved['learningEnabled'] is False
+    with pytest.raises(ValueError, match='只允许'):
+        await runner.start(TaskRunRequest(taskId='bad', strategy='plan_react'),
+                           learning_enabled=True, workspace_online_learning=True)
+    await runner.shutdown()

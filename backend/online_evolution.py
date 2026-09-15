@@ -190,7 +190,8 @@ class OnlineEvolution:
         started = time.perf_counter()
         info = run.setdefault('evolution', {})
         info.update(extraModelRequests=0, extraToolCalls=0, shadowRollouts=0, generatedVersionIds=[])
-        if task.get('workspaceId') and task['split'] != 'train':
+        workspace_online_learning = bool(task.get('workspaceId') and run.get('workspaceOnlineLearning'))
+        if task.get('workspaceId') and task['split'] != 'train' and not workspace_online_learning:
             info['note'] = '非train工作区：不写经验文件或匹配描述'
             return
         try:

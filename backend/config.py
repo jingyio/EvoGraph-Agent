@@ -16,6 +16,8 @@ def integer(name, default, minimum, maximum):
 PORT = integer('PORT', 4317, 1024, 65535)
 MODEL = os.getenv('LLM_MODEL', '')
 API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY', '')
+SECONDARY_API_KEY = os.getenv('LLM_API_KEY_SECONDARY', '')
+WORKSPACE_COMPARISON_MODEL = 'qwen/qwen3.5-27b'
 BASE_URL = os.getenv('LLM_BASE_URL') or os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
 MODEL_TIMEOUT = integer('LLM_TIMEOUT_MS', 60000, 100, 300000) / 1000
 MAX_STEPS = integer('AGENT_MAX_STEPS', 24, 1, 100)
@@ -35,6 +37,8 @@ TASK_READ_CONCURRENCY = integer('TASK_READ_CONCURRENCY', 8, 1, 32)
 
 def public_config():
     return {'modelConfigured': bool(API_KEY and MODEL), 'model': MODEL or None,
+            'workspaceComparisonConfigured': bool(API_KEY and SECONDARY_API_KEY),
+            'workspaceComparisonModel': WORKSPACE_COMPARISON_MODEL,
             'maxSteps': MAX_STEPS, 'backend': 'python', 'enableThinking': False,
             'connectors': {
                 'erpnext': all(os.getenv(key) for key in ['ERPNEXT_BASE_URL', 'ERPNEXT_API_KEY', 'ERPNEXT_API_SECRET']),

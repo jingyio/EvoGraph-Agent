@@ -15,6 +15,7 @@ from .service import RunService, tools_for
 from .platform_check import check_platforms
 from .taskbank import TaskBank
 from .task_runner import TaskRunner, TaskRunRequest
+from .model_client import ModelClient, ModelOptions
 from .paired_evaluation import PairedEvaluation, EvaluationRequest
 from .business_report import render_report
 from .trajectory_experiment import TrajectoryExperiment
@@ -107,7 +108,7 @@ def create_app(service=None):
     task_runner = TaskRunner(taskbank)
     workspace_manager = WorkspaceManager(taskbank.root)
     workspace_bank = WorkspaceBank(workspace_manager)
-    workspace_runner = TaskRunner(workspace_bank, run_limit=1, model_limit=1, read_limit=1,
+    workspace_runner = TaskRunner(workspace_bank, run_limit=2, model_limit=2, read_limit=1,
                                   run_directory=taskbank.root / 'artifacts' / 'workspace-runs',
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
@@ -612,8 +613,17 @@ def create_app(service=None):
 
     comparison_arms = (
         ('plan_react', '传统 Agent · 每次规划'),
-        ('graph_rsi', 'Graph RSI · 历史图执行'),
+        ('graph_rsi', 'Graph RSI · 在线学习'),
     )
+
+    def workspace_comparison_provider(api_key):
+        def create(role):
+            base_url = (config.PLANNER_BASE_URL if role == 'planner'
+                        else config.COMPOSITION_BASE_URL if role == 'composition'
+                        else config.BASE_URL)
+            return ModelClient(ModelOptions(base_url, api_key, config.WORKSPACE_COMPARISON_MODEL,
+                                            config.MODEL_TIMEOUT))
+        return create
 
     def workspace_run_links(run_id):
         base = f'/api/workspaces/runs/{run_id}'
@@ -625,11 +635,15 @@ def create_app(service=None):
         }
 
     def comparison_arm(run, label):
+        comparison = run.get('comparison') or {}
         return {
             'runId': run['id'],
             'taskId': run['taskId'],
             'label': label,
             'strategy': run['strategy'],
+            'providerProfile': comparison.get('providerProfile'),
+            'learningEnabled': bool(run.get('learningEnabled')),
+            'model': config.WORKSPACE_COMPARISON_MODEL,
             'status': run['status'],
             'phase': run.get('phase'),
             'timeline': deepcopy(run.get('events') or []),
@@ -640,7 +654,9 @@ def create_app(service=None):
         }
 
     def comparison_detail(comparison_id):
-        runs = [run for run in workspace_runner.runs.values() if run.get('comparisonId') == comparison_id]
+        runs = [run for run in workspace_runner.runs.values()
+                if (run.get('comparison') or {}).get('id') == comparison_id
+                or run.get('comparisonId') == comparison_id]
         by_strategy = {run['strategy']: run for run in runs}
         if set(by_strategy) != {strategy for strategy, _label in comparison_arms}:
             raise HTTPException(404, '工作区对照执行不存在')
@@ -658,7 +674,9 @@ def create_app(service=None):
             'id': comparison_id,
             'taskId': arms[0]['taskId'],
             'status': status,
-            'executionPolicy': 'strict_serial',
+            'executionPolicy': 'parallel_dual_key',
+            'model': config.WORKSPACE_COMPARISON_MODEL,
+            'limits': {'runs': 2, 'models': 2, 'reads': 1},
             'arms': arms,
         }
 
@@ -669,16 +687,30 @@ def create_app(service=None):
             raise HTTPException(400, '双臂对照会发起两次真实 Agent 执行；请确认费用后再启动')
         if workspace_runner.tasks:
             raise HTTPException(409, '当前已有工作区 Agent 在运行；双臂对照需从空闲队列开始')
+        if not config.API_KEY or not config.SECONDARY_API_KEY:
+            raise HTTPException(503, '双臂并行需要同时配置 LLM_API_KEY 和 LLM_API_KEY_SECONDARY')
         if len(workspace_runner.tasks) + len(comparison_arms) > 32:
             raise HTTPException(409, '任务队列容量不足，无法同时创建双臂对照')
         comparison_id = str(uuid4())
         created = []
+        factories = {
+            'plan_react': workspace_comparison_provider(config.API_KEY),
+            'graph_rsi': workspace_comparison_provider(config.SECONDARY_API_KEY),
+        }
         try:
             for strategy, label in comparison_arms:
-                run = await workspace_runner.start(TaskRunRequest(taskId=task['id'], strategy=strategy))
-                run['comparisonId'] = comparison_id
-                run['comparisonArm'] = {'label': label, 'strategy': strategy}
-                workspace_runner.save(run)
+                learning = strategy == 'graph_rsi'
+                run = await workspace_runner.start(
+                    TaskRunRequest(taskId=task['id'], strategy=strategy),
+                    provider_factory=factories[strategy],
+                    learning_enabled=learning,
+                    workspace_online_learning=learning,
+                    comparison_context={
+                        'id': comparison_id,
+                        'arm': strategy,
+                        'providerProfile': 'secondary' if learning else 'primary',
+                    },
+                )
                 created.append(run)
         except Exception:
             for run in created:

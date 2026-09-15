@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowDownToLine, ArrowRight, Bot, Check, ChevronLeft, ChevronRight, CircleStop, FileBarChart2, FilePlus2, FileSearch, FileText, FolderOpen, LoaderCircle, MessageSquareText, Network, PanelRightOpen, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Table2, Trash2, UploadCloud, X } from 'lucide-react';
+import { AlertCircle, ArrowDownToLine, ArrowRight, Bot, Check, ChevronLeft, ChevronRight, CircleStop, FileBarChart2, FilePlus2, FileSearch, FileText, FolderOpen, LoaderCircle, MessageSquareText, Network, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Table2, Trash2, UploadCloud, X } from 'lucide-react';
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { api, upload } from './api';
 import './workspace.css';
@@ -127,19 +127,25 @@ type ComparisonArm = {
   reportUrl?: string;
   reportDownloadUrl?: string;
   selectionDownloadUrl?: string;
+  providerProfile?: 'primary' | 'secondary';
+  learningEnabled?: boolean;
+  model?: string;
   runDetail?: Run;
 };
 type WorkspaceComparison = {
   id: string;
   taskId: string;
   status: string;
-  executionPolicy: 'strict_serial';
+  executionPolicy: 'strict_serial' | 'parallel_dual_key';
+  model?: string;
+  limits?: { runs: number; models: number; reads: number };
   arms: ComparisonArm[];
 };
 type StoredComparisonRef = { comparisonId: string; taskId: string };
 
 const COMPARISON_STORAGE_KEY = 'rsi-workspace-comparisons-v1';
 const LAST_WORKSPACE_STORAGE_KEY = 'rsi-last-workspace-v1';
+const HISTORY_CUTOFF_STORAGE_KEY = 'rsi-workspace-history-cutoff-v1';
 const storedComparisonRefs = (): Record<string, StoredComparisonRef> => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(COMPARISON_STORAGE_KEY) || '{}') as Record<string, StoredComparisonRef>; }
@@ -153,6 +159,11 @@ const rememberComparison = (workspaceId: string, comparison: WorkspaceComparison
 };
 const rememberWorkspace = (workspaceId: string) => {
   if (workspaceId) window.localStorage.setItem(LAST_WORKSPACE_STORAGE_KEY, workspaceId);
+};
+const historyCutoffs = (): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(window.localStorage.getItem(HISTORY_CUTOFF_STORAGE_KEY) || '{}') as Record<string, string>; }
+  catch { return {}; }
 };
 
 const comparisonArm = (comparison: WorkspaceComparison | null, strategy: ComparisonArm['strategy']) =>
@@ -168,6 +179,7 @@ const armRun = (arm?: ComparisonArm | null): Run | null => arm ? {
   metrics: arm.metrics || arm.runDetail?.metrics || {},
   evaluation: arm.evaluation || arm.runDetail?.evaluation,
   submission: arm.submission || arm.runDetail?.submission,
+  learningEnabled: arm.learningEnabled ?? arm.runDetail?.learningEnabled,
   pollUrl: arm.pollUrl || arm.runDetail?.pollUrl,
   reportUrl: arm.reportUrl || arm.runDetail?.reportUrl,
   reportDownloadUrl: arm.reportDownloadUrl || arm.runDetail?.reportDownloadUrl,
@@ -305,10 +317,8 @@ export default function WorkspaceWorkbench() {
   const input = useRef<HTMLInputElement>(null);
   const requestArea = useRef<HTMLTextAreaElement>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [savedWorkspaces, setSavedWorkspaces] = useState<Workspace[]>([]);
   useEffect(() => {
     void api<Workspace[]>('/api/workspaces').then(items => {
-      setSavedWorkspaces(items);
       const lastWorkspaceId = window.localStorage.getItem(LAST_WORKSPACE_STORAGE_KEY);
       const lastWorkspace = items.find(item => item.id === lastWorkspaceId);
       if (lastWorkspace) void activateWorkspace(lastWorkspace);
@@ -324,7 +334,7 @@ export default function WorkspaceWorkbench() {
   const [costConfirmed, setCostConfirmed] = useState(false);
   const [comparison, setComparison] = useState<WorkspaceComparison | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [followup, setFollowup] = useState('');
+  const [historyCutoff, setHistoryCutoff] = useState('');
   const [busy, setBusy] = useState<'workspace' | 'upload' | 'prepare' | 'run' | ''>('');
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
@@ -335,7 +345,6 @@ export default function WorkspaceWorkbench() {
   const traditionalRun = armRun(traditionalArm);
   const rsiRun = armRun(rsiArm);
   const active = Boolean(busy === 'run' || comparison && ['queued', 'running'].includes(comparison.status));
-  const referenceRun = rsiRun || traditionalRun;
 
   useEffect(() => {
     const area = requestArea.current;
@@ -362,10 +371,10 @@ export default function WorkspaceWorkbench() {
     if (!id) return;
     const item = await api<Workspace>(`/api/workspaces/${id}`);
     setWorkspace(item);
-    setSavedWorkspaces(current => [item, ...current.filter(value => value.id !== item.id)]);
     if (!tableId && item.tables[0]) setTableId(item.tables[0].id);
     const history = await api<{ runs: RunSummary[] }>(`/api/workspaces/runs?workspaceId=${id}`);
-    setRuns(history.runs);
+    const cutoff = historyCutoffs()[id] || historyCutoff;
+    setRuns(cutoff ? history.runs.filter(run => run.createdAt > cutoff) : history.runs);
   }
 
   async function restoreComparison(workspaceId: string, workspaceSnapshot?: Workspace) {
@@ -383,6 +392,7 @@ export default function WorkspaceWorkbench() {
 
   async function activateWorkspace(item: Workspace) {
     setRole(item.role); setWorkspace(item); setTableId(item.tables[0]?.id || ''); setComparison(null);
+    setHistoryCutoff(historyCutoffs()[item.id] || '');
     setReadyTask(null); setRequest(''); setClarifications([]); setCostConfirmed(false); rememberWorkspace(item.id);
     await refreshWorkspace(item.id);
     await restoreComparison(item.id, item);
@@ -414,8 +424,8 @@ export default function WorkspaceWorkbench() {
 
   function chooseRole(nextRole: Role) {
     if (nextRole === role) return;
-    setRole(nextRole); setWorkspace(null); setTableId(''); setPreview(null); setComparison(null); setRuns([]);
-    setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setFollowup(''); setRequest('');
+    setRole(nextRole); setWorkspace(null); setTableId(''); setPreview(null); setComparison(null); setRuns([]); setHistoryCutoff('');
+    setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
   }
 
   async function addFiles(files: FileList | File[]) {
@@ -438,18 +448,17 @@ export default function WorkspaceWorkbench() {
     catch (reason) { setError((reason as Error).message); }
   }
 
-  async function prepareTask(followupRunId?: string) {
+  async function prepareTask() {
     const target = workspace || await createWorkspace(role, false);
     if (!target) return;
     setBusy('prepare'); setError(''); setClarifications([]);
     try {
-      const body = { request: followupRunId ? followup : request, answers, followupRunId };
+      const body = { request, answers };
       const response = await api<{ status: string; task?: WorkspaceTask; clarifications?: { id: string; question: string }[] }>(`/api/workspaces/${target.id}/tasks`, { method: 'POST', body: JSON.stringify(body) });
       if (response.status === 'needs_clarification') { setClarifications(response.clarifications || []); return; }
       const nextTask = response.task || null;
       setReadyTask(nextTask);
-      if (followupRunId && nextTask?.task) setRequest(nextTask.task);
-      setCostConfirmed(false); setFollowup(''); await refreshWorkspace(target.id);
+      setCostConfirmed(false); await refreshWorkspace(target.id);
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(''); }
   }
@@ -483,6 +492,22 @@ export default function WorkspaceWorkbench() {
     }
   }
 
+  function clearHistory() {
+    if (!workspace || active) return;
+    const cutoff = new Date().toISOString();
+    const cutoffs = historyCutoffs();
+    cutoffs[workspace.id] = cutoff;
+    window.localStorage.setItem(HISTORY_CUTOFF_STORAGE_KEY, JSON.stringify(cutoffs));
+    const comparisons = storedComparisonRefs();
+    delete comparisons[workspace.id];
+    window.localStorage.setItem(COMPARISON_STORAGE_KEY, JSON.stringify(comparisons));
+    setHistoryCutoff(cutoff);
+    setRuns([]);
+    setComparison(null);
+    setReadyTask(null);
+    setCostConfirmed(false);
+  }
+
   async function openRun(item: RunSummary) {
     try {
       const sameTask = runs.filter(candidate => candidate.taskId === item.taskId);
@@ -495,7 +520,7 @@ export default function WorkspaceWorkbench() {
       const arms: ComparisonArm[] = [traditional, rsi].filter((run): run is Run => Boolean(run)).map(run => ({
         runId: run.id,
         taskId: run.taskId,
-        label: run.strategy === 'graph_rsi' ? 'Graph RSI · 历史图执行' : '传统 Agent · 每次规划',
+        label: run.strategy === 'graph_rsi' ? 'Graph RSI · 在线学习' : '传统 Agent · 每次规划',
         strategy: run.strategy as ComparisonArm['strategy'],
         status: run.status,
         phase: run.phase,
@@ -524,7 +549,6 @@ export default function WorkspaceWorkbench() {
 
   return <main className="workspace-shell">
     <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>上传资料，交给两个数字员工对照分析</span></div><div className="workspace-topbar-status"><span><i />本次资料独立保存</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span></div></header>
-    <details className="workspace-return"><summary>继续之前的工作</summary><select aria-label="选择已保存工作区" value={workspace?.id || ''} disabled={active} onChange={event => { const old = savedWorkspaces.find(w => w.id === event.target.value); if (old) void activateWorkspace(old); }}><option value="">选择已保存的业务工作</option>{savedWorkspaces.filter(w => w.sources.length > 0 || w.tasks.length > 0).map(w => <option key={w.id} value={w.id}>{w.label} · {w.tasks.length} 次请求</option>)}</select></details>
     <section className="workspace-header"><div><p>选择业务能力 · 输入问题与附件</p><h1>{selectedRole.label}</h1><span>{selectedRole.caption}</span></div><div className="workspace-role-picker">{ROLES.map(item => <button key={item.key} className={item.key === role ? 'selected' : ''} onClick={() => chooseRole(item.key)} disabled={active || busy === 'workspace'}><small>{item.key === 'finance' ? 'FINANCE' : item.key === 'support' ? 'SUPPORT' : 'ENGINEERING'}</small>{item.label}</button>)}</div></section>
 
     {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
@@ -539,22 +563,22 @@ export default function WorkspaceWorkbench() {
       </aside>
 
       <section className="workspace-center">
-        <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask?.followupRunId ? '已准备追问任务' : readyTask ? '已准备双轨任务' : '输入业务需求'}</strong></div><span>{active ? '双轨执行中' : readyTask?.followupRunId ? '追问等待启动' : readyTask ? '等待启动' : '未运行'}</span></header>
+        <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask ? '已准备双轨任务' : '输入业务需求'}</strong></div><span>{active ? '双轨执行中' : readyTask ? '等待启动' : '未运行'}</span></header>
           <textarea ref={requestArea} value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={active} placeholder={role === 'finance' ? '例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。' : role === 'support' ? '例如：按投诉渠道、企业响应与公开叙述生成跟进队列，并标出待核查项。' : '例如：按未分派、里程碑和活动记录形成工程分诊清单，给出每项依据。'} />
-          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-dual-protocol"><strong>两个 run 同时创建</strong><span>模型请求严格串行，排队臂等待模型槽</span></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>我确认启动 2 次真实 Agent 运行并产生模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始双轨对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消两臂</button>}</footer>
+          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-dual-protocol"><strong>两个 run 与模型请求并行</strong><span>qwen/qwen3.5-27b · 主 Key / Secondary Key 各承载一臂</span></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>我确认启动 2 次真实 Agent 运行并产生模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始双轨对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消两臂</button>}</footer>
         </div>
 
         {clarifications.length > 0 && <section className="workspace-clarify"><header><MessageSquareText size={17} /><div><small>需要确认</small><strong>补齐影响结论的资料范围</strong></div></header>{clarifications.map(item => <label key={item.id}><span>{item.question}</span><input value={answers[item.id] || ''} onChange={event => setAnswers(current => ({ ...current, [item.id]: event.target.value }))} placeholder="填写说明或上传相应资料" /></label>)}<button className="workspace-secondary" onClick={() => void prepareTask()} disabled={busy === 'prepare'}><RefreshCw size={14} />提交确认</button></section>}
 
-        <section className="workspace-data"><header><div><small>资料预览</small><strong>{preview?.table.sheet || '尚未选择数据表'}</strong></div>{preview && <span>{formatCount(preview.table.rowCount)} 行 · {preview.table.fields.length} 列</span>}</header>{preview ? <><details className="employee-audit"><summary>字段类型与缺失值</summary><div className="workspace-fields">{preview.table.fields.map(field => <span key={field}><b>{field}</b><small>{preview.table.types[field]} · 缺失 {preview.table.missing[field] || 0}</small></span>)}</div></details><div className="workspace-table-scroll"><table><thead><tr>{columns.slice(0, 6).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{preview.records.map((row, index) => <tr key={String(row.rowId || index)}>{columns.slice(0, 6).map(field => <td key={field}>{String(row[field] ?? '—')}</td>)}</tr>)}</tbody></table></div></> : <div className="workspace-empty"><FolderOpen size={20} /><span>上传资料后显示解析预览</span></div>}</section>
+        <details className="workspace-data workspace-data-collapsible"><summary><div><small>资料预览</small><strong>{preview?.table.sheet || '尚未选择数据表'}</strong></div>{preview && <span>{formatCount(preview.table.rowCount)} 行 · {preview.table.fields.length} 列</span>}</summary><div className="workspace-data-body">{preview ? <><details className="employee-audit"><summary>字段类型与缺失值</summary><div className="workspace-fields">{preview.table.fields.map(field => <span key={field}><b>{field}</b><small>{preview.table.types[field]} · 缺失 {preview.table.missing[field] || 0}</small></span>)}</div></details><div className="workspace-table-scroll"><table><thead><tr>{columns.slice(0, 6).map(field => <th key={field}>{field}</th>)}</tr></thead><tbody>{preview.records.map((row, index) => <tr key={String(row.rowId || index)}>{columns.slice(0, 6).map(field => <td key={field}>{String(row[field] ?? '—')}</td>)}</tr>)}</tbody></table></div></> : <div className="workspace-empty"><FolderOpen size={20} /><span>上传资料后显示解析预览</span></div>}</div></details>
 
-        {(comparison || readyTask) && <section className="workspace-comparison"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件。两个 run 同时创建，模型请求严格串行。页面只展示后端保存的状态、事件、用量与报告。</p></header><div className="workspace-agent-grid">
+        {(comparison || readyTask) && <section className="workspace-comparison"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件，均使用 qwen/qwen3.5-27b；主 Key 与 Secondary Key 并行执行。页面只展示后端保存的状态、事件、用量与报告。</p></header><div className="workspace-agent-grid">
           <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回传统 run') : '等待点击启动'} />
           <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回 RSI run') : '等待点击启动'} />
         </div></section>}
       </section>
 
-      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次 run</strong></div><PanelRightOpen size={16} /></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); const selected = item.taskId === comparison?.taskId; return <button key={item.id} className={selected ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{item.strategy === 'graph_rsi' ? 'RSI · ' : '传统 · '}{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{task?.followupRunId ? '追问 · ' : ''}{optionalTokens(item.metrics)} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始双轨工作后，两臂真实轨迹会保存在这里。</span></div>}</div>{referenceRun && !active && <section className="workspace-followup"><small>继续追问</small><textarea value={followup} onChange={event => setFollowup(event.target.value)} placeholder="基于当前报告继续分析…" /><button onClick={() => void prepareTask(referenceRun.id)} disabled={!followup.trim() || busy === 'prepare'}><ArrowRight size={14} />准备双轨追问</button></section>}</aside>
+      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次 run</strong></div><button className="workspace-clear-history" onClick={clearHistory} disabled={!runs.length || active} title="清空当前页面的历史记录"><Trash2 size={13} />清空历史记录</button></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); const selected = item.taskId === comparison?.taskId; return <button key={item.id} className={selected ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{item.strategy === 'graph_rsi' ? 'RSI · ' : '传统 · '}{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{optionalTokens(item.metrics)} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始双轨工作后，两臂真实轨迹会保存在这里。</span></div>}</div></aside>
     </section>
   </main>;
 }

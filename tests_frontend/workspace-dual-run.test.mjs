@@ -10,8 +10,8 @@ test('one confirmed action creates the native paired comparison', () => {
   assert.match(source, /body: JSON\.stringify\(\{ confirmCost: true \}\)/);
   assert.match(source, /开始双轨对照/);
   assert.match(source, /我确认启动 2 次真实 Agent 运行/);
-  assert.match(source, /两个 run 同时创建/);
-  assert.match(source, /模型请求严格串行，排队臂等待模型槽/);
+  assert.match(source, /两个 run 与模型请求并行/);
+  assert.match(source, /qwen\/qwen3\.5-27b · 主 Key \/ Secondary Key 各承载一臂/);
   assert.doesNotMatch(source, /rsiStartTask/);
   assert.doesNotMatch(source, /startRsiRun/);
   assert.doesNotMatch(source, /awaitingRsi/);
@@ -26,7 +26,10 @@ test('both lanes use one comparison poll and expose real events metrics and repo
   assert.doesNotMatch(source, /activeArms\.map\(async \(\[arm, run\]\)/);
   assert.match(source, /传统 Agent/);
   assert.match(source, /在线 RSI Agent/);
+  assert.match(source, /主 Key 与 Secondary Key 并行执行/);
+  assert.match(source, /executionPolicy: 'strict_serial' \| 'parallel_dual_key'/);
   for (const label of ['LLM 请求', 'Token', '工具调用', '串行耗时', '最终业务报告']) assert.match(source, new RegExp(label));
+  assert.match(source, /learningEnabled: arm\.learningEnabled \?\? arm\.runDetail\?\.learningEnabled/);
   assert.match(source, /学习写入状态未返回/);
   assert.match(source, /后端未返回报告/);
   assert.match(source, /后端未返回下载地址/);
@@ -36,7 +39,7 @@ test('both lanes use one comparison poll and expose real events metrics and repo
 });
 
 
-test('comparison and last workspace survive refresh and terminal runs remain restorable', () => {
+test('last workspace restores silently without a visible continuation section', () => {
   assert.match(source, /COMPARISON_STORAGE_KEY = 'rsi-workspace-comparisons-v1'/);
   assert.match(source, /LAST_WORKSPACE_STORAGE_KEY = 'rsi-last-workspace-v1'/);
   assert.match(source, /current\[workspaceId\] = \{ comparisonId: comparison\.id, taskId: comparison\.taskId \}/);
@@ -47,6 +50,9 @@ test('comparison and last workspace survive refresh and terminal runs remain res
   assert.match(source, /restoreComparison\(item\.id, item\)/);
   assert.match(source, /api<WorkspaceComparison>\(`\/api\/workspaces\/comparison-runs\/\$\{saved\.comparisonId\}`\)/);
   assert.doesNotMatch(source, /if \(!\['queued', 'running'\]\.includes\(restored\.status\)\) return/);
+  assert.doesNotMatch(source, /继续之前的工作/);
+  assert.doesNotMatch(source, /继续追问/);
+  assert.doesNotMatch(source, /准备双轨追问/);
 });
 
 test('long task text grows to its real scroll height and mobile lanes stack', () => {
@@ -56,4 +62,24 @@ test('long task text grows to its real scroll height and mobile lanes stack', ()
   assert.match(css, /workspace-request textarea\{[^}]*overflow-y:hidden[^}]*height:auto/);
   assert.match(css, /@media\(max-width:1120px\)\{\.workspace-agent-grid\{grid-template-columns:1fr\}/);
   assert.match(css, /@media\(max-width:420px\)/);
+});
+
+
+test('history can be cleared persistently without deleting audit artifacts', () => {
+  assert.match(source, /HISTORY_CUTOFF_STORAGE_KEY = 'rsi-workspace-history-cutoff-v1'/);
+  assert.match(source, /function clearHistory\(\)/);
+  assert.match(source, /cutoffs\[workspace\.id\] = cutoff/);
+  assert.match(source, /delete comparisons\[workspace\.id\]/);
+  assert.match(source, /setRuns\(\[\]\)/);
+  assert.match(source, /history\.runs\.filter\(run => run\.createdAt > cutoff\)/);
+  assert.match(source, /清空历史记录/);
+  const clearBlock = source.slice(source.indexOf('function clearHistory'), source.indexOf('async function openRun'));
+  assert.doesNotMatch(clearBlock, /api</);
+});
+
+test('the whole data preview is collapsed by default and can be expanded', () => {
+  assert.match(source, /<details className="workspace-data workspace-data-collapsible"><summary>/);
+  assert.doesNotMatch(source, /<details className="workspace-data workspace-data-collapsible" open/);
+  assert.match(css, /workspace-data-collapsible\[open\]>summary:before/);
+  assert.match(css, /workspace-data-body/);
 });

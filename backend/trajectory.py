@@ -504,7 +504,7 @@ def induce(run, task, tools):
                   'coverage': 'partial', 'modelBoundaries': boundaries, 'contractScope': 'read_compute',
                   'requirementsSource': source, 'scope': 'current_workspace_only'}
     return {'protocol': PROTOCOL, 'nodes': nodes, 'descriptor': descriptor,
-            'sourceRunId': run['id'], 'sourceSplit': 'train', 'contractHash': api_hash(tools),
+            'sourceRunId': run['id'], 'sourceSplit': task['split'], 'contractHash': api_hash(tools),
             'sourceTraceDigest': digest(run['toolTrace']), 'artifactBoundaries': boundaries}
 
 
@@ -777,10 +777,14 @@ def canonical_structure(proposal):
 def maintain(evolution, run, task, tools):
     info = run.setdefault('evolution', {})
     info.update(generatedVersionIds=[], generatedMatchVersions=[], extraModelRequests=0, extraToolCalls=0, shadowRollouts=0)
-    if task['split'] != 'train':
+    workspace_candidate = bool(task.get('workspaceId') and run.get('workspaceOnlineLearning'))
+    if task['split'] != 'train' and not workspace_candidate:
         info['note'] = '冻结/用户任务不修改经验'
         return
 
+    evaluation_status = (run.get('evaluation') or {}).get('status')
+    candidate_only = workspace_candidate and evaluation_status == 'user_review_required'
+    accepted_execution = evaluation_status == 'passed' or candidate_only
     recovery = run.get('trajectoryRecovery') or {}
     negative = recovery.get('negativeMatch') if isinstance(recovery, dict) else None
     negative_parents = []
@@ -798,7 +802,7 @@ def maintain(evolution, run, task, tools):
         if negative_parents:
             info['negativeMatchEvidence'] = deepcopy(evidence)
 
-    if run['status'] != 'completed' or run['evaluation']['status'] != 'passed':
+    if run['status'] != 'completed' or not accepted_execution:
         if negative_parents:
             info['note'] = '复用后的业务事实失败已记录为M负证据；失败轨迹不晋升G，后续匹配重新判断未覆盖义务'
         else:
@@ -817,6 +821,14 @@ def maintain(evolution, run, task, tools):
     if parent and structure(parent) == structure(proposal):
         schemas = parent['descriptor'].get('acceptedSchemas', [parent['descriptor']['schema']])
         current_schema = proposal['descriptor']['schema']
+        if candidate_only:
+            parent.setdefault('evidence', []).append({
+                'runId': run['id'], 'passed': False, 'candidateAccepted': True,
+                'evaluationStatus': evaluation_status, 'matchVersion': info.get('matchVersion'),
+                'decision': run.get('trajectoryMatch'),
+            })
+            info['note'] = '未人工复核的工作区轨迹仅记录为候选使用证据；不扩展已保存图的匹配范围'
+            return
         if current_schema not in schemas:
             before = deepcopy(parent['descriptor'])
             parent['descriptor']['acceptedSchemas'] = deepcopy(schemas) + [current_schema]
@@ -837,6 +849,9 @@ def maintain(evolution, run, task, tools):
     version = dict(proposal, id=str(uuid4()), parentGraphId=parent['id'] if parent else None,
                    generation=parent['generation'] + 1 if parent else 0, matchVersion=match_version,
                    createdAt=now(), status='probation', reviewed=False, evidence=[],
+                   sourceEvaluationStatus=evaluation_status, candidateOnly=candidate_only,
+                   scope=('同工作区候选；业务正文尚待人工复核' if candidate_only
+                          else '通过结构化评测的正常训练轨迹候选'),
                    patches=[{'operation': ('replace_after_bounded_recovery' if parent and recovery.get('status') == 'recovered'
                                                    else 'replace_with_successful_trajectory' if parent
                                                    else 'induce_executed_operations'),
@@ -847,13 +862,15 @@ def maintain(evolution, run, task, tools):
                                      if info.get('negativeMatchEvidence') else {})}],
                    plan={'steps': [{'id': n['id'], 'intent': n['tool'], 'dependencies': n['dependencies']} for n in proposal['nodes']]})
     evolution.versions.append(version)
-    if parent:
+    if parent and not candidate_only:
         parent['supersededBy'] = version['id']
     info['generatedVersionIds'] = [version['id']]
     info['generatedMatchVersions'] = [{'graphId': version['id'], 'version': match_version}]
     info['trajectoryCompilation'] = {'sourceRunId': run['id'], 'sourceTraceDigest': proposal['sourceTraceDigest'],
                                      'nodes': proposal['nodes'], 'descriptor': proposal['descriptor'],
                                      'patches': version['patches'], 'matchPatches': version['matchPatches']}
-    info['note'] = ('同run有界恢复成功：负匹配证据写入M，完整成功轨迹晋升为G后继；后续使用尚待观察'
+    info['note'] = ('工作区实际完成轨迹已编译为未人工复核的 probation 候选；后续使用与人工确认仍待观察'
+                    if candidate_only
+                    else '同run有界恢复成功：负匹配证据写入M，完整成功轨迹晋升为G后继；后续使用尚待观察'
                     if recovery.get('status') == 'recovered'
                     else '实际成功轨迹编译；G与M差异分别保存，后续使用尚待观察')

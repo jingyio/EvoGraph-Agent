@@ -1,8 +1,12 @@
 ## 2026-09-15 双轨工作区与可续跑 campaign
 
-`POST /api/workspaces/tasks/{taskId}/comparison-runs` 原子创建同一任务的 `plan_react` 与 `graph_rsi` 两个真实 run；`GET /api/workspaces/comparison-runs/{comparisonId}` 返回两臂保存的状态、timeline、metrics、evaluation、submission和报告链接。工作区模型槽仍严格串行，因此两个轨道可以同时显示 queued/running，而不会改变串行计量。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。
+`POST /api/workspaces/tasks/{taskId}/comparison-runs` 原子创建同一任务的 `plan_react` 与 `graph_rsi` 两个真实 run；前者使用主模型服务凭据且关闭跨任务学习，后者使用 `LLM_API_KEY_SECONDARY` 且开启工作区在线学习。两臂共享任务、附件、27B模型、提示、工具、恢复和预算，调度上限为 `run=2/model=2/read=1`，因此模型请求可以真实并行，读取型工具仍串行。`GET /api/workspaces/comparison-runs/{comparisonId}` 返回 `executionPolicy=parallel_dual_key`、模型、limits、provider profile、学习开关，以及两臂保存的timeline、metrics、evaluation、submission和报告链接；不返回凭据。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。
 
-跨场景正式线在创建时通过 `campaign_plan()` 冻结12、12、24三个阶段和全部48项顺序。前24项在同一运行中完成stage1门槛与stage2；`continue_campaign(id, 48)` 校验runtime、冻结清单和输入/题面/评分hash，恢复同一目录的在线经验，只追加stage3。前24项不重跑，任何阶段的普通业务失败继续保留。
+工作台最后一个workspace和未结束comparison仍通过本地引用静默恢复。可见的旧工作区选择器与追问区已移除；资料预览使用默认关闭的原生 `details`。清空历史记录写入workspace级时间cutoff并删除该workspace的comparison恢复引用，只改变浏览器列表视图，不调用删除API，也不改写任何run、报告、轨迹或实验artifact。
+
+27B真实冒烟 `c762fcdc-e08e-422b-80b0-5ea6968968e6` 验证两次首次模型请求在14ms内开始，调度峰值为2个run和2个模型请求；两臂均通过且usage完整。它是产品执行链验收，在线臂在冷启动后创建G0/M0，但没有后续任务使用，因此不进入正式RSI收益或进化结论。
+
+跨场景正式线在创建时通过 `campaign_plan()` 冻结12、12、24三个阶段和全部48项顺序。`continue_campaign(id, 48)` 只允许在runtime、冻结清单和输入/题面/评分hash一致时恢复同一目录的在线经验并追加剩余任务。campaign `4cfbc988-fab0-4537-b7e2-e509c5cfd76a` 已因基础设施/usage缺口停在stage1的10对；后两阶段未执行，不能补齐或拼接。
 
 ## 2026-09-15 跨场景归因运行线
 
