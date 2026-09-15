@@ -270,12 +270,16 @@ class TaskRunner:
         return ModelClient(ModelOptions(config.COMPOSITION_BASE_URL, config.COMPOSITION_API_KEY, config.COMPOSITION_MODEL, config.MODEL_TIMEOUT))
 
     async def start(self, request, *, evaluation_context=None, provider_factory=None, learning_enabled=None,
-                    workspace_online_learning=False, comparison_context=None):
+                    workspace_online_learning=False, comparison_context=None, evolution_override=None,
+                    learning_write_enabled=None, experience_context=None):
         if len(self.tasks) >= 32:
             raise ValueError('任务队列已满（32），请等待或取消')
         task = deepcopy(self.bank.task(request.taskId))
         tools = self.bank.tools(task['id'])
         resolved_learning = self.learning_enabled if learning_enabled is None else bool(learning_enabled)
+        resolved_learning_write = resolved_learning if learning_write_enabled is None else bool(learning_write_enabled)
+        if resolved_learning_write and not resolved_learning:
+            raise ValueError('写入学习经验前必须启用跨任务经验')
         if workspace_online_learning and (request.strategy != 'graph_rsi' or not resolved_learning):
             raise ValueError('工作区在线学习只允许显式启用学习的 graph_rsi run')
         if comparison_context is not None:
@@ -286,8 +290,10 @@ class TaskRunner:
                 raise ValueError('comparison_context 必须包含有效 id、arm 和 providerProfile')
         planner, executor = self.providers(provider_factory)
         composition = self.composition_provider(provider_factory)
+        evolution = evolution_override or self.evolution
         run = dict(id=str(uuid4()), taskId=task['id'], scenario=task['scenario'], split=task['split'], strategy=request.strategy,
-                   learningEnabled=resolved_learning, workspaceOnlineLearning=bool(workspace_online_learning),
+                   learningEnabled=resolved_learning, learningWriteEnabled=resolved_learning_write,
+                   workspaceOnlineLearning=bool(workspace_online_learning),
                    status='queued', phase='排队', createdAt=now(), events=[], toolTrace=[], plan=None, graph=None, retrieval=[], graphSelection=[],
                    models=dict(planner=planner.model, composition=composition.model, executor=executor.model,
                                distinctModels=planner.model != executor.model, compositionDistinct=composition.model != planner.model),
@@ -309,6 +315,8 @@ class TaskRunner:
                    evaluation=dict(status='failed', issues=['missing_report'], scope='structured-facts-and-evidence', prose='not_evaluated'))
         if comparison_context is not None:
             run['comparison'] = deepcopy(comparison_context)
+        if experience_context is not None:
+            run['experience'] = deepcopy(experience_context)
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
         self.runs[run['id']] = run
@@ -322,7 +330,7 @@ class TaskRunner:
                     self.peaks['runs'] = max(self.peaks['runs'], self.active_runs)
                     try:
                         run.update(status='running', phase='开始执行', startedAt=now(), traceVersion=2)
-                        await self.execute(run, task, tools, planner, composition, executor)
+                        await self.execute(run, task, tools, planner, composition, executor, evolution)
                     finally:
                         self.active_runs -= 1
             except asyncio.CancelledError:
@@ -330,9 +338,9 @@ class TaskRunner:
             except Exception as error:
                 run.update(status='failed', error=str(error)[:1200])
             finally:
-                if run['learningEnabled'] and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
+                if run['learningWriteEnabled'] and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
                     try:
-                        self.evolution.observe(run, task, tools)
+                        evolution.observe(run, task, tools)
                     except Exception as error:
                         run.setdefault('evolution', {})['maintenanceError'] = str(error)[:500]
                     overhead = run.get('evolution', {}).get('maintenanceMs', 0) + run.get('evolution', {}).get('persistMs', 0)
@@ -356,7 +364,7 @@ class TaskRunner:
         background.add_done_callback(cleanup)
         return run
 
-    async def execute(self, run, task, tools, planner, composition, executor):
+    async def execute(self, run, task, tools, planner, composition, executor, evolution):
         started, active_reads = time.monotonic(), 0
         context = ToolContext(run)
         known = {t.name: t for t in tools}
@@ -1035,7 +1043,7 @@ class TaskRunner:
 
         async def replay_trajectory():
             nonlocal current_intent, trajectory_residual_complete
-            rows, lookup_ms = trajectory.candidates(self.evolution.versions, task, tools, readonly=not run['learningEnabled'])
+            rows, lookup_ms = trajectory.candidates(evolution.versions, task, tools, readonly=not run['learningWriteEnabled'])
             run['evolution'] = dict(lookupMs=lookup_ms, planningPath='fallback', protocol=trajectory.PROTOCOL)
             if not rows:
                 return False
@@ -1117,7 +1125,7 @@ class TaskRunner:
                     selected, composed = None, None
                     if run['strategy'] in [*graph_strategies, 'plan_react_reuse']:
                         lookup_start = time.perf_counter()
-                        selected = deepcopy(run['evaluationContext'].get('graphSnapshot')) if 'evaluationContext' in run else self.evolution.select(task, tools)
+                        selected = deepcopy(run['evaluationContext'].get('graphSnapshot')) if 'evaluationContext' in run else evolution.select(task, tools)
                         reuse = dict(usedVersionId=selected['id'] if selected else None, sourceGraphId=selected['id'] if selected else None, generation=selected['generation'] if selected else None,
                                      lookupMs=round((time.perf_counter() - lookup_start) * 1000, 3), execution='saved-plan' if selected else 'cold-plan',
                                      planningPath='fast' if selected else 'fallback')
@@ -1130,7 +1138,7 @@ class TaskRunner:
                             if 'evaluationContext' in run:
                                 run['planReuse']['note'] = '冻结成对评测：复用与 RSI 相同的已保存 Plan；不学习'
                     if run['strategy'] in graph_strategies and not selected and 'evaluationContext' not in run:
-                        candidates = self.evolution.composition_candidates(task, tools)
+                        candidates = evolution.composition_candidates(task, tools)
                         if candidates:
                             run['phase'] = 'Composition 粗计划与局部片段选择'
                             composition_started = time.perf_counter()
@@ -1144,7 +1152,7 @@ class TaskRunner:
                                     composition_model_wall_ms = round((time.perf_counter() - model_started) * 1000, 3)
                                 local_started = time.perf_counter()
                                 try:
-                                    composed = self.evolution.compose(task, tools, coarse)
+                                    composed = evolution.compose(task, tools, coarse)
                                 finally:
                                     composition_local_ms = round((time.perf_counter() - local_started) * 1000, 3)
                                 composition_wall_ms = round((time.perf_counter() - composition_started) * 1000, 3)

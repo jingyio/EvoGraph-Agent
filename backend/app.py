@@ -30,6 +30,7 @@ from .workpack_experiment import WorkpackExperiment
 from .workpack_judge import WorkpackJudge
 from .analysis_datasets import AnalysisDatasets
 from .attribution_experiment import AttributionExperiment
+from .online_evolution import OnlineEvolution
 
 
 class ReportReview(BaseModel):
@@ -108,10 +109,14 @@ def create_app(service=None):
     task_runner = TaskRunner(taskbank)
     workspace_manager = WorkspaceManager(taskbank.root)
     workspace_bank = WorkspaceBank(workspace_manager)
-    workspace_runner = TaskRunner(workspace_bank, run_limit=2, model_limit=2, read_limit=1,
+    workspace_runner = TaskRunner(workspace_bank, run_limit=3, model_limit=3, read_limit=3,
                                   run_directory=taskbank.root / 'artifacts' / 'workspace-runs',
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
+    workspace_empty_experience = OnlineEvolution(
+        workspace_bank,
+        taskbank.root / 'artifacts' / 'workspace-runtime' / 'no-learning-empty.json',
+    )
     releases = ReleaseEvidence(taskbank.root)
     analysis_datasets = AnalysisDatasets(taskbank.root)
     trajectory_experiment = TrajectoryExperiment(taskbank.root)
@@ -153,6 +158,8 @@ def create_app(service=None):
     app.state.task_runner = task_runner
     app.state.workspace_manager = workspace_manager
     app.state.workspace_runner = workspace_runner
+    app.state.finance_release_descriptor = None
+    app.state.finance_release_experience = None
     app.state.workpack_experiment = workpack_experiment
     app.state.attribution_experiment = attribution_experiment
     app.state.workpack_judge = workpack_judge
@@ -611,7 +618,45 @@ def create_app(service=None):
         run = await workspace_runner.start(TaskRunRequest(taskId=task['id'], strategy=request.strategy))
         return {'id': run['id'], 'taskId': task_id, 'status': run['status']}
 
+    def finance_release_context():
+        cached_descriptor = app.state.finance_release_descriptor
+        cached_experience = app.state.finance_release_experience
+        if cached_descriptor is not None and cached_experience is not None:
+            return cached_descriptor, cached_experience
+        try:
+            descriptor = analysis_datasets.default_descriptor()
+        except (FileNotFoundError, KeyError, ValueError) as reason:
+            raise HTTPException(503, f'当前分析清单不可用于实测对比：{reason}') from reason
+        if descriptor.get('source') != {'kind': 'attribution'}:
+            raise HTTPException(503, '当前分析清单不是跨任务学习归因数据，不能加载为 RSI 知识库')
+        if (descriptor.get('attribution') or {}).get('kind') != 'cross-task-learning':
+            raise HTTPException(503, '当前分析清单没有声明跨任务学习归因，不能加载为 RSI 知识库')
+        try:
+            dataset = analysis_datasets.get(descriptor['datasetId'])
+        except (FileNotFoundError, KeyError, ValueError) as reason:
+            raise HTTPException(503, f'当前分析数据未通过发布清单校验：{reason}') from reason
+        scenarios = {point.get('scenario') for point in dataset.get('points') or []}
+        if scenarios != {'finance'}:
+            raise HTTPException(503, '当前分析数据不是纯财务任务，不能加载到财务实测对比')
+        release_id = descriptor.get('experimentId')
+        if not isinstance(release_id, str) or not release_id:
+            raise HTTPException(503, '当前分析清单缺少实验 ID，不能加载 RSI 知识库')
+        experience_path = (taskbank.root / 'artifacts' / 'attribution-experiments' / release_id /
+                           'online_rsi' / 'experience.json')
+        if not experience_path.exists():
+            raise HTTPException(503, '当前分析清单对应的 RSI 知识库不存在')
+        experience = OnlineEvolution(workspace_bank, experience_path)
+        experience.restore()
+        app.state.finance_release_descriptor = descriptor
+        app.state.finance_release_experience = experience
+        return descriptor, experience
+
     comparison_arms = (
+        ('plan_react', '传统 Plan + ReAct', 'plan_react', False, 'primary'),
+        ('no_learning', '图执行 · 不学习', 'graph_rsi', False, 'primary'),
+        ('online_rsi', '图执行 · 在线 RSI', 'graph_rsi', True, 'secondary'),
+    )
+    legacy_comparison_arms = (
         ('plan_react', '传统 Agent · 每次规划'),
         ('graph_rsi', 'Graph RSI · 在线学习'),
     )
@@ -634,15 +679,19 @@ def create_app(service=None):
             'selectionDownloadUrl': base + '/selection/download',
         }
 
-    def comparison_arm(run, label):
+    def comparison_arm(run, label, arm_name=None):
         comparison = run.get('comparison') or {}
         return {
+            'arm': arm_name or comparison.get('arm'),
             'runId': run['id'],
             'taskId': run['taskId'],
+            'createdAt': run.get('createdAt'),
             'label': label,
             'strategy': run['strategy'],
             'providerProfile': comparison.get('providerProfile'),
             'learningEnabled': bool(run.get('learningEnabled')),
+            'learningWriteEnabled': bool(run.get('learningWriteEnabled')),
+            'experience': deepcopy(run.get('experience')),
             'model': config.WORKSPACE_COMPARISON_MODEL,
             'status': run['status'],
             'phase': run.get('phase'),
@@ -657,10 +706,37 @@ def create_app(service=None):
         runs = [run for run in workspace_runner.runs.values()
                 if (run.get('comparison') or {}).get('id') == comparison_id
                 or run.get('comparisonId') == comparison_id]
-        by_strategy = {run['strategy']: run for run in runs}
-        if set(by_strategy) != {strategy for strategy, _label in comparison_arms}:
+        by_arm = {(run.get('comparison') or {}).get('arm'): run for run in runs}
+        current_names = {arm for arm, _label, _strategy, _learning, _profile in comparison_arms}
+        previous_current_names = {'no_learning', 'online_rsi'}
+        legacy_names = {arm for arm, _label in legacy_comparison_arms}
+        if set(by_arm) == current_names:
+            descriptor, finance_release_experience = finance_release_context()
+            arms = [comparison_arm(by_arm[arm], label, arm) for arm, label, _strategy, _learning, _profile in comparison_arms]
+            design = 'plan_react_graph_learning_three_arm'
+            knowledge_base = {
+                'releaseId': descriptor['experimentId'],
+                'datasetId': descriptor['datasetId'],
+                'versionCount': len(finance_release_experience.versions),
+                'readOnly': True,
+            }
+        elif set(by_arm) == previous_current_names:
+            descriptor, finance_release_experience = finance_release_context()
+            arms = [comparison_arm(by_arm[arm], label, arm)
+                    for arm, label, _strategy, _learning, _profile in comparison_arms if arm in previous_current_names]
+            design = 'same_graph_runtime_learning_ablation'
+            knowledge_base = {
+                'releaseId': descriptor['experimentId'],
+                'datasetId': descriptor['datasetId'],
+                'versionCount': len(finance_release_experience.versions),
+                'readOnly': True,
+            }
+        elif set(by_arm) == legacy_names:
+            arms = [comparison_arm(by_arm[arm], label, arm) for arm, label in legacy_comparison_arms]
+            design = 'legacy_plan_react_vs_graph_rsi'
+            knowledge_base = None
+        else:
             raise HTTPException(404, '工作区对照执行不存在')
-        arms = [comparison_arm(by_strategy[strategy], label) for strategy, label in comparison_arms]
         statuses = {arm['status'] for arm in arms}
         if 'running' in statuses:
             status = 'running'
@@ -670,13 +746,16 @@ def create_app(service=None):
             status = 'completed'
         else:
             status = 'completed_with_failures'
+        three_arm = design == 'plan_react_graph_learning_three_arm'
         return {
             'id': comparison_id,
             'taskId': arms[0]['taskId'],
             'status': status,
-            'executionPolicy': 'parallel_dual_key',
+            'executionPolicy': 'parallel_three_arm_two_key' if three_arm else 'parallel_dual_key',
+            'design': design,
+            'knowledgeBase': knowledge_base,
             'model': config.WORKSPACE_COMPARISON_MODEL,
-            'limits': {'runs': 2, 'models': 2, 'reads': 1},
+            'limits': {'runs': 3, 'models': 3, 'reads': 3} if three_arm else {'runs': 2, 'models': 2, 'reads': 1},
             'arms': arms,
         }
 
@@ -684,31 +763,48 @@ def create_app(service=None):
     async def workspace_comparison_run_start(task_id: str, request: WorkspaceComparisonRunRequest):
         task = workspace_manager.task(task_id)
         if not request.confirmCost:
-            raise HTTPException(400, '双臂对照会发起两次真实 Agent 执行；请确认费用后再启动')
+            raise HTTPException(400, '三臂对照会发起三次真实 Agent 执行；请确认费用后再启动')
         if workspace_runner.tasks:
-            raise HTTPException(409, '当前已有工作区 Agent 在运行；双臂对照需从空闲队列开始')
+            raise HTTPException(409, '当前已有工作区 Agent 在运行；三臂对照需从空闲队列开始')
         if not config.API_KEY or not config.SECONDARY_API_KEY:
-            raise HTTPException(503, '双臂并行需要同时配置 LLM_API_KEY 和 LLM_API_KEY_SECONDARY')
+            raise HTTPException(503, '三臂并行需要同时配置 LLM_API_KEY 和 LLM_API_KEY_SECONDARY')
+        descriptor, finance_release_experience = finance_release_context()
+        finance_release_id = descriptor['experimentId']
+        if not finance_release_experience.versions:
+            raise HTTPException(503, '当前发布清单对应的在线 RSI 知识库为空，不能启动实测对比')
         if len(workspace_runner.tasks) + len(comparison_arms) > 32:
-            raise HTTPException(409, '任务队列容量不足，无法同时创建双臂对照')
+            raise HTTPException(409, '任务队列容量不足，无法同时创建三臂对照')
         comparison_id = str(uuid4())
         created = []
         factories = {
             'plan_react': workspace_comparison_provider(config.API_KEY),
-            'graph_rsi': workspace_comparison_provider(config.SECONDARY_API_KEY),
+            'no_learning': workspace_comparison_provider(config.API_KEY),
+            'online_rsi': workspace_comparison_provider(config.SECONDARY_API_KEY),
+        }
+        evolutions = {
+            'plan_react': workspace_empty_experience,
+            'no_learning': workspace_empty_experience,
+            'online_rsi': finance_release_experience,
         }
         try:
-            for strategy, label in comparison_arms:
-                learning = strategy == 'graph_rsi'
+            for arm, _label, strategy, learning, profile in comparison_arms:
+                experience = {
+                    'mode': 'frozen_finance_release' if learning else 'not_applicable' if strategy == 'plan_react' else 'empty_isolated',
+                    'releaseId': finance_release_id if learning else None,
+                    'versionCount': len(finance_release_experience.versions) if learning else 0,
+                    'readOnly': True,
+                }
                 run = await workspace_runner.start(
                     TaskRunRequest(taskId=task['id'], strategy=strategy),
-                    provider_factory=factories[strategy],
+                    provider_factory=factories[arm],
                     learning_enabled=learning,
-                    workspace_online_learning=learning,
+                    learning_write_enabled=False,
+                    evolution_override=evolutions[arm],
+                    experience_context=experience,
                     comparison_context={
                         'id': comparison_id,
-                        'arm': strategy,
-                        'providerProfile': 'secondary' if learning else 'primary',
+                        'arm': arm,
+                        'providerProfile': profile,
                     },
                 )
                 created.append(run)
@@ -728,7 +824,7 @@ def create_app(service=None):
     def workspace_run_list(workspaceId: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):
         rows = [run for run in workspace_runner.runs.values() if not workspaceId or workspace_manager.task(run['taskId']).get('workspaceId') == workspaceId]
         rows.sort(key=lambda run: run.get('createdAt', ''), reverse=True)
-        return {'scheduler': workspace_runner.status(), 'runs': [{key: run.get(key) for key in ['id', 'taskId', 'status', 'strategy', 'phase', 'createdAt', 'metrics', 'evaluation', 'evolution']} for run in rows[:limit]]}
+        return {'scheduler': workspace_runner.status(), 'runs': [{key: run.get(key) for key in ['id', 'taskId', 'status', 'strategy', 'phase', 'createdAt', 'metrics', 'evaluation', 'evolution', 'learningEnabled', 'learningWriteEnabled', 'comparison', 'experience']} for run in rows[:limit]]}
 
     @app.get('/api/workspaces/runs/{run_id}')
     def workspace_run_get(run_id: str):

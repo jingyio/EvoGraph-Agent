@@ -754,66 +754,71 @@ async def test_completed_scope_prevents_evidence_rereads_without_leaking_private
     assert '_evidenceRef' not in model_text
 
 
-async def test_run_level_providers_use_two_model_slots_and_only_graph_run_learns(tmp_path):
-    active_profiles, reached, release = set(), asyncio.Event(), asyncio.Event()
+async def test_run_level_providers_allow_all_three_live_comparison_arms_to_request_together(tmp_path):
+    active_lanes, reached, release = set(), asyncio.Event(), asyncio.Event()
     created = []
 
-    class DualKeyModel(Model):
-        def __init__(self, profile, role):
+    class ThreeArmModel(Model):
+        def __init__(self, lane, role):
             super().__init__(role, [])
-            self.profile = profile
-            self.model = f'{profile}-{role}-qwen/qwen3.5-27b'
+            self.lane = lane
+            self.model = f'{lane}-{role}-qwen/qwen3.5-27b'
 
         async def complete(self, messages, tools):
-            if self.role == 'planner' and self.profile not in active_profiles:
-                active_profiles.add(self.profile)
-                if len(active_profiles) == 2:
+            if self.role == 'planner' and self.lane not in active_lanes:
+                active_lanes.add(self.lane)
+                if len(active_lanes) == 3:
                     reached.set()
                 await asyncio.wait_for(release.wait(), timeout=2)
             return await super().complete(messages, tools)
 
-    def factory(profile):
+    def factory(lane):
         def create(role):
-            created.append((profile, role))
-            return DualKeyModel(profile, role)
+            created.append((lane, role))
+            return ThreeArmModel(lane, role)
         return create
 
     runner = TaskRunner(Bank(tmp_path), lambda _role: (_ for _ in ()).throw(AssertionError('runner default provider used')),
-                        run_limit=2, model_limit=2, read_limit=1, learning_enabled=False)
+                        run_limit=3, model_limit=3, read_limit=3, learning_enabled=False)
     observed = []
     runner.evolution.observe = lambda run, task, tools: observed.append((run['id'], task['id']))
 
-    traditional = await runner.start(
+    plan = await runner.start(
         TaskRunRequest(taskId='shared', strategy='plan_react'),
-        provider_factory=factory('primary'), learning_enabled=False,
+        provider_factory=factory('primary-plan'), learning_enabled=False, learning_write_enabled=False,
         comparison_context={'id': 'comparison', 'arm': 'plan_react', 'providerProfile': 'primary'},
+        experience_context={'mode': 'not_applicable', 'versionCount': 0, 'readOnly': True},
+    )
+    no_learning = await runner.start(
+        TaskRunRequest(taskId='shared', strategy='graph_rsi'),
+        provider_factory=factory('primary-graph'), learning_enabled=False, learning_write_enabled=False,
+        comparison_context={'id': 'comparison', 'arm': 'no_learning', 'providerProfile': 'primary'},
+        experience_context={'mode': 'empty_isolated', 'versionCount': 0, 'readOnly': True},
     )
     graph = await runner.start(
         TaskRunRequest(taskId='shared', strategy='graph_rsi'),
-        provider_factory=factory('secondary'), learning_enabled=True, workspace_online_learning=True,
-        comparison_context={'id': 'comparison', 'arm': 'graph_rsi', 'providerProfile': 'secondary'},
+        provider_factory=factory('secondary'), learning_enabled=True, learning_write_enabled=False,
+        comparison_context={'id': 'comparison', 'arm': 'online_rsi', 'providerProfile': 'secondary'},
+        experience_context={'mode': 'frozen_finance_release', 'versionCount': 3, 'readOnly': True},
     )
     await asyncio.wait_for(reached.wait(), timeout=2)
-    assert runner.active_runs == 2 and runner.active_models == 2
+    assert runner.active_runs == 3 and runner.active_models == 3
     release.set()
     await asyncio.gather(*list(runner.tasks.values()))
 
-    assert runner.peaks['runs'] == 2 and runner.peaks['models'] == 2
-    assert traditional['models'] == {
-        'planner': 'primary-planner-qwen/qwen3.5-27b',
-        'composition': 'primary-composition-qwen/qwen3.5-27b',
-        'executor': 'primary-executor-qwen/qwen3.5-27b',
-        'distinctModels': True,
-        'compositionDistinct': True,
-    }
+    assert runner.peaks['runs'] == 3 and runner.peaks['models'] == 3
+    assert plan['strategy'] == 'plan_react'
+    assert no_learning['strategy'] == graph['strategy'] == 'graph_rsi'
+    assert plan['models']['planner'].startswith('primary-plan-')
+    assert no_learning['models']['planner'].startswith('primary-graph-')
     assert graph['models']['planner'].startswith('secondary-')
-    assert graph['models']['executor'].startswith('secondary-')
-    assert graph['models']['composition'].startswith('secondary-')
-    assert traditional['learningEnabled'] is False and graph['learningEnabled'] is True
-    assert graph['workspaceOnlineLearning'] is True
-    assert observed == [(graph['id'], 'shared')]
+    assert plan['learningEnabled'] is False and no_learning['learningEnabled'] is False and graph['learningEnabled'] is True
+    assert plan['learningWriteEnabled'] is False and no_learning['learningWriteEnabled'] is False and graph['learningWriteEnabled'] is False
+    assert graph['workspaceOnlineLearning'] is False
+    assert observed == []
     assert sorted(created) == sorted([
-        ('primary', 'planner'), ('primary', 'executor'), ('primary', 'composition'),
+        ('primary-plan', 'planner'), ('primary-plan', 'executor'), ('primary-plan', 'composition'),
+        ('primary-graph', 'planner'), ('primary-graph', 'executor'), ('primary-graph', 'composition'),
         ('secondary', 'planner'), ('secondary', 'executor'), ('secondary', 'composition'),
     ])
     await runner.shutdown()

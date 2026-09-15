@@ -1162,14 +1162,14 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
     app = create_app(RunService(tmp_path / 'legacy'))
     async with app.router.lifespan_context(app):
         manager = app.state.workspace_manager
-        workspace = manager.create('finance', label='金融双臂测试')
+        workspace = manager.create('finance', label='金融三臂测试')
         manager.add_source(workspace['id'], 'orders.csv', b'order_id,amount_cents\no-1,100\n')
         task, questions = manager.create_task(workspace['id'], '统计当前订单并形成有资料依据的内部复核简报。')
         assert task and not questions
 
-        # Keep both real runner jobs queued so this API contract test cannot
-        # make provider calls. Production uses the configured strict serial
-        # semaphore and exposes the same queued/running states.
+        # Keep all three real runner jobs queued so this API contract test cannot
+        # make provider calls. The live workspace creates all arms together and
+        # exposes only their queued/running states here.
         app.state.workspace_runner.run_slots = asyncio.Semaphore(0)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             denied = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': False})
@@ -1179,25 +1179,53 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             assert missing_secondary.status_code == 503
             assert not app.state.workspace_runner.runs and not app.state.workspace_runner.tasks
             monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', 'secondary-secret')
+            app.state.finance_release_descriptor = {
+                'datasetId': 'finance-attribution-v5-12-api-candidate',
+                'experimentId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
+            }
+            app.state.finance_release_experience = type(
+                'FrozenExperience', (), {'versions': [{'id': 'G-finance-12'}]}
+            )()
 
             started = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
             assert started.status_code == 202
             payload = started.json()
             assert payload['taskId'] == task['id']
             assert payload['status'] == 'queued'
-            assert payload['executionPolicy'] == 'parallel_dual_key'
-            assert [(arm['label'], arm['strategy']) for arm in payload['arms']] == [
-                ('传统 Agent · 每次规划', 'plan_react'),
-                ('Graph RSI · 在线学习', 'graph_rsi'),
+            assert payload['executionPolicy'] == 'parallel_three_arm_two_key'
+            assert payload['design'] == 'plan_react_graph_learning_three_arm'
+            assert payload['knowledgeBase'] == {
+                'releaseId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
+                'datasetId': 'finance-attribution-v5-12-api-candidate',
+                'versionCount': 1,
+                'readOnly': True,
+            }
+            assert [(arm['arm'], arm['label'], arm['strategy']) for arm in payload['arms']] == [
+                ('plan_react', '传统 Plan + ReAct', 'plan_react'),
+                ('no_learning', '图执行 · 不学习', 'graph_rsi'),
+                ('online_rsi', '图执行 · 在线 RSI', 'graph_rsi'),
             ]
             assert payload['model'] == 'qwen/qwen3.5-27b'
-            assert payload['limits'] == {'runs': 2, 'models': 2, 'reads': 1}
-            assert len({arm['runId'] for arm in payload['arms']}) == 2
+            assert payload['limits'] == {'runs': 3, 'models': 3, 'reads': 3}
+            assert len({arm['runId'] for arm in payload['arms']}) == 3
             assert {arm['taskId'] for arm in payload['arms']} == {task['id']}
-            assert [(arm['providerProfile'], arm['learningEnabled'], arm['model']) for arm in payload['arms']] == [
-                ('primary', False, 'qwen/qwen3.5-27b'),
-                ('secondary', True, 'qwen/qwen3.5-27b'),
+            assert [(arm['providerProfile'], arm['learningEnabled'], arm['learningWriteEnabled'], arm['model']) for arm in payload['arms']] == [
+                ('primary', False, False, 'qwen/qwen3.5-27b'),
+                ('primary', False, False, 'qwen/qwen3.5-27b'),
+                ('secondary', True, False, 'qwen/qwen3.5-27b'),
             ]
+            assert payload['arms'][0]['experience'] == {
+                'mode': 'not_applicable', 'releaseId': None, 'versionCount': 0, 'readOnly': True,
+            }
+            assert payload['arms'][1]['experience'] == {
+                'mode': 'empty_isolated', 'releaseId': None, 'versionCount': 0, 'readOnly': True,
+            }
+            assert payload['arms'][2]['experience'] == {
+                'mode': 'frozen_finance_release',
+                'releaseId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
+                'versionCount': 1,
+                'readOnly': True,
+            }
             assert all(app.state.workspace_runner.runs[arm['runId']]['comparison']['id'] == payload['id']
                        for arm in payload['arms'])
 
@@ -1225,6 +1253,51 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
 
             conflict = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
             assert conflict.status_code == 409
+
+
+
+async def test_workspace_comparison_get_keeps_both_previous_two_arm_shapes(tmp_path, monkeypatch):
+    class Bank:
+        def __init__(self):
+            self.root = tmp_path
+            self.tasks, self.gold, self.manifest = {}, {}, None
+
+        def load(self):
+            pass
+
+    monkeypatch.setattr('backend.app.TaskBank', Bank)
+    app = create_app(RunService(tmp_path / 'legacy'))
+    app.state.finance_release_descriptor = {
+        'datasetId': 'finance-attribution-v5-12-api-candidate',
+        'experimentId': 'release-finance',
+    }
+    app.state.finance_release_experience = type('FrozenExperience', (), {'versions': [{'id': 'G0'}]})()
+
+    def saved(run_id, comparison_id, arm, strategy, learning):
+        return {
+            'id': run_id, 'taskId': 'task-1', 'status': 'completed', 'phase': '已完成',
+            'strategy': strategy, 'createdAt': '2026-09-15T00:00:00Z', 'events': [],
+            'metrics': {}, 'evaluation': {'status': 'passed'}, 'submission': {},
+            'learningEnabled': learning, 'learningWriteEnabled': False,
+            'comparison': {'id': comparison_id, 'arm': arm, 'providerProfile': 'secondary' if learning else 'primary'},
+        }
+
+    app.state.workspace_runner.runs = {
+        'a': saved('a', 'previous', 'no_learning', 'graph_rsi', False),
+        'b': saved('b', 'previous', 'online_rsi', 'graph_rsi', True),
+        'c': saved('c', 'legacy', 'plan_react', 'plan_react', False),
+        'd': saved('d', 'legacy', 'graph_rsi', 'graph_rsi', True),
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        previous = (await client.get('/api/workspaces/comparison-runs/previous')).json()
+        assert previous['design'] == 'same_graph_runtime_learning_ablation'
+        assert [arm['arm'] for arm in previous['arms']] == ['no_learning', 'online_rsi']
+        assert previous['knowledgeBase']['releaseId'] == 'release-finance'
+
+        legacy = (await client.get('/api/workspaces/comparison-runs/legacy')).json()
+        assert legacy['design'] == 'legacy_plan_react_vs_graph_rsi'
+        assert [arm['arm'] for arm in legacy['arms']] == ['plan_react', 'graph_rsi']
+        assert legacy['knowledgeBase'] is None
 
 
 def test_explicit_workspace_online_learning_creates_only_unreviewed_candidate(monkeypatch):

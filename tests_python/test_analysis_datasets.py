@@ -155,6 +155,11 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     }
     assert expected_ids.issubset(dataset_ids)
     items_by_id = {row['datasetId']: row for row in listing['items']}
+    default_descriptor = store.default_descriptor()
+    assert default_descriptor == items_by_id[listing['defaultDatasetId']]
+    assert default_descriptor['experimentId'] == 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5'
+    assert default_descriptor['source'] == {'kind': 'attribution'}
+    assert default_descriptor['attribution']['kind'] == 'cross-task-learning'
     assert items_by_id['finance-attribution-v5-12-api-candidate']['status'] == 'candidate'
     assert items_by_id['finance-attribution-v5-repair-probe']['status'] == 'candidate'
     assert items_by_id['finance-attribution-v5-12-expanded']['status'] == 'historical'
@@ -199,7 +204,13 @@ def test_repository_manifest_exposes_v4_36_as_an_isolated_online_e2e_dataset():
     assert candidate['points'][10]['pairId'] == 'FX11'
     assert candidate['points'][10]['baseline']['passed'] is False
     assert candidate['points'][10]['rsi']['passed'] is True
-    assert candidate['points'][11]['rsi']['usedVersionId'] == candidate['revisions'][1]['versionId']
+    fx12 = candidate['points'][11]
+    assert fx12['rsi']['usedVersionId'] == candidate['revisions'][1]['versionId']
+    assert fx12['baseline']['strategy'] == fx12['rsi']['strategy'] == 'graph_rsi'
+    assert fx12['baseline']['executionMode'] == 'cold-plan'
+    assert fx12['rsi']['executionMode'] == 'trajectory'
+    assert (fx12['baseline']['graphToolCalls'], fx12['baseline']['modelToolCalls']) == (3, 24)
+    assert (fx12['rsi']['graphToolCalls'], fx12['rsi']['modelToolCalls']) == (23, 1)
     current = store.get('finance-attribution-v4-6')
     assert current['summary']['actualGraphUse']['hits'] == 4
     assert current['summary']['actualGraphUse']['attempts'] == 6
@@ -330,6 +341,19 @@ def test_attribution_dataset_fails_closed_on_digest_runtime_asset_protocol_and_s
         with pytest.raises(ValueError, match='测试组与保存实验不一致'):
             store.get(manifest['datasetId'])
     write_private(path, original)
+
+
+def test_cross_task_learning_attribution_rejects_plan_react_arm(tmp_path):
+    store, path, original, manifest = attribution_fixture(tmp_path)
+    registry_path = tmp_path / 'releases/analysis-manifest.json'
+    changed = deepcopy(original)
+    changed['pairs'][0]['no_learning']['strategy'] = 'plan_react'
+    write_private(path, changed)
+    registry = json.loads(registry_path.read_text())
+    registry['datasets'][0]['artifactDigest'] = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+    write_private(registry_path, registry)
+    with pytest.raises(ValueError, match='混入非图执行策略'):
+        store.get(manifest['datasetId'])
 
 
 def test_attribution_revision_projection_separates_m_only_revision_and_requires_execution():

@@ -3,7 +3,6 @@ import {
   Activity,
   BadgeDollarSign,
   Clock3,
-  FileDown,
   Gauge,
   GitBranch,
   Layers3,
@@ -69,6 +68,12 @@ type Arm = {
   traceUrl?: string;
   toolErrors?: number | null;
   executionStages?: Record<string, ExecutionStageMetric>;
+  strategy?: string;
+  learningEnabled?: boolean | null;
+  planningPath?: string;
+  executionMode?: string;
+  graphToolCalls?: number | null;
+  modelToolCalls?: number | null;
   error?: string;
 };
 type Point = {
@@ -430,6 +435,12 @@ function normalizeArm(
   return {
     runId: asString(arm.runId) || asString(arm.id),
     status: asString(arm.status),
+    strategy: asString(arm.strategy),
+    learningEnabled: typeof arm.learningEnabled === "boolean" ? arm.learningEnabled : null,
+    planningPath: asString(arm.planningPath),
+    executionMode: asString(arm.executionMode),
+    graphToolCalls: asNumber(arm.graphToolCalls),
+    modelToolCalls: asNumber(arm.modelToolCalls),
     passed:
       typeof arm.passed === "boolean"
         ? arm.passed
@@ -633,28 +644,6 @@ export function analysisPoints(detail: Detail): Point[] {
     .sort((a, b) => a.index - b.index);
 }
 
-
-function reportUrl(dataset: DatasetSummary, arm: "baseline" | "rsi", run: Arm) {
-  const attributionExperiment = attributionMode(dataset);
-  const armKey = arm === "baseline" ? "no_learning" : "online_rsi";
-  return (
-    run.reportUrl ||
-    (run.runId
-      ? attributionExperiment
-        ? `/api/attribution-experiments/${dataset.experimentId}/runs/${armKey}/${run.runId}/report`
-        : `/api/workpack-experiments/${dataset.experimentId}/runs/${arm}/${run.runId}/report`
-      : "")
-  );
-}
-
-function traceUrl(dataset: DatasetSummary, arm: "baseline" | "rsi", run: Arm) {
-  if (run.traceUrl || run.runUrl) return run.traceUrl || run.runUrl || "";
-  if (!run.runId) return "";
-  const armKey = arm === "baseline" ? "no_learning" : "online_rsi";
-  return attributionMode(dataset)
-    ? `/api/attribution-experiments/${dataset.experimentId}/runs/${armKey}/${run.runId}`
-    : `/api/workpack-experiments/${dataset.experimentId}/runs/${arm}/${run.runId}`;
-}
 
 function PolylineChart({
   points,
@@ -888,14 +877,13 @@ function PolylineChart({
   );
 }
 
-type AnalysisView = "results" | "evolution" | "cost" | "operations" | "audit";
+type AnalysisView = "results" | "evolution" | "cost" | "operations";
 
 const analysisViews: Array<{ id: AnalysisView; label: string; description: string }> = [
   { id: "results", label: "业务结果", description: "质量与核心结果" },
   { id: "evolution", label: "记忆进化", description: "创建、复用、修订与验证" },
   { id: "cost", label: "成本曲线", description: "token 与串行延迟" },
   { id: "operations", label: "请求与可靠性", description: "模型请求、失败与恢复" },
-  { id: "audit", label: "报告与轨迹", description: "任务报告和技术审计" },
 ];
 
 export default function DataAnalysis() {
@@ -907,18 +895,13 @@ export default function DataAnalysis() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [replayCount, setReplayCount] = useState<number | null>(null);
   const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replayPrimed, setReplayPrimed] = useState(false);
   const [replayIntervalMs, setReplayIntervalMs] = useState(1500);
   const [analysisView, setAnalysisView] = useState<AnalysisView>("results");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
-  const [taskDetail, setTaskDetail] = useState<{
-    experimentId: string; releaseId: string;
-    task: { task: string };
-    inputs: { id: string; name: string; download: string }[];
-    runs: Record<string, { submission?: { summary?: string }; toolTrace?: { tool: string; executor: string; ok: boolean }[] }>;
-  } | null>(null);
-  const [taskError, setTaskError] = useState("");
+
 
   useEffect(() => {
     let active = true;
@@ -954,6 +937,7 @@ export default function DataAnalysis() {
     setSelectedIndex(null);
     setReplayCount(null);
     setReplayPlaying(false);
+    setReplayPrimed(false);
     setAnalysisView("results");
     void api<Detail>(`/api/analysis/datasets/${encodeURIComponent(datasetId)}`)
       .then((payload) => active && setDetail(payload))
@@ -1034,6 +1018,9 @@ export default function DataAnalysis() {
     curve.find((point) => point.index === selectedIndex) ||
     curve.at(-1) ||
     null;
+  const replayContentDeferred =
+    !replayPrimed && (analysisView === "evolution" || analysisView === "cost");
+  const displayedReplayCount = replayContentDeferred ? 0 : replayVisible.length;
   useEffect(() => {
     if (!replayPlaying || replayCount == null || !visible.length) return;
     if (replayCount >= visible.length) {
@@ -1051,21 +1038,7 @@ export default function DataAnalysis() {
     if (replayCount == null || !replayVisible.length) return;
     setSelectedIndex(replayVisible.at(-1)?.index ?? null);
   }, [replayCount, replayVisible]);
-  useEffect(() => {
-    let active = true;
-    setTaskDetail(null);
-    setTaskError("");
-    if (selected?.detailUrl) {
-      void api<NonNullable<typeof taskDetail>>(selected.detailUrl)
-        .then((payload) => {
-          if (payload.experimentId !== metadata?.experimentId || payload.releaseId !== metadata?.releaseId)
-            throw new Error("任务详情与当前发布上下文不一致");
-          if (active) setTaskDetail(payload);
-        })
-        .catch((reason) => active && setTaskError(reason.message));
-    }
-    return () => { active = false; };
-  }, [selected?.detailUrl, metadata?.experimentId, metadata?.releaseId]);
+
   const baseline =
     detail?.summary?.baseline || detail?.summary?.arms?.no_learning || {};
   const rsi = detail?.summary?.rsi || detail?.summary?.arms?.online_rsi || {};
@@ -1128,6 +1101,13 @@ export default function DataAnalysis() {
     (point) => point.rsi.planningPath === "fast",
   ).length;
   const scopeFastRate = replayVisible.length ? scopeFast / replayVisible.length : null;
+  const graphProtocolVerified =
+    replayVisible.length > 0 &&
+    replayVisible.every(
+      (point) =>
+        point.baseline.strategy === "graph_rsi" &&
+        point.rsi.strategy === "graph_rsi",
+    );
   const scopeG0 = replayVisible.reduce(
     (total, point) => total + (point.rsi.generatedVersionIds?.length || 0),
     0,
@@ -1260,13 +1240,13 @@ export default function DataAnalysis() {
           {points.length > 0 && (scenarios.length > 1 || workflows.length > 1) && (
             <section className="analysis-filters" aria-label="分析筛选">
               {scenarios.length > 1 && (
-                <label>业务场景<select aria-label="筛选业务场景" value={scenario} onChange={(event) => { setScenario(event.target.value); setWorkflow("all"); setSelectedIndex(null); setReplayCount(null); setReplayPlaying(false); }}>
+                <label>业务场景<select aria-label="筛选业务场景" value={scenario} onChange={(event) => { setScenario(event.target.value); setWorkflow("all"); setSelectedIndex(null); setReplayCount(null); setReplayPlaying(false); setReplayPrimed(false); }}>
                   <option value="all">全部场景</option>
                   {scenarios.map((item) => <option key={item} value={item}>{scenarioNames[item] || item}</option>)}
                 </select></label>
               )}
               {workflows.length > 1 && (
-                <label>任务类型<select aria-label="筛选任务类型" value={workflow} onChange={(event) => { setWorkflow(event.target.value); setSelectedIndex(null); setReplayCount(null); setReplayPlaying(false); }}>
+                <label>任务类型<select aria-label="筛选任务类型" value={workflow} onChange={(event) => { setWorkflow(event.target.value); setSelectedIndex(null); setReplayCount(null); setReplayPlaying(false); setReplayPrimed(false); }}>
                   <option value="all">全部任务类型</option>
                   {workflows.map((item) => <option key={item.id} value={item.id}>{item.label.replaceAll("-", " ")}</option>)}
                 </select></label>
@@ -1275,6 +1255,13 @@ export default function DataAnalysis() {
           )}
 
           {points.length > 0 && (
+            <>
+              {isAttribution && (
+                <div className={`analysis-comparison-scope ${graphProtocolVerified ? "verified" : "invalid"}`}>
+                  <strong>同一图执行 Agent 的 {curve.length} 项累计对照</strong>
+                  <span>两臂均由 API 校验为 graph_rsi；A 每任务重新规划和编译，B 可读取并更新此前成功任务形成的经验。具体图调度比例以真实轨迹为准。</span>
+                </div>
+              )}
             <section className="analysis-arm-contrast" aria-label="不使用 RSI 与使用在线 RSI 的核心对比">
               <article className="baseline">
                 <div><span>A</span><small>不使用跨任务学习</small></div>
@@ -1286,8 +1273,8 @@ export default function DataAnalysis() {
                   <div><dt>串行时间</dt><dd>{duration(scopeBaselineLatency)}</dd></div>
                 </dl>
               </article>
-              <div className="analysis-arm-delta" aria-label="RSI 相对变化">
-                <strong>RSI 相对变化</strong>
+              <div className="analysis-arm-delta" aria-label="RSI 累计相对变化">
+                <strong>{curve.length} 项累计变化</strong>
                 <span className={changeClass(scopeTokenSaving)}>{changeText("Token", scopeTokenSaving)}</span>
                 <span className={changeClass(scopeRequestSaving)}>{changeText("请求", scopeRequestSaving)}</span>
                 <span className={changeClass(scopeLatencySaving)}>{changeText("串行时间", scopeLatencySaving)}</span>
@@ -1303,17 +1290,19 @@ export default function DataAnalysis() {
                 </dl>
               </article>
             </section>
+            </>
           )}
 
           {points.length > 0 && (
             <div className="analysis-presentation-shell">
               <aside className="analysis-replay" aria-label="保存结果回放" title="按真实任务顺序播放保存结果，不会重新调用模型">
-              <div aria-live="polite"><span>保存结果回放</span><strong>{replayVisible.length} / {visible.length}</strong></div>
-              <progress max={Math.max(visible.length, 1)} value={replayVisible.length} aria-label="回放进度" />
+              <div aria-live="polite"><span>保存结果回放</span><strong>{displayedReplayCount} / {visible.length}</strong></div>
+              <progress max={Math.max(visible.length, 1)} value={displayedReplayCount} aria-label="回放进度" />
               <div className="analysis-replay-controls">
                 <button
                   type="button"
                   onClick={() => {
+                    setReplayPrimed(true);
                     if (replayCount == null || replayCount >= visible.length)
                       setReplayCount(1);
                     setReplayPlaying(true);
@@ -1335,6 +1324,7 @@ export default function DataAnalysis() {
                   type="button"
                   onClick={() => {
                     if (!visible.length) return;
+                    setReplayPrimed(true);
                     setReplayCount(1);
                     setReplayPlaying(true);
                   }}
@@ -1360,11 +1350,12 @@ export default function DataAnalysis() {
                 <button
                   type="button"
                   onClick={() => {
+                    setReplayPrimed(true);
                     setReplayPlaying(false);
                     setReplayCount(null);
                     setSelectedIndex(visible.at(-1)?.index ?? null);
                   }}
-                  disabled={!visible.length || (replayCount == null && !replayPlaying)}
+                  disabled={!visible.length || (!replayContentDeferred && replayCount == null && !replayPlaying)}
                 >
                   最终结果
                 </button>
@@ -1406,36 +1397,27 @@ export default function DataAnalysis() {
                     <div><dt>{labels.rsi}</dt><dd>{selected.rsi.passed ? "通过" : "未通过"} · {number(selected.rsi.modelRequests)} 次请求</dd></div>
                     <div><dt>本任务 token</dt><dd>{number(selected.baseline.tokens)} → {number(selected.rsi.tokens)}</dd></div>
                   </dl>
-                  <button type="button" onClick={() => setAnalysisView("audit")}>查看报告与真实轨迹</button>
                 </article>
               )}
             </section>
           )}
 
-          {analysisView === "evolution" && isAttribution && (
+          {replayContentDeferred && (
+            <section id={`analysis-view-${analysisView}`} role="tabpanel" className="analysis-replay-empty">
+              <Play size={20} />
+              <strong>等待播放</strong>
+              <span>点击右侧播放，结果将按任务顺序出现</span>
+            </section>
+          )}
+
+          {analysisView === "evolution" && replayPrimed && isAttribution && (
             <section id="analysis-view-evolution" role="tabpanel" className="analysis-section analysis-attribution analysis-view-panel">
-              <header>
-                <div>
-                  <p className="eyebrow">LEARNING ATTRIBUTION</p>
-                  <h2>{attributionTimelineHeading(timelineEntries.length)}</h2>
+              <header className="analysis-evolution-heading">
+                <h2>{attributionTimelineHeading(timelineEntries.length)}</h2>
+                <div aria-label="进化状态图例">
+                  <span>首次复用</span><span>结构修订</span><span>新版本使用</span>
                 </div>
-                <p>
-                  机会标签来自冻结协议。只有保存的实质 diff
-                  和后续运行实际使用，才标为修订与进化证据。
-                </p>
               </header>
-              <div className="analysis-arm-definition" aria-label="实验两臂">
-                <div>
-                  <span>A</span>
-                  <strong>{labels.baseline}</strong>
-                  <small>每次重新规划与编译，不读写跨任务经验</small>
-                </div>
-                <div>
-                  <span>B</span>
-                  <strong>{labels.rsi}</strong>
-                  <small>从空经验开始，只学习此前正常任务</small>
-                </div>
-              </div>
               <ol className="analysis-timeline">
                 {timelineEntries.map((entry) => {
                   const point = "workpackId" in entry ? entry : undefined;
@@ -1445,8 +1427,7 @@ export default function DataAnalysis() {
                           pairId: point.pairId,
                           workpackId: point.workpackId,
                           generatedVersionIds: point.rsi.generatedVersionIds,
-                          generatedMatchVersions:
-                            point.rsi.generatedMatchVersions,
+                          generatedMatchVersions: point.rsi.generatedMatchVersions,
                           usedVersionId: point.rsi.usedVersionId,
                           usedMatchVersion: point.rsi.usedMatchVersion,
                         },
@@ -1459,9 +1440,7 @@ export default function DataAnalysis() {
                         scopedRevisions,
                       )
                     : null;
-                  const memoryActivated = Boolean(
-                    point && point.index === memoryReuseIndex,
-                  );
+                  const memoryActivated = Boolean(point && point.index === memoryReuseIndex);
                   const routineReuse = Boolean(
                     point &&
                     point.index !== 1 &&
@@ -1473,22 +1452,25 @@ export default function DataAnalysis() {
                     !revisionState?.usesMatchingRevision &&
                     (signals?.usedGraph || signals?.usedMatching),
                   );
-                  const evidence = signals
-                    ? ([
-                        signals.createdGraph && "保存 G 版本",
-                        signals.createdMatching && "保存 M 版本",
-                        revisionState?.graphRevision && "G 结构实质修订",
-                        revisionState?.matchingRevision && "M 匹配实质修订",
-                        revisionState?.usesGraphRevision && "后续实际执行修订 G",
-                        revisionState?.usesMatchingRevision && "后续实际使用修订 M",
-                        !revisionState?.usesGraphRevision &&
-                          signals.usedGraph &&
-                          "复用 G 版本",
-                        !revisionState?.usesMatchingRevision &&
-                          signals.usedMatching &&
-                          "复用 M 版本",
-                      ].filter(Boolean) as string[])
-                    : [];
+                  const statusLabel = !point
+                    ? "待运行"
+                    : revisionState?.graphRevision && revisionState?.matchingRevision
+                      ? "图与匹配修订"
+                      : revisionState?.graphRevision
+                        ? "图结构修订"
+                        : revisionState?.matchingRevision
+                          ? "匹配规则修订"
+                          : revisionState?.usesGraphRevision || revisionState?.usesMatchingRevision
+                            ? "使用新版本"
+                            : revisionState?.verifiedLaterUse
+                              ? "已验证使用"
+                              : memoryActivated
+                                ? "首次复用"
+                                : routineReuse
+                                  ? "持续复用"
+                                  : entry.index === 1
+                                    ? "首次完成"
+                                    : "完成";
                   const timelineClassName = [
                     point ? "recorded" : "pending",
                     memoryActivated ? "memory-activated" : "",
@@ -1496,19 +1478,15 @@ export default function DataAnalysis() {
                     revisionState?.graphRevision ? "graph-evolution" : "",
                     revisionState?.matchingRevision ? "matching-evolution" : "",
                     revisionState?.verifiedLaterUse ? "verified-use" : "",
-                    revisionState?.usesGraphRevision ||
-                    revisionState?.usesMatchingRevision
-                      ? "revision-use"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
+                    revisionState?.usesGraphRevision || revisionState?.usesMatchingRevision ? "revision-use" : "",
+                  ].filter(Boolean).join(" ");
                   return (
                     <li
                       key={entry.index}
                       className={timelineClassName}
                       role={point ? "button" : undefined}
                       tabIndex={point ? 0 : undefined}
+                      title={point?.title || entry.title || point?.workpackId}
                       onKeyDown={(event) => {
                         if (point && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault(); setSelectedIndex(point.index);
@@ -1516,37 +1494,9 @@ export default function DataAnalysis() {
                       }}
                       onClick={() => point && setSelectedIndex(point.index)}
                     >
-                      <span className="analysis-timeline-index">
-                        {entry.index}
-                      </span>
-                      <div>
-                        <small>
-                          {entry.opportunity ||
-                            defaultOpportunityChain[entry.index - 1] ||
-                            "任务机会"}
-                        </small>
-                        <strong>
-                          {point?.title || entry.title || point?.workpackId}
-                        </strong>
-                        <p>
-                          {evidence.length
-                            ? evidence.join(" · ")
-                            : point
-                              ? "已保存运行，尚无可主张的 G/M 修订链"
-                              : "待正式运行"}
-                        </p>
-                      </div>
-                      <em>
-                        {memoryActivated
-                          ? "记忆已构建 · 首次复用"
-                          : revisionState?.verifiedLaterUse
-                          ? "已验证使用"
-                          : point
-                            ? point.baseline.runId && point.rsi.runId
-                              ? "已配对"
-                              : "未完成配对"
-                            : "待运行"}
-                      </em>
+                      <span className="analysis-timeline-index">{entry.index}</span>
+                      <strong>{point?.workpackId || `任务 ${entry.index}`}</strong>
+                      <em>{statusLabel}</em>
                     </li>
                   );
                 })}
@@ -1554,45 +1504,26 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {analysisView === "evolution" && points.length > 0 && (
-            <section id={!isAttribution ? "analysis-view-evolution" : undefined} role={!isAttribution ? "tabpanel" : undefined} className="analysis-section analysis-mechanism analysis-mechanism-panel">
-              <Route size={20} />
-              <p className="eyebrow">MECHANISM BOUNDARY</p>
-              <h2>
-                {isAttribution
-                  ? "学习贡献与修订证据"
-                  : `${metadata?.displayName || "该测试组"}展示 G0 形成与 Fast 复用`}
-              </h2>
+          {analysisView === "evolution" && replayPrimed && points.length > 0 && (
+            <section className="analysis-evolution-summary" aria-label="当前进化结果">
+              <Route size={18} />
               {isAttribution ? (
                 <>
-                  <p>
-                    当前保存结果包含 {number(scopeG0)} 个 G 版本、
-                    {number(scopeM0)} 个 M 版本；
-                    {scopeActualGraphUse
-                      ? <>历史图实际执行 {number(scopeActualGraphUse.hits)}/{number(scopeActualGraphUse.attempts)}（{percent(scopeActualGraphUse.rate)}）</>
-                      : <>当前回放前缀有 {number(scopeVersionUses)} 项历史版本选择记录；版本选择不等于严格图执行，执行状态请从“报告与轨迹”审计</>}
-                    ；确认 {graphRevisions.length} 次 G 实质修订、
-                    {matchingRevisions.length} 次 M 实质修订，其中 {usedRevisions.length} 个修订具有后续实际使用记录。
-                  </p>
-                  <dl>
-                    <div><dt>G 修订</dt><dd>{graphRevisions.length}</dd></div>
-                    <div><dt>M 修订</dt><dd>{matchingRevisions.length}</dd></div>
-                    <div><dt>修订后使用</dt><dd>{usedRevisions.length}</dd></div>
-                  </dl>
+                  <span>图执行 <strong>{scopeActualGraphUse ? `${number(scopeActualGraphUse.hits)}/${number(scopeActualGraphUse.attempts)}` : number(scopeVersionUses)}</strong></span>
+                  <span>图修订 <strong>{graphRevisions.length}</strong></span>
+                  <span>匹配修订 <strong>{matchingRevisions.length}</strong></span>
+                  <span>后续使用 <strong>{usedRevisions.length}</strong></span>
                 </>
               ) : (
                 <>
-                  <p>当前回放前缀记录 {number(scopeG0)} 次 G0 形成和 {number(scopeFast)} 次 Fast 使用；没有实质结构 diff 时不称为递归进化。</p>
-                  <dl>
-                    <div><dt>Composition</dt><dd>{number(learning.composition)}</dd></div>
-                    <div><dt>Fallback</dt><dd>{number(learning.fallback)}</dd></div>
-                  </dl>
+                  <span>形成经验 <strong>{number(scopeG0)}</strong></span>
+                  <span>复用 <strong>{number(scopeFast)}</strong></span>
                 </>
               )}
             </section>
           )}
 
-          {analysisView === "cost" && points.length > 0 && (
+          {analysisView === "cost" && replayPrimed && points.length > 0 && (
             <section id="analysis-view-cost" role="tabpanel" className="analysis-section analysis-view-panel">
               <header>
                 <div>
@@ -1717,59 +1648,7 @@ export default function DataAnalysis() {
             </section>
           )}
 
-          {analysisView === "audit" && selected && (
-            <section id="analysis-view-audit" role="tabpanel" className="analysis-focus analysis-view-panel" aria-live="polite">
-              <header>
-                <div><small>当前任务报告</small><h2>第 {selected.index} 项 · {selected.title || selected.workflowType.replaceAll("-", " ")}</h2></div>
-                <span>{scenarioNames[selected.scenario] || selected.scenario} · {selected.opportunity || `R${selected.round || "—"}`}</span>
-              </header>
-              {taskError && <p role="alert">{taskError}</p>}
-              {taskDetail && (
-                <div className="analysis-task-business">
-                  <div className="analysis-task-business-head">
-                    <div><small>业务问题与输入资料</small><strong>{selected.title || selected.workpackId}</strong></div>
-                    <div className="analysis-run-links">{taskDetail.inputs.map((input) => <a key={input.id} href={input.download}><FileDown size={13} />{input.name}</a>)}</div>
-                  </div>
-                  <details className="analysis-request-detail"><summary>查看完整业务问题</summary><p>{taskDetail.task.task}</p></details>
-                  <div className="analysis-report-comparison">
-                    {(["baseline", "rsi"] as const).map((arm) => {
-                      const run = selected[arm];
-                      const url = reportUrl(metadata, arm, run);
-                      const trace = traceUrl(metadata, arm, run);
-                      return (
-                        <article key={arm} className={arm}>
-                          <header><div><small>{labels[arm]}</small><h3>业务报告</h3></div><em>{run.passed ? "结构化校验通过" : run.status || "未通过"}</em></header>
-                          <details className="analysis-report-body">
-                            <summary>查看完整报告正文</summary>
-                            <div>{taskDetail.runs[arm]?.submission?.summary || "未交付业务报告"}</div>
-                          </details>
-                          <dl>
-                            <div><dt>Token</dt><dd>{number(run.tokens)}</dd></div><div><dt>模型请求</dt><dd>{number(run.modelRequests)}</dd></div>
-                            <div><dt>串行时间</dt><dd>{duration(run.durationMs)}</dd></div><div><dt>工具错误</dt><dd>{number(run.toolErrors)}</dd></div>
-                          </dl>
-                          <div className="analysis-run-links">
-                            {url && <a href={url} target="_blank" rel="noreferrer"><FileDown size={13} />业务报告</a>}
-                            {selected.detailUrl && <a href={`${selected.detailUrl}/runs/${arm}/selection`}>结构化清单</a>}
-                            {trace && <a href={trace} target="_blank" rel="noreferrer"><GitBranch size={13} />真实轨迹</a>}
-                          </div>
-                          <details className="analysis-trace-detail"><summary>技术审计：真实工具调用</summary><ol>{taskDetail.runs[arm]?.toolTrace?.map((item, index) => (
-                            <li key={index}>{({ workspace_preview_rows: "读取资料", workspace_map_fields: "选择数据字段", workspace_aggregate_keyed: "按业务对象汇总", workspace_align_keyed: "关联当前资料", workspace_derive_values: "计算派生金额", workspace_compare_values: "检查业务条件", workspace_select_missing: "检查资料完整性", workspace_filter_rows: "筛选业务记录", workspace_sort_rows: "排序业务记录", workspace_publish_report: "提交报告" } as Record<string, string>)[item.tool] || item.tool}{item.executor === "graph" ? " · 图执行" : " · 模型决策"} · {item.ok ? "完成" : "失败，已计入开销"}</li>
-                          ))}</ol></details>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {isAttribution && scopedRevisions.some((revision) => revision.sourcePairId === selected.pairId || revision.sourceTaskId === selected.workpackId) && (
-                <details className="analysis-revision-audit"><summary>技术审计：本任务产生的 G / M diff</summary>
-                  {scopedRevisions.filter((revision) => revision.sourcePairId === selected.pairId || revision.sourceTaskId === selected.workpackId).map((revision, index) => (
-                    <div key={index}><strong>{revision.graphChanged ? "G 结构有实质差异" : "G 未变化"} · {revision.matchingChanged ? "M 匹配描述有实质差异" : "M 未变化"}</strong><span>后续实际使用 {revision.subsequentUses?.length || 0} 次</span><pre>{JSON.stringify(revision, null, 2)}</pre></div>
-                  ))}
-                </details>
-              )}
-            </section>
-          )}
+
 
               </div>
             </div>

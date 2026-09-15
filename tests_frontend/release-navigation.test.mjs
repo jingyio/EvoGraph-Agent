@@ -151,14 +151,13 @@ test('cumulative model cost keeps a per-arm unknown value as a gap', async()=>{
  assert.equal(rows[2].costSavingRate,null);
 });
 
-test('presentation omits maintenance diagnostics and keeps the saved run audit links', async()=>{
+test('presentation removes the report and trajectory view with its extra detail loading', async()=>{
  const { readFile }=await import('node:fs/promises');
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  assert.doesNotMatch(source,/analysis-maintenance/);
  assert.doesNotMatch(source,/analysis-task-ledger/);
- for(const label of ['查看完整报告正文','业务报告','结构化清单','真实轨迹','技术审计：真实工具调用']) {
-  assert.match(source,new RegExp(label));
- }
+ assert.doesNotMatch(source,/taskDetail/);
+ assert.doesNotMatch(source,/查看完整报告正文|结构化清单|技术审计：真实工具调用/);
 });
 
 test('formal cost claims remain gated while candidate observations stay dynamic', async()=>{
@@ -178,6 +177,9 @@ test('analysis keeps the fixed-scope candidate observation without internal requ
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  for(const label of ['模型决策请求分解','读取选择','计算选择','混合决策','报告组合']) assert.doesNotMatch(source,new RegExp(label));
  assert.match(source,/在线 RSI 通过更多任务/);
+ assert.match(source,/同一图执行 Agent 的 \{curve\.length\} 项累计对照/);
+ assert.match(source,/两臂均由 API 校验为 graph_rsi/);
+ assert.match(source,/\{curve\.length\} 项累计变化/);
  assert.match(source,/累计效率变化/);
  assert.match(source,/在线 RSI 在当前固定范围全部通过/);
  assert.match(source,/不代表跨场景普遍收益/);
@@ -242,12 +244,12 @@ test('analysis uses stable cohort ids and avoids fixed experiment counts', async
  assert.doesNotMatch(source,/正式六任务/);
 });
 
-test('filtered graph wording separates version selection from strict graph execution', async()=>{
+test('compact evolution summary keeps the measured graph execution count', async()=>{
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
- assert.match(source,/版本选择不等于严格图执行/);
+ assert.match(source,/scopeActualGraphUse/);
  assert.match(source,/实际图执行/);
- assert.match(source,/真实轨迹/);
- assert.doesNotMatch(source,/当前筛选有 .*项记录使用历史版本，严格图执行状态/);
+ assert.match(source,/<span>图执行 <strong>/);
+ assert.doesNotMatch(source,/版本选择不等于严格图执行/);
 });
 
 
@@ -325,7 +327,7 @@ test('analysis replays saved evidence without presenting it as a live model run'
  assert.match(source,/cumulativePoints\(replayVisible\)/);
  assert.match(source,/window\.clearTimeout\(timer\)/);
  assert.match(source,/memory-activated/);
- assert.match(source,/记忆已构建 · 首次复用/);
+ assert.match(source,/首次复用/);
  assert.doesNotMatch(source,/initialCreation/);
  assert.doesNotMatch(source,/initial-creation/);
  assert.match(css,/li\.memory-activated/);
@@ -336,9 +338,10 @@ test('analysis replays saved evidence without presenting it as a live model run'
 test('analysis presentation is split into logical replay tabs', async()=>{
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  const css=await readFile(new URL('../src/data-analysis.css',import.meta.url),'utf8');
- for(const label of ['业务结果','记忆进化','成本曲线','请求与可靠性','报告与轨迹']) {
+ for(const label of ['业务结果','记忆进化','成本曲线','请求与可靠性']) {
   assert.match(source,new RegExp(`label: "${label}"`));
  }
+ assert.doesNotMatch(source,/label: "报告与轨迹"/);
  assert.match(source,/role="tablist"/);
  assert.match(source,/role="tab"/);
  assert.match(source,/aria-selected=\{analysisView === view\.id\}/);
@@ -346,9 +349,21 @@ test('analysis presentation is split into logical replay tabs', async()=>{
  assert.match(source,/analysisView === "evolution"/);
  assert.match(source,/analysisView === "cost"/);
  assert.match(source,/analysisView === "operations"/);
- assert.match(source,/analysisView === "audit"/);
- assert.match(source,/setAnalysisView\("audit"\)/);
+ assert.match(source,/replayContentDeferred/);
+ assert.match(source,/等待播放/);
+ assert.match(source,/点击右侧播放，结果将按任务顺序出现/);
+ assert.match(source,/setReplayPrimed\(true\)/);
+ assert.doesNotMatch(source,/analysisView === "audit"/);
+ assert.doesNotMatch(source,/setAnalysisView\("audit"\)/);
  assert.match(css,/analysis-view-tabs/);
  assert.match(css,/position:sticky/);
  assert.match(css,/overflow-x:auto/);
+});
+
+
+test('main navigation names the live product page as 实测对比', async()=>{
+ const { readFile }=await import('node:fs/promises');
+ const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');
+ assert.match(app,/href="#home"[^>]*>[\s\S]*?实测对比/);
+ assert.match(app,/数字员工<span>企业运营工作台<\/span>/);
 });

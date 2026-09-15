@@ -91,6 +91,11 @@ class AnalysisDatasets:
         row['source'] = deepcopy(source)
         return row
 
+    def default_descriptor(self) -> dict:
+        """Return the explicitly pinned default dataset without guessing by time."""
+        registry = self._registry()
+        return self._descriptor(self._manifest(registry['defaultDatasetId']))
+
     def list(self) -> dict:
         registry = self._registry()
         return {
@@ -311,6 +316,8 @@ class AnalysisDatasets:
 
     def _arm(self, item: dict, run: dict, arm: str, pricing: dict) -> dict:
         metrics = run.get('metrics') or {}
+        evolution = run.get('evolution') or {}
+        tool_trace = [row for row in (run.get('toolTrace') or []) if isinstance(row, dict)]
         usage = self._token_usage(metrics)
         tokens = self._tokens(metrics)
         latency = self._duration(metrics)
@@ -330,6 +337,12 @@ class AnalysisDatasets:
         return {
             'runId': run_id,
             'status': run.get('status'),
+            'strategy': run.get('strategy'),
+            'learningEnabled': run.get('learningEnabled'),
+            'planningPath': evolution.get('planningPath'),
+            'executionMode': evolution.get('execution'),
+            'graphToolCalls': sum(row.get('executor') == 'graph' for row in tool_trace),
+            'modelToolCalls': sum(row.get('executor') == 'model' for row in tool_trace),
             'passed': (run.get('evaluation') or {}).get('status') == 'passed',
             'tokens': tokens,
             'inputTokens': usage[0] if usage else None,
@@ -476,9 +489,16 @@ class AnalysisDatasets:
             'baselineLatency': True, 'rsiLatency': True,
             'baselineCost': True, 'rsiCost': True,
         }
+        attribution_kind = (manifest.get('attribution') or {}).get('kind')
         for offset, pair in enumerate(item.get('pairs') or []):
             spec = pair.get('spec') or {}
             baseline, rsi = pair.get('no_learning') or {}, pair.get('online_rsi') or {}
+            if attribution_kind == 'cross-task-learning':
+                for arm_name, run in (('no_learning', baseline), ('online_rsi', rsi)):
+                    if run and run.get('strategy') != 'graph_rsi':
+                        raise ValueError(
+                            f'学习归因测试组混入非图执行策略: {spec.get("id") or offset + 1}/{arm_name}'
+                        )
             baseline_metrics, rsi_metrics = baseline.get('metrics') or {}, rsi.get('metrics') or {}
             baseline_tokens, rsi_tokens = self._tokens(baseline_metrics), self._tokens(rsi_metrics)
             baseline_latency, rsi_latency = self._duration(baseline_metrics), self._duration(rsi_metrics)

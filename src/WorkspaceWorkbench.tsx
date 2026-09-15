@@ -11,34 +11,38 @@ type Workspace = { id: string; role: Role; label: string; folderName: string; fo
 type Preview = { table: Table; records: Record<string, unknown>[] };
 type ReportSummary = { id: string; runId: string; taskId: string; title: string; createdAt: string; metrics: Record<string, unknown>; selectedIds: string[]; evidenceCount: number; summary: string };
 type ExportItem = { id: string; name: string; rowCount: number; createdAt: string };
-type TraceEvent = { seq: number; type: string; title: string; detail?: any; elapsedMs?: number; metrics?: Metrics };
+type TraceEvent = { seq: number; at?: string; type: string; title: string; detail?: any; elapsedMs?: number; metrics?: Metrics };
 type Metrics = { modelRequests?: number; toolCalls?: number; inputTokens?: number; outputTokens?: number; durationMs?: number; toolErrors?: number; reportAttempts?: number; runtimeOverheadMs?: number };
-type Run = { id: string; taskId: string; status: string; phase: string; strategy: string; events: TraceEvent[]; metrics: Metrics; evaluation?: { status: string; issues?: string[] }; trajectoryMatch?: unknown; submission?: { groups?: { name: string; reason: string; condition: string; count: number; selectedIds: string[]; evidenceIds: string[] }[]; metrics?: Record<string, unknown>; selectedIds?: string[]; evidenceIds?: string[]; summary?: string; assumptions?: string[] }; graph?: { nodes: GraphNode[]; nodeStates: Record<string, string> }; fallback?: string; evolution?: { planningPath?: string; usedVersionId?: string; generation?: number; matchVersion?: number; trajectoryCompilation?: unknown; currentBindings?: unknown; lookupMs?: number; localCompileMs?: number; bindingMs?: number }; error?: string; learningEnabled?: boolean; pollUrl?: string; reportUrl?: string; reportDownloadUrl?: string; selectionDownloadUrl?: string };
+type Run = { id: string; taskId: string; status: string; phase: string; strategy: string; createdAt?: string; events: TraceEvent[]; metrics: Metrics; evaluation?: { status: string; issues?: string[] }; trajectoryMatch?: unknown; submission?: { groups?: { name: string; reason: string; condition: string; count: number; selectedIds: string[]; evidenceIds: string[] }[]; metrics?: Record<string, unknown>; selectedIds?: string[]; evidenceIds?: string[]; summary?: string; assumptions?: string[] }; graph?: { nodes: GraphNode[]; nodeStates: Record<string, string> }; fallback?: string; evolution?: { planningPath?: string; usedVersionId?: string; generation?: number; matchVersion?: number; trajectoryCompilation?: unknown; currentBindings?: unknown; lookupMs?: number; localCompileMs?: number; bindingMs?: number }; error?: string; learningEnabled?: boolean; learningWriteEnabled?: boolean; pollUrl?: string; reportUrl?: string; reportDownloadUrl?: string; selectionDownloadUrl?: string };
 type GraphNode = { id: string; tool: string; dependencies: string[]; foreach?: unknown; reuse?: unknown; defer?: boolean };
-type RunSummary = { id: string; taskId: string; status: string; phase: string; strategy: string; createdAt: string; metrics: Metrics; evaluation: { status: string } };
+type RunSummary = { id: string; taskId: string; status: string; phase: string; strategy: string; createdAt: string; metrics: Metrics; evaluation: { status: string }; learningEnabled?: boolean; learningWriteEnabled?: boolean; comparison?: { id?: string; arm?: string; providerProfile?: string }; experience?: { mode?: string; releaseId?: string | null; versionCount?: number; readOnly?: boolean } };
 
-const ROLES: { key: Role; label: string; caption: string }[] = [
-  { key: 'finance', label: '财务运营', caption: '订单、支付、退款与异常复核' },
-  { key: 'support', label: '客服运营', caption: '投诉、响应、渠道与跟进队列' },
-  { key: 'tickets', label: '技术工单', caption: '分诊、阻塞、活动与变更比较' },
-];
+const FINANCE_CAPABILITY = { key: 'finance' as const, label: '财务运营', caption: '订单、支付、退款与异常复核' };
 const formatCount = (value?: number) => new Intl.NumberFormat('zh-CN').format(value || 0);
 const formatMs = (value?: number) => value == null ? '—' : value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${Math.round(value)}ms`;
 const totalTokens = (metrics?: Metrics) => (metrics?.inputTokens || 0) + (metrics?.outputTokens || 0);
 const statusName: Record<string, string> = { queued: '排队', running: '处理中', completed: '已完成', limited: '受限停止', cancelled: '已取消', failed: '失败', passed: '硬校验通过', user_review_required: '等待复核', failed_evaluation: '未通过校验' };
 
-function eventTitle(event: TraceEvent): string {
-  if (event.type === 'model_start') return 'LLM 正在判断下一步';
-  if (event.type === 'model') return 'LLM 已返回业务动作';
-  if (event.type === 'plan') return '生成当前数据计划';
-  if (event.type === 'graph_created') return 'RSI 结构化图已建立';
-  if (event.type === 'graph') return `RSI 节点 ${event.title}`;
-  if (event.type === 'binding') return '绑定当前资料参数';
-  if (event.type === 'action') return `调用 ${event.title}`;
-  if (event.type === 'observation') return `获得 ${event.title} 结果`;
-  if (event.type === 'fallback') return '结构不适用，交回模型';
-  if (event.type === 'report_recovery') return '报告校验恢复';
-  if (event.type === 'evaluation') return '结构化成果校验';
+type LaneKind = 'plan' | 'traditional' | 'rsi';
+const laneName = (lane: LaneKind) => lane === 'plan' ? '传统 Plan + ReAct' : lane === 'rsi' ? '图执行 · 在线 RSI' : '图执行 · 不学习';
+
+function eventTitle(event: TraceEvent, lane: LaneKind = 'traditional'): string {
+  if (event.type === 'model_start') {
+    if (event.title === 'match') return lane === 'rsi' ? '正在匹配金融经验' : '正在检查可复用结构';
+    if (event.title === 'plan') return lane === 'plan' ? '正在生成执行计划' : '正在为本次任务重新规划';
+    if (event.title === 'execute') return 'LLM 正在选择下一项业务动作';
+    return 'LLM 请求进行中';
+  }
+  if (event.type === 'model') return event.detail?.decisionStage === 'report_composition' ? 'LLM 已组织业务报告' : 'LLM 已返回业务动作';
+  if (event.type === 'plan') return lane === 'plan' ? '传统执行计划已生成' : '本次数据计划已生成';
+  if (event.type === 'graph_created') return lane === 'rsi' ? '已载入并绑定可复用执行图' : '本次执行图已建立';
+  if (event.type === 'graph') return `${lane === 'rsi' ? '经验图' : '执行图'}节点 ${event.title}`;
+  if (event.type === 'binding') return lane === 'rsi' ? '经验图已绑定本次资料' : '本次资料参数已绑定';
+  if (event.type === 'action') return `调用 ${toolLabel(event.title)}`;
+  if (event.type === 'observation') return `获得 ${toolLabel(event.title)}结果`;
+  if (event.type === 'fallback') return lane === 'rsi' ? '经验覆盖不足，交回模型补齐' : '当前结构不足，交回模型补齐';
+  if (event.type === 'report_recovery') return '业务报告校验恢复';
+  if (event.type === 'evaluation') return '业务成果校验';
   if (event.type === 'finished') return '本次工作已结束';
   return event.title;
 }
@@ -59,7 +63,7 @@ function compactValue(value: unknown): string {
   return String(value);
 }
 
-function eventDetailLines(event: TraceEvent): string[] {
+function eventDetailLines(event: TraceEvent, lane: LaneKind = 'traditional'): string[] {
   const detail = event.detail;
   if (!detail) return [];
   if (event.type === 'model' || event.type === 'model_start') {
@@ -85,11 +89,11 @@ function eventDetailLines(event: TraceEvent): string[] {
     try {
       const argumentsValue = typeof detail.arguments === 'string' ? JSON.parse(detail.arguments) : detail.arguments;
       return [
-        `执行者：${detail.executor === 'graph' ? 'RSI 结构化运行时' : 'LLM 调度'}`,
+        `执行者：${detail.executor === 'graph' ? (lane === 'rsi' ? '在线 RSI 图运行时' : '图执行运行时') : 'LLM 调度'}`,
         ...Object.entries(argumentsValue || {}).slice(0, 6).map(([key, value]) => `${key}：${compactValue(value)}`),
       ];
     } catch {
-      return [`执行者：${detail.executor === 'graph' ? 'RSI 结构化运行时' : 'LLM 调度'}`];
+      return [`执行者：${detail.executor === 'graph' ? (lane === 'rsi' ? '在线 RSI 图运行时' : '图执行运行时') : 'LLM 调度'}`];
     }
   }
   if (event.type === 'observation') {
@@ -113,8 +117,10 @@ function GraphView({ run }: { run: Run }) {
 }
 
 type ComparisonArm = {
+  arm?: 'plan_react' | 'no_learning' | 'online_rsi' | 'graph_rsi';
   runId: string;
   taskId: string;
+  createdAt?: string;
   label: string;
   strategy: 'plan_react' | 'graph_rsi';
   status: string;
@@ -129,6 +135,8 @@ type ComparisonArm = {
   selectionDownloadUrl?: string;
   providerProfile?: 'primary' | 'secondary';
   learningEnabled?: boolean;
+  learningWriteEnabled?: boolean;
+  experience?: { mode?: string; releaseId?: string | null; versionCount?: number; readOnly?: boolean };
   model?: string;
   runDetail?: Run;
 };
@@ -136,7 +144,9 @@ type WorkspaceComparison = {
   id: string;
   taskId: string;
   status: string;
-  executionPolicy: 'strict_serial' | 'parallel_dual_key';
+  executionPolicy: 'strict_serial' | 'parallel_dual_key' | 'parallel_three_arm_two_key';
+  design?: 'plan_react_graph_learning_three_arm' | 'same_graph_runtime_learning_ablation' | 'legacy_plan_react_vs_graph_rsi';
+  knowledgeBase?: { releaseId?: string; datasetId?: string; versionCount?: number; readOnly?: boolean } | null;
   model?: string;
   limits?: { runs: number; models: number; reads: number };
   arms: ComparisonArm[];
@@ -166,8 +176,13 @@ const historyCutoffs = (): Record<string, string> => {
   catch { return {}; }
 };
 
-const comparisonArm = (comparison: WorkspaceComparison | null, strategy: ComparisonArm['strategy']) =>
-  comparison?.arms.find(arm => arm.strategy === strategy) || null;
+const comparisonArm = (comparison: WorkspaceComparison | null, armName: 'plan_react' | 'no_learning' | 'online_rsi') =>
+  comparison?.arms.find(arm => arm.arm === armName) ||
+  comparison?.arms.find(arm => armName === 'plan_react'
+    ? arm.strategy === 'plan_react'
+    : armName === 'no_learning'
+      ? arm.strategy === 'graph_rsi' && arm.learningEnabled === false
+      : arm.strategy === 'graph_rsi' && arm.learningEnabled !== false) || null;
 const armRun = (arm?: ComparisonArm | null): Run | null => arm ? {
   ...arm.runDetail,
   id: arm.runId,
@@ -175,11 +190,13 @@ const armRun = (arm?: ComparisonArm | null): Run | null => arm ? {
   status: arm.status,
   phase: arm.phase || arm.runDetail?.phase || '',
   strategy: arm.strategy,
+  createdAt: arm.createdAt || arm.runDetail?.createdAt,
   events: arm.timeline || arm.runDetail?.events || [],
   metrics: arm.metrics || arm.runDetail?.metrics || {},
   evaluation: arm.evaluation || arm.runDetail?.evaluation,
   submission: arm.submission || arm.runDetail?.submission,
   learningEnabled: arm.learningEnabled ?? arm.runDetail?.learningEnabled,
+  learningWriteEnabled: arm.learningWriteEnabled ?? arm.runDetail?.learningWriteEnabled,
   pollUrl: arm.pollUrl || arm.runDetail?.pollUrl,
   reportUrl: arm.reportUrl || arm.runDetail?.reportUrl,
   reportDownloadUrl: arm.reportDownloadUrl || arm.runDetail?.reportDownloadUrl,
@@ -272,24 +289,24 @@ const firstThreshold = (value: unknown): string => {
 };
 const centsAsBrl = (value: unknown) => typeof value === 'number' ? `R$ ${(value / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
 type StageFact = { label: string; value: string };
-function eventStageLabel(event: TraceEvent): string {
-  if (event.type === 'model_start') return event.title === 'plan' ? '理解任务' : event.title === 'match' ? '匹配历史经验' : event.title === 'execute' ? '选择下一动作' : '模型决策';
+function eventStageLabel(event: TraceEvent, lane: LaneKind = 'traditional'): string {
+  if (event.type === 'model_start') return event.title === 'plan' ? (lane === 'plan' ? '传统规划' : '本次重规划') : event.title === 'match' ? (lane === 'rsi' ? '匹配金融经验' : '检查当前结构') : event.title === 'execute' ? '选择下一动作' : '模型决策';
   if (event.type === 'model') return event.detail?.decisionStage === 'report_composition' ? '组织报告' : '模型决策';
   if (event.type === 'plan') return '形成计划';
   if (event.type === 'graph_created') return '构建执行图';
-  if (event.type === 'graph' || event.type === 'binding') return 'RSI 图执行';
-  if (event.type === 'action') return event.detail?.executor === 'graph' ? 'RSI 自动执行' : '调用业务工具';
+  if (event.type === 'graph' || event.type === 'binding') return lane === 'rsi' ? '经验图执行' : '本次图执行';
+  if (event.type === 'action') return event.detail?.executor === 'graph' ? (lane === 'rsi' ? '经验图自动执行' : '图运行时执行') : '调用业务工具';
   if (event.type === 'observation') return event.detail?.ok === false ? '工具恢复' : '获得当前结果';
   if (event.type === 'evaluation') return '核验成果';
   if (event.type === 'finished') return '保存完成';
   if (event.type === 'report_recovery' || event.type === 'fallback' || event.type === 'read_guard') return '有界恢复';
   return '执行进展';
 }
-function notificationEventTitle(event: TraceEvent): string {
+function notificationEventTitle(event: TraceEvent, lane: LaneKind): string {
   if (event.type === 'action') return toolLabel(event.title);
   if (event.type === 'observation') return event.detail?.ok === false ? `${toolLabel(event.title)}需要恢复` : `${toolLabel(event.title)}已完成`;
-  if (event.type === 'graph') return `RSI 节点已完成 · ${event.title}`;
-  return eventTitle(event);
+  if (event.type === 'graph') return `${lane === 'rsi' ? '经验图' : '执行图'}节点已完成 · ${event.title}`;
+  return eventTitle(event, lane);
 }
 
 function eventStageFacts(event: TraceEvent, run: Run): StageFact[] {
@@ -365,7 +382,7 @@ function LiveStageNotification({
   run,
   active,
 }: {
-  id: 'traditional' | 'rsi';
+  id: LaneKind;
   label: string;
   run: Run | null;
   active: boolean;
@@ -399,10 +416,10 @@ function LiveStageNotification({
   const facts = eventStageFacts(event, shownRun);
   const channel = event.detail?.ok === false ? 'error' : eventChannel(event);
   return <article key={shown.key} className={`workspace-live-notification ${id} ${channel}`} data-event-seq={event.seq}>
-    <div className="workspace-live-notification-icon" aria-hidden="true">{id === 'rsi' ? <Sparkles size={18} /> : <Bot size={18} />}</div>
+    <div className="workspace-live-notification-icon" aria-hidden="true">{id === 'rsi' ? <Sparkles size={18} /> : id === 'plan' ? <FileText size={18} /> : <Bot size={18} />}</div>
     <div className="workspace-live-notification-copy">
-      <header><span>{label}</span><small>{eventStageLabel(event)} · {event.elapsedMs == null ? '刚刚' : formatMs(event.elapsedMs)}</small></header>
-      <strong>{notificationEventTitle(event)}</strong>
+      <header><span>{label}</span><small>{eventStageLabel(event, id)} · {event.elapsedMs == null ? '刚刚' : formatMs(event.elapsedMs)}</small></header>
+      <strong>{notificationEventTitle(event, id)}</strong>
       {facts.length > 0 && <dl>{facts.map((fact, index) => <div key={`${fact.label}-${index}`}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>}
     </div>
     <button type="button" onClick={() => {
@@ -415,19 +432,49 @@ function LiveStageNotification({
 }
 
 function WorkspaceLiveOverlay({
+  planRun,
   traditionalRun,
   rsiRun,
   active,
 }: {
+  planRun: Run | null;
   traditionalRun: Run | null;
   rsiRun: Run | null;
   active: boolean;
 }) {
-  if (!traditionalRun && !rsiRun) return null;
-  return <aside className="workspace-live-overlay" role="status" aria-live="polite" aria-label="双轨实时阶段通知">
-    <LiveStageNotification id="traditional" label="传统 Agent" run={traditionalRun} active={active && activeRun(traditionalRun)} />
-    <LiveStageNotification id="rsi" label="在线 RSI Agent" run={rsiRun} active={active && activeRun(rsiRun)} />
+  if (!planRun && !traditionalRun && !rsiRun) return null;
+  return <aside className="workspace-live-overlay" role="status" aria-live="polite" aria-label="三臂实时阶段通知">
+    <LiveStageNotification id="plan" label="传统 Plan + ReAct" run={planRun} active={active && activeRun(planRun)} />
+    <LiveStageNotification id="traditional" label="图执行 · 不学习" run={traditionalRun} active={active && activeRun(traditionalRun)} />
+    <LiveStageNotification id="rsi" label="图执行 · 在线 RSI（金融经验）" run={rsiRun} active={active && activeRun(rsiRun)} />
   </aside>;
+}
+
+function WorkspaceStageBoard({ lanes }: { lanes: { lane: LaneKind; run: Run | null; waiting: string }[] }) {
+  const anyActive = lanes.some(item => activeRun(item.run));
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    if (!anyActive) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [anyActive]);
+  return <section className="workspace-stage-board" aria-label="三臂真实阶段对照">
+    <header><strong>当前执行阶段</strong></header>
+    <div>{lanes.map(({ lane, run, waiting }) => {
+      const latest = run?.events.at(-1);
+      const eventStarted = latest?.at ? Date.parse(latest.at) : NaN;
+      const waitingMs = activeRun(run) && Number.isFinite(eventStarted) ? Math.max(0, clock - eventStarted) : null;
+      return <article key={lane} className={lane}>
+        <small>{laneName(lane)}</small>
+        <strong>{latest ? notificationEventTitle(latest, lane) : run?.status === 'queued' ? '等待首次请求' : waiting}</strong>
+        <span>{waitingMs != null
+          ? `${eventStageLabel(latest!, lane)} · 已持续 ${formatMs(waitingMs)}`
+          : run
+            ? `${latest ? `${eventStageLabel(latest, lane)} · ` : ''}${statusName[run.status] || run.status}`
+            : '尚未启动'}</span>
+      </article>;
+    })}</div>
+  </section>;
 }
 
 function WorkspaceRunLane({
@@ -436,7 +483,7 @@ function WorkspaceRunLane({
   error,
   waiting,
 }: {
-  arm: 'traditional' | 'rsi';
+  arm: LaneKind;
   run: Run | null;
   error?: string;
   waiting: string;
@@ -448,51 +495,45 @@ function WorkspaceRunLane({
   const report = run?.submission;
   const exports = runExports(run);
   const isRsi = arm === 'rsi';
+  const isPlan = arm === 'plan';
+  const showMetrics = Boolean(run && run.status !== 'queued');
   const learningState = run
-    ? (run as Run & { learningEnabled?: boolean }).learningEnabled === true
-      ? '在线学习已开启'
-      : (run as Run & { learningEnabled?: boolean }).learningEnabled === false
-        ? '在线学习已关闭'
-        : '学习写入状态未返回'
+    ? run.learningWriteEnabled === true
+      ? '经验可读写'
+      : run.learningEnabled === true
+        ? '读取冻结经验，不写入'
+        : run.learningEnabled === false
+          ? '不读取或写入经验'
+          : '经验状态未返回'
     : '等待运行创建';
 
   return <article className={`workspace-agent-lane ${arm}`}>
     <header>
-      <div>
-        <small>{isRsi ? 'ONLINE RSI AGENT' : 'TRADITIONAL AGENT'}</small>
-        <h3>{isRsi ? '在线 RSI Agent' : '传统 Agent'}</h3>
-      </div>
+      <h3>{laneName(arm)}</h3>
       <span className={run?.status === 'completed' ? 'done' : activeRun(run) ? 'active' : error ? 'failed' : ''}>
         {run ? statusName[run.status] || run.status : error ? '启动失败' : waiting}
       </span>
     </header>
 
-    <div className="workspace-agent-metrics">
-      <Metric label="LLM 请求" value={optionalCount(run?.metrics.modelRequests)} hint="真实 provider 请求" />
-      <Metric label="Token" value={optionalTokens(run?.metrics)} hint="输入 + 输出" />
-      <Metric label="工具调用" value={optionalCount(run?.metrics.toolCalls)} hint={run?.metrics.toolErrors == null ? '错误数等待/不可用' : `${formatCount(run.metrics.toolErrors)} 次错误`} />
-      <Metric label="串行耗时" value={run ? formatMs(run.metrics.durationMs) : '等待/不可用'} hint={run?.phase || '端到端'} />
-    </div>
-
-    <div className="workspace-agent-current">
-      <span>{activeRun(run) ? '正在执行' : terminalRun(run) ? '执行已保存' : '等待真实 run'}</span>
-      <strong>{selectedEvent ? eventTitle(selectedEvent) : waiting}</strong>
-      <small>{run ? `${events.length} 个真实事件 · ${run.id}` : '后端创建 run 后开始显示事件'}</small>
-      {isRsi && <em>{learningState}</em>}
-    </div>
+    {showMetrics && <div className="workspace-agent-metrics">
+      <Metric label="LLM 请求" value={optionalCount(run?.metrics.modelRequests)} />
+      <Metric label="Token" value={optionalTokens(run?.metrics)} />
+      <Metric label="工具调用" value={optionalCount(run?.metrics.toolCalls)} />
+      <Metric label="串行耗时" value={run ? formatMs(run.metrics.durationMs) : '等待/不可用'} />
+    </div>}
 
     {error && <p className="workspace-run-error">{error}</p>}
 
-    <details className="workspace-event-history">
-      <summary><span>完整执行记录</span><small>{events.length} 个真实事件 · 点击展开审计</small></summary>
-      <div className="workspace-lane-events" aria-label={`${isRsi ? '在线 RSI Agent' : '传统 Agent'}真实事件`}>
+    {events.length > 0 && <details className="workspace-event-history">
+      <summary><span>完整执行记录</span><small>{events.length} 个真实事件</small></summary>
+      <div className="workspace-lane-events" aria-label={`${laneName(arm)}真实事件`}>
         {events.map(event => <button
           key={event.seq}
           className={`${eventChannel(event)} ${selectedEvent?.seq === event.seq ? 'selected' : ''}`}
           onClick={() => setSelectedEventSeq(event.seq)}
         >
           <i>{eventChannel(event) === 'model' ? 'M' : eventChannel(event) === 'rsi' ? 'R' : eventChannel(event) === 'tool' ? 'T' : 'C'}</i>
-          <span><strong>{eventTitle(event)}</strong><small>{event.elapsedMs == null ? '时间未返回' : formatMs(event.elapsedMs)}</small></span>
+          <span><strong>{eventTitle(event, arm)}</strong><small>{event.elapsedMs == null ? '时间未返回' : formatMs(event.elapsedMs)}</small></span>
           {event.type === 'observation' && event.detail?.ok === false && <em>错误</em>}
         </button>)}
         {!events.length && <p>{error ? '该臂没有可回放事件。' : waiting}</p>}
@@ -501,26 +542,27 @@ function WorkspaceRunLane({
       {selectedEvent && <div className={`workspace-event-detail ${eventChannel(selectedEvent)}`}>
         <header>
           <span>{eventChannel(selectedEvent) === 'model' ? 'LLM' : eventChannel(selectedEvent) === 'rsi' ? 'RSI RUNTIME' : eventChannel(selectedEvent) === 'tool' ? 'TOOL' : 'CONTROL'}</span>
-          <strong>{eventTitle(selectedEvent)}</strong>
+          <strong>{eventTitle(selectedEvent, arm)}</strong>
         </header>
-        {eventDetailLines(selectedEvent).length > 0
-          ? <ul>{eventDetailLines(selectedEvent).map((line, index) => <li key={`${selectedEvent.seq}-${index}`}>{line}</li>)}</ul>
+        {eventDetailLines(selectedEvent, arm).length > 0
+          ? <ul>{eventDetailLines(selectedEvent, arm).map((line, index) => <li key={`${selectedEvent.seq}-${index}`}>{line}</li>)}</ul>
           : <p>该真实事件没有返回额外展示字段。</p>}
       </div>}
-    </details>
+    </details>}
 
-    <details className="workspace-agent-audit">
+    {run && <details className="workspace-agent-audit">
       <summary>技术审计 · 图、参数与完整轨迹</summary>
       {run ? <>
+        <p>Run {run.id} · {events.length} 个真实事件{isRsi ? ` · 金融冻结知识库 · ${learningState}` : isPlan ? ' · 不读取图经验' : ' · 不读取或写入跨任务经验'}</p>
         <GraphView run={run} />
         {Boolean(run.trajectoryMatch || run.evolution?.trajectoryCompilation) && <div className="workspace-trajectory">
           <strong>轨迹来源 · G{run.evolution?.generation ?? '—'} / M{run.evolution?.matchVersion ?? '—'}</strong>
           <pre>{JSON.stringify({ match: run.trajectoryMatch, compilation: run.evolution?.trajectoryCompilation }, null, 2)}</pre>
         </div>}
       </> : <p>等待后端返回运行结构。</p>}
-    </details>
+    </details>}
 
-    <section className="workspace-lane-report">
+    {(report || terminalRun(run)) && <section className="workspace-lane-report">
       <header>
         <div><FileBarChart2 size={17} /><strong>最终业务报告</strong></div>
         <span>{report ? (run?.evaluation?.status === 'passed' ? '结构化校验通过' : run?.evaluation?.status === 'user_review_required' ? '待用户复核' : '已返回，校验未通过') : terminalRun(run) ? '后端未返回报告' : '等待完成'}</span>
@@ -536,7 +578,7 @@ function WorkspaceRunLane({
         </div>
         {exports.length > 0 && <div className="workspace-downloads">{exports.map(item => <a key={item.path} href={item.path}><ArrowDownToLine size={14} />下载清单 · {item.rowCount == null ? '行数未返回' : `${item.rowCount} 行`}</a>)}</div>}
       </> : <p>{terminalRun(run) ? '本次真实 run 已结束，但当前 API 没有返回业务报告。' : '运行完成后在这里显示同 run 的报告正文、下载入口和结构化清单。'}</p>}
-    </section>
+    </section>}
   </article>;
 }
 
@@ -547,11 +589,10 @@ export default function WorkspaceWorkbench() {
   useEffect(() => {
     void api<Workspace[]>('/api/workspaces').then(items => {
       const lastWorkspaceId = window.localStorage.getItem(LAST_WORKSPACE_STORAGE_KEY);
-      const lastWorkspace = items.find(item => item.id === lastWorkspaceId);
+      const lastWorkspace = items.find(item => item.id === lastWorkspaceId && item.role === FINANCE_CAPABILITY.key);
       if (lastWorkspace) void activateWorkspace(lastWorkspace);
     }).catch(() => {});
   }, []);
-  const [role, setRole] = useState<Role>('finance');
   const [tableId, setTableId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [request, setRequest] = useState('');
@@ -566,9 +607,10 @@ export default function WorkspaceWorkbench() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedRole = ROLES.find(item => item.key === role) || ROLES[0];
-  const traditionalArm = comparisonArm(comparison, 'plan_react');
-  const rsiArm = comparisonArm(comparison, 'graph_rsi');
+  const planArm = comparisonArm(comparison, 'plan_react');
+  const traditionalArm = comparisonArm(comparison, 'no_learning');
+  const rsiArm = comparisonArm(comparison, 'online_rsi');
+  const planRun = armRun(planArm);
   const traditionalRun = armRun(traditionalArm);
   const rsiRun = armRun(rsiArm);
   const active = Boolean(busy === 'run' || comparison && ['queued', 'running'].includes(comparison.status));
@@ -580,13 +622,13 @@ export default function WorkspaceWorkbench() {
     area.style.height = `${Math.max(122, area.scrollHeight)}px`;
   }, [request]);
 
-  async function createWorkspace(nextRole: Role, resetDraft = true): Promise<Workspace | null> {
+  async function createWorkspace(resetDraft = true): Promise<Workspace | null> {
     setBusy('workspace'); setError('');
     if (resetDraft) {
       setComparison(null); setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
     }
     try {
-      const item = await api<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ role: nextRole, label: `${ROLES.find(roleItem => roleItem.key === nextRole)?.label || nextRole}工作区` }) });
+      const item = await api<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ role: FINANCE_CAPABILITY.key, label: `${FINANCE_CAPABILITY.label}工作区` }) });
       setWorkspace(item); setTableId(item.tables[0]?.id || ''); setPreview(null); setRuns([]); rememberWorkspace(item.id);
       return item;
     } catch (reason) { setError((reason as Error).message); }
@@ -613,12 +655,13 @@ export default function WorkspaceWorkbench() {
       const task = (workspaceSnapshot || workspace)?.tasks.find(item => item.id === saved.taskId);
       if (task) { setReadyTask(task); setRequest(task.task); }
     } catch (reason) {
-      setError(`无法恢复已保存的双轨执行：${(reason as Error).message}`);
+      setError(`无法恢复已保存的对比执行：${(reason as Error).message}`);
     }
   }
 
   async function activateWorkspace(item: Workspace) {
-    setRole(item.role); setWorkspace(item); setTableId(item.tables[0]?.id || ''); setComparison(null);
+    if (item.role !== FINANCE_CAPABILITY.key) return;
+    setWorkspace(item); setTableId(item.tables[0]?.id || ''); setComparison(null);
     setHistoryCutoff(historyCutoffs()[item.id] || '');
     setReadyTask(null); setRequest(''); setClarifications([]); setCostConfirmed(false); rememberWorkspace(item.id);
     await refreshWorkspace(item.id);
@@ -649,16 +692,11 @@ export default function WorkspaceWorkbench() {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [comparison?.id, comparison?.status, workspace?.id]);
 
-  function chooseRole(nextRole: Role) {
-    if (nextRole === role) return;
-    setRole(nextRole); setWorkspace(null); setTableId(''); setPreview(null); setComparison(null); setRuns([]); setHistoryCutoff('');
-    setReadyTask(null); setClarifications([]); setAnswers({}); setCostConfirmed(false); setRequest('');
-  }
 
   async function addFiles(files: FileList | File[]) {
     const pendingFiles = Array.from(files);
     if (!pendingFiles.length || busy) return;
-    const target = workspace || await createWorkspace(role, false);
+    const target = workspace || await createWorkspace(false);
     if (!target) return;
     setBusy('upload'); setError('');
     try {
@@ -676,7 +714,7 @@ export default function WorkspaceWorkbench() {
   }
 
   async function prepareTask() {
-    const target = workspace || await createWorkspace(role, false);
+    const target = workspace || await createWorkspace(false);
     if (!target) return;
     setBusy('prepare'); setError(''); setClarifications([]);
     try {
@@ -738,16 +776,23 @@ export default function WorkspaceWorkbench() {
   async function openRun(item: RunSummary) {
     try {
       const sameTask = runs.filter(candidate => candidate.taskId === item.taskId);
-      const traditionalSummary = sameTask.find(candidate => candidate.strategy === 'plan_react');
-      const rsiSummary = sameTask.find(candidate => candidate.strategy === 'graph_rsi');
-      const [traditional, rsi] = await Promise.all([
+      const planSummary = sameTask.find(candidate => candidate.comparison?.arm === 'plan_react') ||
+        sameTask.find(candidate => candidate.strategy === 'plan_react');
+      const traditionalSummary = sameTask.find(candidate => candidate.comparison?.arm === 'no_learning') ||
+        sameTask.find(candidate => candidate.strategy === 'graph_rsi' && candidate.learningEnabled === false);
+      const rsiSummary = sameTask.find(candidate => candidate.comparison?.arm === 'online_rsi') ||
+        sameTask.find(candidate => candidate.strategy === 'graph_rsi' && candidate.learningEnabled === true);
+      const [plan, traditional, rsi] = await Promise.all([
+        planSummary ? api<Run>(`/api/workspaces/runs/${planSummary.id}`) : Promise.resolve(null),
         traditionalSummary ? api<Run>(`/api/workspaces/runs/${traditionalSummary.id}`) : Promise.resolve(null),
         rsiSummary ? api<Run>(`/api/workspaces/runs/${rsiSummary.id}`) : Promise.resolve(null),
       ]);
-      const arms: ComparisonArm[] = [traditional, rsi].filter((run): run is Run => Boolean(run)).map(run => ({
+      const arms: ComparisonArm[] = [plan, traditional, rsi].filter((run): run is Run => Boolean(run)).map(run => ({
+        arm: run.learningEnabled ? 'online_rsi' : run.strategy === 'plan_react' ? 'plan_react' : 'no_learning',
         runId: run.id,
         taskId: run.taskId,
-        label: run.strategy === 'graph_rsi' ? 'Graph RSI · 在线学习' : '传统 Agent · 每次规划',
+        createdAt: run.createdAt,
+        label: run.learningEnabled ? '图执行 · 在线 RSI' : run.strategy === 'plan_react' ? '传统 Plan + ReAct' : '图执行 · 不学习',
         strategy: run.strategy as ComparisonArm['strategy'],
         status: run.status,
         phase: run.phase,
@@ -755,6 +800,9 @@ export default function WorkspaceWorkbench() {
         metrics: run.metrics,
         evaluation: run.evaluation,
         submission: run.submission,
+        learningEnabled: run.learningEnabled,
+        learningWriteEnabled: (run as Run & { learningWriteEnabled?: boolean }).learningWriteEnabled,
+        experience: (run as Run & { experience?: ComparisonArm['experience'] }).experience,
         reportUrl: `/api/workspaces/runs/${run.id}/report`,
         reportDownloadUrl: `/api/workspaces/runs/${run.id}/report/download`,
         selectionDownloadUrl: `/api/workspaces/runs/${run.id}/selection/download`,
@@ -768,15 +816,15 @@ export default function WorkspaceWorkbench() {
   function dropped(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }
 
   const visibleWorkspace: Workspace = workspace || {
-    id: '', role, label: `${selectedRole.label}工作区`,
+    id: '', role: FINANCE_CAPABILITY.key, label: `${FINANCE_CAPABILITY.label}工作区`,
     folderName: '首次输入后创建', folderPath: '上传首份资料或提交工作要求后创建本地目录',
     sources: [], tables: [], tasks: [], reports: [], exports: [],
   };
   const columns = preview?.table.fields || [];
 
   return <main className="workspace-shell">
-    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>上传资料，交给两个数字员工对照分析</span></div><div className="workspace-topbar-status"><span><i />本次资料独立保存</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span></div></header>
-    <section className="workspace-header"><div><p>选择业务能力 · 输入问题与附件</p><h1>{selectedRole.label}</h1><span>{selectedRole.caption}</span></div><div className="workspace-role-picker">{ROLES.map(item => <button key={item.key} className={item.key === role ? 'selected' : ''} onClick={() => chooseRole(item.key)} disabled={active || busy === 'workspace'}><small>{item.key === 'finance' ? 'FINANCE' : item.key === 'support' ? 'SUPPORT' : 'ENGINEERING'}</small>{item.label}</button>)}</div></section>
+    <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>上传资料，比较传统规划、图执行与在线 RSI</span></div><div className="workspace-topbar-status"><span><i />本次资料独立保存</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span></div></header>
+    <section className="workspace-header"><div><p>财务复核 · 输入问题与附件</p><h1>{FINANCE_CAPABILITY.label}</h1><span>{FINANCE_CAPABILITY.caption}</span></div><div className="workspace-capability" aria-label="当前业务能力"><small>FINANCE</small><strong>财务复核</strong><span>当前演示固定能力</span></div></section>
 
     {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
     <section className="workspace-layout">
@@ -790,9 +838,9 @@ export default function WorkspaceWorkbench() {
       </aside>
 
       <section className="workspace-center">
-        <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask ? '已准备双轨任务' : '输入业务需求'}</strong></div><span>{active ? '双轨执行中' : readyTask ? '等待启动' : '未运行'}</span></header>
-          <textarea ref={requestArea} value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={active} placeholder={role === 'finance' ? '例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。' : role === 'support' ? '例如：按投诉渠道、企业响应与公开叙述生成跟进队列，并标出待核查项。' : '例如：按未分派、里程碑和活动记录形成工程分诊清单，给出每项依据。'} />
-          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><div className="workspace-dual-protocol"><strong>两个 run 与模型请求并行</strong><span>qwen/qwen3.5-27b · 主 Key / Secondary Key 各承载一臂</span></div><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>我确认启动 2 次真实 Agent 运行并产生模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}开始双轨对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消两臂</button>}</footer>
+        <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask ? '对比任务已准备' : '输入业务需求'}</strong></div><span>{active ? '执行中' : readyTask ? '可启动' : '未运行'}</span></header>
+          <textarea ref={requestArea} value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={active} placeholder="例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。" />
+          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>确认 3 次真实运行及模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}运行三臂对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消运行</button>}</footer>
         </div>
 
         {clarifications.length > 0 && <section className="workspace-clarify"><header><MessageSquareText size={17} /><div><small>需要确认</small><strong>补齐影响结论的资料范围</strong></div></header>{clarifications.map(item => <label key={item.id}><span>{item.question}</span><input value={answers[item.id] || ''} onChange={event => setAnswers(current => ({ ...current, [item.id]: event.target.value }))} placeholder="填写说明或上传相应资料" /></label>)}<button className="workspace-secondary" onClick={() => void prepareTask()} disabled={busy === 'prepare'}><RefreshCw size={14} />提交确认</button></section>}
@@ -801,16 +849,41 @@ export default function WorkspaceWorkbench() {
 
       </section>
 
-      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次 run</strong></div><button className="workspace-clear-history" onClick={clearHistory} disabled={!runs.length || active} title="清空当前页面的历史记录"><Trash2 size={13} />清空历史记录</button></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); const selected = item.taskId === comparison?.taskId; return <button key={item.id} className={selected ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{item.strategy === 'graph_rsi' ? 'RSI · ' : '传统 · '}{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{optionalTokens(item.metrics)} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始双轨工作后，两臂真实轨迹会保存在这里。</span></div>}</div></aside>
+      <aside className="workspace-history"><header><div><small>工作记录</small><strong>{runs.length} 次 run</strong></div><button className="workspace-clear-history" onClick={clearHistory} disabled={!runs.length || active} title="清空当前页面的历史记录"><Trash2 size={13} />清空历史记录</button></header><div className="workspace-history-list">{runs.map(item => { const task = visibleWorkspace.tasks.find(row => row.id === item.taskId); const selected = item.taskId === comparison?.taskId; return <button key={item.id} className={selected ? 'selected' : ''} onClick={() => void openRun(item)}><span className={item.status}><i />{item.learningEnabled ? 'RSI · ' : item.strategy === 'graph_rsi' ? '不学习 · ' : '传统 · '}{statusName[item.status] || item.status}</span><strong>{task?.title || item.taskId.slice(0, 8)}</strong><small>{optionalTokens(item.metrics)} token · {formatMs(item.metrics.durationMs)}</small></button>; })}{!runs.length && <div className="workspace-history-empty"><FileSearch size={18} /><span>开始三臂工作后，三条真实轨迹会保存在这里。</span></div>}</div></aside>
     </section>
 
-    {(comparison || readyTask) && <section className="workspace-comparison workspace-comparison-wide"><header><div><small>同一任务 · 两个真实 RUN</small><h2>传统 Agent 与在线 RSI Agent</h2></div><p>两臂读取同一任务和附件，均使用 qwen/qwen3.5-27b；主 Key 与 Secondary Key 并行执行。页面只展示后端保存的状态、事件、用量与报告。</p></header>
-      <div className="workspace-comparison-task" aria-label="本次完整问题"><small>本次完整问题</small><p>{readyTask?.task || request || '当前历史任务未返回完整题面。'}</p></div>
-      <div className="workspace-agent-grid">
-        <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={comparison ? (traditionalArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回传统 run') : '等待点击启动'} />
-        <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={comparison ? (rsiArm?.status === 'queued' ? '已创建，等待模型槽' : '后端未返回 RSI run') : '等待点击启动'} />
+    {(comparison || readyTask) && <section className="workspace-comparison workspace-comparison-wide"><header><div><small>同题 · 同附件 · 同模型</small><h2>三种 Agent 实测对比</h2></div></header>
+      <div className="workspace-method-contrast" aria-label="传统规划、图执行不学习与在线 RSI 方法差异">
+        <article className="plan"><div><span>A</span><strong>传统 Plan + ReAct</strong></div><p>模型逐步规划并执行。</p></article>
+        <article className="traditional"><div><span>B</span><strong>图执行 · 不学习</strong></div><p>每次重新规划，不读取经验。</p></article>
+        <article className="rsi"><div><span>C</span><strong>图执行 · 在线 RSI</strong></div><p>复用冻结经验，按当前资料重算。</p></article>
       </div>
+      <div className="workspace-attribution-guide"><span><b>A → B</b> 图运行时与编译方式的差异</span><span><b>B → C</b> 跨任务学习的净贡献</span></div>
+      <details className="workspace-experiment-notes">
+        <summary>实验说明</summary>
+        <div>
+          <p>三臂读取同一题目和附件，使用 qwen/qwen3.5-27b、同一工具和预算。A 用于检验传统 Agent 基线；B 与 C 使用相同图运行时，B 不读写跨任务经验，C 只读金融 12 任务冻结知识库。</p>
+          <dl>
+            <div><dt>并行</dt><dd>三个 run 同时创建；主 Key 承载 A/B，Secondary Key 承载 C</dd></div>
+            <div><dt>知识库</dt><dd>{comparison?.knowledgeBase ? `${comparison.knowledgeBase.versionCount || 0} 个版本 · ${comparison.knowledgeBase.releaseId || 'ID 未返回'} · 只读` : '启动后由后端返回版本和 Release ID'}</dd></div>
+            <div><dt>阶段计时</dt><dd>只按后端真实事件更新，持续时间从当前事件时间戳计算</dd></div>
+          </dl>
+        </div>
+      </details>
+      <div className="workspace-comparison-task" aria-label="本次完整问题"><small>本次完整问题</small><p>{readyTask?.task || request || '当前历史任务未返回完整题面。'}</p></div>
+      {comparison && <>
+        <WorkspaceStageBoard lanes={[
+          { lane: 'plan', run: planRun, waiting: '等待首次请求' },
+          { lane: 'traditional', run: traditionalRun, waiting: '等待首次请求' },
+          { lane: 'rsi', run: rsiRun, waiting: '等待首次请求' },
+        ]} />
+        <div className="workspace-agent-grid">
+          <WorkspaceRunLane arm="plan" run={planRun} waiting={planArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回 Plan + ReAct run'} />
+          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={traditionalArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回不学习 run'} />
+          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={rsiArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回 RSI run'} />
+        </div>
+      </>}
     </section>}
-    <WorkspaceLiveOverlay traditionalRun={traditionalRun} rsiRun={rsiRun} active={active} />
+    <WorkspaceLiveOverlay planRun={planRun} traditionalRun={traditionalRun} rsiRun={rsiRun} active={active} />
   </main>;
 }

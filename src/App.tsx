@@ -34,7 +34,7 @@ export default function App() {
         </a>
         <nav aria-label="主导航">
           <a href="#home" aria-current={page === "home" ? "page" : undefined}>
-            数字员工
+            实测对比
           </a>
           <a
             href="#analysis"

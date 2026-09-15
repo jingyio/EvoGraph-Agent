@@ -1,3 +1,25 @@
+## 2026-09-15 三臂发布解析与精简演示层（最新）
+
+实测在线 RSI 不再在 `backend/app.py` 固定实验 ID。后端从 `releases/analysis-manifest.json.defaultDatasetId` 读取唯一默认数据集，要求其来源为 `attribution`、归因类型为 `cross-task-learning`，随后完整校验实验工件摘要、runtime、资产、协议和任务范围；只有全部任务均为财务场景且对应 `online_rsi/experience.json` 存在时，才把该经验库只读注入 C 臂。返回 DTO 同时携带 `datasetId` 与 `experimentId`，确保实测页和数据分析页使用同一发布上下文。
+
+演示层只保留三张一句话方法卡、A→B/B→C 归因和完整题面。模型、双 Key 分配、知识库身份与计时口径进入默认折叠的“实验说明”；三臂尚未启动时不渲染空指标、空报告和重复等待面板。启动后才显示真实阶段、核心指标、报告和可折叠审计。真实事件仍按800ms轮询，阶段时间来自后端事件时间戳。
+
+验证：Python 259项、前端38项、生产构建和 `git diff --check` 通过；浏览器在1280px宽度下无横向溢出。费用确认保持未勾选，本轮没有产生新的付费模型运行。
+
+## 2026-09-15 实测对比增加传统 Plan + ReAct 参考
+
+`POST /api/workspaces/tasks/{taskId}/comparison-runs` 现在为同一题目和附件同时创建三条真实运行：`plan_react` 传统参考、空经验且禁止读写的 `graph_rsi/no_learning`、只读加载金融12任务冻结知识库的 `graph_rsi/online_rsi`。三臂均固定 `qwen/qwen3.5-27b`、相同工作区工具、报告恢复、预算和输入。A→B用于观察传统规划与图运行时的差异；B→C才隔离跨任务学习贡献，避免把冷启动编译收益误称为RSI学习收益。
+
+实测工作区调度为 `run=3/model=3/read=3`。传统参考与不学习臂使用主Key，在线RSI使用Secondary Key；三条模型请求可以同时进入运行时，本地只读工具也不再由共享 `read=1` 人为排队。该改动只作用于交互演示工作区，不改变正式归因实验的冻结串行/双Key协议。对照DTO声明 `design=plan_react_graph_learning_three_arm`、`executionPolicy=parallel_three_arm_two_key`，并继续兼容此前两臂和旧 `plan_react`/`graph_rsi` 历史记录。
+
+前端增加三臂真实阶段对照，按保存的 `model_start`、匹配、绑定、工具、报告与终态事件显示当前阶段，并用事件时间戳显示该阶段实际持续时间，不生成百分比或模拟进度。弹窗统一为“传统 Plan + ReAct”“图执行 · 不学习”“图执行 · 在线 RSI（金融经验）”，图执行正文不再把不学习臂误称为RSI。
+
+## 2026-09-15 实测对比使用当前金融知识库
+
+`POST /api/workspaces/tasks/{taskId}/comparison-runs` 现在创建两个相同 `graph_rsi` 运行时。`no_learning` 臂使用进程内独立空 `OnlineEvolution`，禁止跨任务读写并从当前任务重新规划和编译；`online_rsi` 臂只读加载实验 `d02f0ecd-8bb5-4359-94be-e7f7233df6a5/online_rsi/experience.json` 的3个冻结版本。两臂通过主Key与Secondary Key并行运行，共享模型、提示、工具、预算和当前输入；B仍对当前附件重新绑定金额、阈值和业务ID。
+
+`TaskRunner.start` 支持显式 `evolution_override` 与独立的 `learningWriteEnabled`。这让B可以读取已学习知识而不把演示任务写回证据库。每个run保存 `comparison.arm`、`experience.mode/releaseId/versionCount/readOnly`；对照DTO声明 `design=same_graph_runtime_learning_ablation` 和知识库身份。旧 `plan_react` vs `graph_rsi` comparison 仍可按历史arm读取，但新实测不再用它生成指标。
+
 ## 2026-09-15 工单独立归因运行线（最新）
 
 最终演示按两个独立证据上下文展示：财务继续读取已完成的12项候选实验 `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`，不重复运行；技术工单使用新的 `tickets_probe` / `tickets_formal`。工单清单在运行前从 `cross-domain-rsi-attribution-v1-48` 精确冻结 `T01–T12`，预检只运行 `T01,T02`。客服及此前跨场景失败完整保留在历史审计，不进入最终主展示。
@@ -40,7 +62,7 @@ Release/Analysis Manifest 仍精确绑定金融12任务候选 `d02f0ecd-8bb5-435
 
 ## 2026-09-15 双轨工作区与可续跑 campaign
 
-`POST /api/workspaces/tasks/{taskId}/comparison-runs` 原子创建同一任务的 `plan_react` 与 `graph_rsi` 两个真实 run；前者使用主模型服务凭据且关闭跨任务学习，后者使用 `LLM_API_KEY_SECONDARY` 且开启工作区在线学习。两臂共享任务、附件、27B模型、提示、工具、恢复和预算，调度上限为 `run=2/model=2/read=1`，因此模型请求可以真实并行，读取型工具仍串行。`GET /api/workspaces/comparison-runs/{comparisonId}` 返回 `executionPolicy=parallel_dual_key`、模型、limits、provider profile、学习开关，以及两臂保存的timeline、metrics、evaluation、submission和报告链接；不返回凭据。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。
+2026-09-15 早期工作台曾创建 `plan_react` 与 `graph_rsi` 两个真实run；该协议只作为历史comparison兼容读取。随后该两臂消融又被本文顶部的三臂实测替代；旧记录继续按 `run=2/model=2/read=1` 和双Key协议只读恢复。`GET /api/workspaces/comparison-runs/{comparisonId}` 返回design、知识库身份、provider profile、学习/写入开关、timeline、metrics、evaluation、submission和报告链接；不返回凭据。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。
 
 工作台最后一个workspace和未结束comparison仍通过本地引用静默恢复。可见的旧工作区选择器与追问区已移除；资料预览使用默认关闭的原生 `details`。清空历史记录写入workspace级时间cutoff并删除该workspace的comparison恢复引用，只改变浏览器列表视图，不调用删除API，也不改写任何run、报告、轨迹或实验artifact。
 
@@ -255,7 +277,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 前端 `5173` 默认 `#home`，数据分析为 `#analysis`（旧 `#evidence` 兼容跳转）；旧 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>` 统一重定向到历史区域。
 
-`#analysis` 使用一套跨标签共享的保存结果回放状态，并按“业务结果 / 记忆进化 / 成本曲线 / 请求与可靠性 / 报告与轨迹”分开展示。首屏只保留测试组状态、两臂质量、token/请求效率和 G/M 修订后使用；保存结果控制在桌面端位于右侧，成本页三张累计曲线并列。报告页只保留完整题面、两臂完整报告、业务报告/结构化清单/真实轨迹、工具调用和有来源的真实 G/M diff；冻结子簇、逐任务账本、发布后维护诊断、数据限制长列表和模型请求内部分类退出主展示。单场景筛选自动隐藏，任务类型筛选仅在有多个类型时显示；窄屏标签栏局部滚动，页面本身不产生横向溢出。所有内容仍由当前选中的同一分析清单项提供，不改变 Release Manifest 或历史工件。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#analysis` 只读取分析清单固定的一个保存实验，历史 `#experiments` 在 archive 中保留完整控制台。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
+`#analysis` 使用一套跨标签共享的保存结果回放状态，并按“业务结果 / 记忆进化 / 成本曲线 / 请求与可靠性”分开展示。首屏只保留测试组状态、两臂质量、token/请求效率和 G/M 修订后使用；保存结果控制在桌面端位于右侧，成本页三张累计曲线并列。“报告与轨迹”暂时退出演示标签，前端也不再为选中任务额外请求报告详情；原始报告、结构化清单和轨迹 artifact 继续保留在后端与历史审计入口。记忆进化页仅显示任务编号和“首次复用 / 结构修订 / 新版本使用”等核心状态，再以一行汇总真实图执行、G/M 修订及后续使用。进化与成本标签首次进入显示 0 项空态，只有播放或显式选择最终结果后才投影保存数据。冻结子簇、逐任务账本、发布后维护诊断、数据限制长列表和模型请求内部分类退出主展示。单场景筛选自动隐藏，任务类型筛选仅在有多个类型时显示；窄屏标签栏局部滚动，页面本身不产生横向溢出。所有内容仍由当前选中的同一分析清单项提供；学习归因数据若任一臂不是 `graph_rsi`，分析 API 直接拒绝该测试组，不改变 Release Manifest 或历史工件。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#analysis` 只读取分析清单固定的一个保存实验，历史 `#experiments` 在 archive 中保留完整控制台。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
 
 运行与恢复命令、配置字段、持久化位置见 [.codex/state.md](../.codex/state.md)。实验结论见 [EXPERIMENT_STATUS.md](EXPERIMENT_STATUS.md)，不要从截图或旧 README 推断当前性能。
 
