@@ -58,6 +58,15 @@ def two_domain_manifest(tasks, *, probe=False):
     return [deepcopy(row) for scenario in TWO_DOMAIN_SCENARIOS for row in by_scenario[scenario]]
 
 
+def ticket_manifest(tasks, *, probe=False):
+    rows = [deepcopy(row) for row in tasks
+            if row.get('scenario') == 'tickets' and 1 <= int(row.get('scenarioPosition') or 0) <= 12]
+    rows.sort(key=lambda row: int(row.get('scenarioPosition') or 0))
+    if [int(row.get('scenarioPosition') or 0) for row in rows] != list(range(1, 13)):
+        raise ValueError('tickets 任务清单不完整')
+    return rows[:2] if probe else rows
+
+
 def dual_key_provider(api_key):
     def factory(_role):
         return ModelClient(ModelOptions(config.BASE_URL, api_key, MODEL, config.MODEL_TIMEOUT))
@@ -223,8 +232,8 @@ def summarize(item):
         'relativeQualityGate': relative_quality_gate,
         'onlineQualityGapTasks': max(0, arm_summary['no_learning']['passed'] - arm_summary['online_rsi']['passed']),
         'maximumOnlineQualityGapTasks': maximum_quality_gap,
-        'comparativeConclusionAllowed': complete_usage and item.get('mode') in {'cross_domain_formal', 'finance_tickets_formal'},
-        'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal', 'finance_tickets_formal'},
+        'comparativeConclusionAllowed': complete_usage and item.get('mode') in {'cross_domain_formal', 'finance_tickets_formal', 'tickets_formal'},
+        'costConclusionAllowed': quality and item.get('mode') in {'formal', 'cross_domain_formal', 'finance_tickets_formal', 'tickets_formal'},
         'netTokenSaving': (1 - arm_summary['online_rsi']['tokens'] / arm_summary['no_learning']['tokens']) if arm_summary['no_learning']['tokens'] else None,
         'netLatencySaving': (1 - arm_summary['online_rsi']['durationMs'] / arm_summary['no_learning']['durationMs']) if arm_summary['no_learning']['durationMs'] else None,
         'actualGraphUse': {
@@ -290,7 +299,7 @@ class AttributionExperiment:
             raise ValueError(f'归因实验要求执行、规划和组合统一使用 {MODEL}')
 
     async def start(self, mode='smoke'):
-        allowed = {'smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal'}
+        allowed = {'smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal', 'tickets_probe', 'tickets_formal'}
         if mode not in allowed:
             raise ValueError('unknown attribution stage')
         if self.tasks:
@@ -298,11 +307,13 @@ class AttributionExperiment:
         self._validate_model()
         cross_domain = mode.startswith('cross_domain_')
         two_domain = mode.startswith('finance_tickets_')
-        if two_domain and (not config.API_KEY or not config.SECONDARY_API_KEY):
-            raise ValueError('财务与技术工单双臂并行实验需要主、Secondary两个API Key')
-        asset_version = cross_domain_attribution_assets.VERSION if (cross_domain or two_domain) else VERSION
-        asset_builder = cross_domain_attribution_assets.build if (cross_domain or two_domain) else build
-        asset_installer = cross_domain_attribution_assets.install if (cross_domain or two_domain) else install
+        ticket_only = mode.startswith('tickets_')
+        parallel_attribution = two_domain or ticket_only
+        if parallel_attribution and (not config.API_KEY or not config.SECONDARY_API_KEY):
+            raise ValueError('双臂并行归因实验需要主、Secondary两个API Key')
+        asset_version = cross_domain_attribution_assets.VERSION if (cross_domain or parallel_attribution) else VERSION
+        asset_builder = cross_domain_attribution_assets.build if (cross_domain or parallel_attribution) else build
+        asset_installer = cross_domain_attribution_assets.install if (cross_domain or parallel_attribution) else install
         asset = asset_builder(self.root)
         runtime = fingerprint(self.root)
         predecessor = None
@@ -310,8 +321,8 @@ class AttributionExperiment:
             cross_domain_attribution_assets.campaign_plan(asset['tasks'])
             if cross_domain else ([], [], [])
         )
-        formal_mode = ('cross_domain_formal' if cross_domain else 'finance_tickets_formal' if two_domain else 'formal')
-        probe_mode = ('cross_domain_probe' if cross_domain else 'finance_tickets_probe' if two_domain else 'probe')
+        formal_mode = ('cross_domain_formal' if cross_domain else 'finance_tickets_formal' if two_domain else 'tickets_formal' if ticket_only else 'formal')
+        probe_mode = ('cross_domain_probe' if cross_domain else 'finance_tickets_probe' if two_domain else 'tickets_probe' if ticket_only else 'probe')
         if mode == formal_mode and not cross_domain:
             predecessor = next((
                 item for item in reversed(list(self.items.values()))
@@ -321,7 +332,11 @@ class AttributionExperiment:
             ), None)
             if not predecessor:
                 raise ValueError('同一 runtime 与资产的预检未通过，禁止启动正式归因实验')
-        if mode == 'finance_tickets_probe':
+        if mode == 'tickets_probe':
+            manifest = ticket_manifest(asset['tasks'], probe=True)
+        elif mode == 'tickets_formal':
+            manifest = ticket_manifest(asset['tasks'])
+        elif mode == 'finance_tickets_probe':
             manifest = two_domain_manifest(asset['tasks'], probe=True)
         elif mode == 'finance_tickets_formal':
             manifest = two_domain_manifest(asset['tasks'])
@@ -370,7 +385,9 @@ class AttributionExperiment:
                 'selectionPolicy': 'all three stages frozen before execution; later stages never selected from earlier outcomes',
             } if mode == 'cross_domain_formal' else None),
             'protocol': {
-                'id': ('finance-tickets-graph-rsi-learning-attribution-v1-probe' if mode == 'finance_tickets_probe'
+                'id': ('tickets-graph-rsi-learning-attribution-v1-probe' if mode == 'tickets_probe'
+                       else 'tickets-graph-rsi-learning-attribution-v1-12' if mode == 'tickets_formal'
+                       else 'finance-tickets-graph-rsi-learning-attribution-v1-probe' if mode == 'finance_tickets_probe'
                        else 'finance-tickets-graph-rsi-learning-attribution-v1-24' if mode == 'finance_tickets_formal'
                        else 'finance-graph-rsi-error-recovery-probe-v1' if mode == 'repair_probe'
                        else 'cross-domain-graph-rsi-learning-attribution-v2-staged-24' if mode == 'cross_domain_formal'
@@ -383,20 +400,22 @@ class AttributionExperiment:
                 'computeInterface': 'granular-compute-v1',
                 'maxModelRequestsPerRun': config.MAX_STEPS,
                 'runTimeoutSeconds': config.RUN_TIMEOUT,
-                'limits': ({'run': 2, 'model': 2, 'read': 1} if two_domain else {'run': 1, 'model': 1, 'read': 1}),
+                'limits': ({'run': 2, 'model': 2, 'read': 1} if parallel_attribution else {'run': 1, 'model': 1, 'read': 1}),
                 'perArmLimits': {'run': 1, 'model': 1, 'read': 1},
                 'taskCountPerArm': len(manifest),
                 'taskOrder': [row['id'] for row in manifest],
-                'armOrder': ('parallel dual-key per pair; same task order in each arm' if two_domain else 'alternating per pair; same task order in each arm'),
+                'armOrder': ('parallel dual-key per pair; same task order in each arm' if parallel_attribution else 'alternating per pair; same task order in each arm'),
                 'noLearning': 'graph_rsi with an empty isolated library; no cross-task reads or writes; cold plan and graph compile every task',
                 'onlineRsi': 'same graph_rsi runtime from an independent empty library; learns only prior successful train tasks in this experiment',
                 'shared': ['model', 'prompt', 'tools', 'cold planning', 'graph compilation', 'parameter binding', 'report recovery', 'budget', 'inputs'],
                 'judge': 'not_run',
                 'actualGraphUseMinimumRate': (None if mode in {'smoke', 'cross_domain_smoke'} else 0.50),
-                'maximumOnlineQualityGapTasks': (1 if (cross_domain or two_domain) and mode in {'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal'} else None),
+                'maximumOnlineQualityGapTasks': (1 if (cross_domain or parallel_attribution) and mode in {'cross_domain_probe', 'cross_domain_formal', 'finance_tickets_probe', 'finance_tickets_formal', 'tickets_probe', 'tickets_formal'} else None),
                 'actualGraphUsePolicy': 'count only a saved version that is selected and has graph-executor nodes completed; partial reuse qualifies, version load alone does not',
                 'smokePolicy': ('one cold-start pair only; excluded from formal metrics' if mode == 'smoke'
                                 else 'two new-domain capability pairs (support C01 and tickets T01); excluded from learning and formal conclusions' if mode == 'cross_domain_smoke'
+                                else 'ticket cold-start plus first reuse; excluded from formal metrics' if mode == 'tickets_probe'
+                                else 'frozen ticket tasks T01 through T12; dual-key paired execution' if mode == 'tickets_formal'
                                 else 'finance and ticket cold-start plus first reuse; excluded from formal metrics' if mode == 'finance_tickets_probe'
                                 else 'frozen finance 12 plus tickets 12; dual-key paired execution' if mode == 'finance_tickets_formal'
                                 else 'cold-start plus first reuse/rebind pair; excluded from formal metrics' if mode == 'probe'
@@ -404,8 +423,8 @@ class AttributionExperiment:
                                 else 'FX01 creates the parent; FX09 exercises the coverage extension and bounded report recovery; FX10 tests later use; excluded from formal metrics' if mode == 'repair_probe'
                                 else 'one campaign: frozen 12-pair gate followed by 12 frozen demo pairs; optional explicit continuation uses the remaining 24 frozen pairs without rerunning earlier work' if cross_domain
                                 else 'formal frozen twelve-task finance chain'),
-                'failurePolicy': ('retain all attempts; selected-domain formal continues ordinary business failures and stops only on runtime mutation, usage loss or maintenance failure' if (cross_domain or two_domain) else 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure'),
-                'executionPolicy': ('parallel_dual_key' if two_domain else 'strict_serial'),
+                'failurePolicy': ('retain all attempts; selected-domain formal continues ordinary business failures and stops only on runtime mutation, usage loss or maintenance failure' if (cross_domain or parallel_attribution) else 'retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure'),
+                'executionPolicy': ('parallel_dual_key' if parallel_attribution else 'strict_serial'),
             },
         }
         self.items[key] = item
@@ -418,16 +437,16 @@ class AttributionExperiment:
             manager = WorkspaceManager(directory)
             bank = WorkspaceBank(manager)
             runners = {
-                'no_learning': TaskRunner(bank, provider_factory=(dual_key_provider(config.API_KEY) if two_domain else None),
+                'no_learning': TaskRunner(bank, provider_factory=(dual_key_provider(config.API_KEY) if parallel_attribution else None),
                                           run_limit=1, model_limit=1, read_limit=1,
                                           learning_enabled=False, run_directory=directory / 'no_learning' / 'runs',
                                           evolution_path=directory / 'no_learning' / 'experience.json'),
-                'online_rsi': TaskRunner(bank, provider_factory=(dual_key_provider(config.SECONDARY_API_KEY) if two_domain else None),
+                'online_rsi': TaskRunner(bank, provider_factory=(dual_key_provider(config.SECONDARY_API_KEY) if parallel_attribution else None),
                                         run_limit=1, model_limit=1, read_limit=1,
                                         learning_enabled=True, run_directory=directory / 'online_rsi' / 'runs',
                                         evolution_path=directory / 'online_rsi' / 'experience.json'),
             }
-            if two_domain:
+            if parallel_attribution:
                 shared_read_slots = asyncio.Semaphore(1)
                 for runner in runners.values():
                     runner.read_slots = shared_read_slots
@@ -442,7 +461,7 @@ class AttributionExperiment:
                             'workspaceId': workspace['id'], 'taskId': task['id'], 'status': 'running'}
                     item['pairs'].append(pair)
                     self.save(item)
-                    if two_domain:
+                    if parallel_attribution:
                         started_runs = await asyncio.gather(*(
                             runners[arm].start(TaskRunRequest(taskId=task['id'], strategy='graph_rsi'))
                             for arm in ARMS
@@ -481,7 +500,7 @@ class AttributionExperiment:
                         or (pair[arm].get('evolution') or {}).get('maintenanceError')
                         for arm in ARMS
                     )
-                    if mode in {'smoke', 'probe', 'repair_probe', 'cross_domain_smoke', 'finance_tickets_probe'} and any(
+                    if mode in {'smoke', 'probe', 'repair_probe', 'cross_domain_smoke', 'finance_tickets_probe', 'tickets_probe'} and any(
                         pair[arm].get('status') != 'completed' or (pair[arm].get('evaluation') or {}).get('status') != 'passed'
                         for arm in ARMS
                     ):

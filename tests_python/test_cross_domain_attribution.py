@@ -428,8 +428,22 @@ def test_two_domain_manifest_freezes_twelve_finance_and_twelve_ticket_tasks():
     ]
 
 
+def test_ticket_manifest_freezes_twelve_ticket_tasks_only():
+    from backend.attribution_experiment import ticket_manifest
+
+    manifest = assets.build(ROOT)
+    selected = ticket_manifest(manifest['tasks'])
+    assert [row['id'] for row in selected] == [f'T{index:02d}' for index in range(1, 13)]
+    assert {row['scenario'] for row in selected} == {'tickets'}
+    assert [row['id'] for row in ticket_manifest(manifest['tasks'], probe=True)] == ['T01', 'T02']
+
+
+@pytest.mark.parametrize(('mode', 'expected_ids'), [
+    ('finance_tickets_probe', ['F01', 'F02', 'T01', 'T02']),
+    ('tickets_probe', ['T01', 'T02']),
+])
 @pytest.mark.asyncio
-async def test_two_domain_probe_runs_paired_arms_in_parallel_with_isolated_learning(tmp_path, monkeypatch):
+async def test_selected_domain_probe_runs_paired_arms_in_parallel_with_isolated_learning(tmp_path, monkeypatch, mode, expected_ids):
     from backend import attribution_experiment as module
 
     fake_tasks = [
@@ -496,15 +510,17 @@ async def test_two_domain_probe_runs_paired_arms_in_parallel_with_isolated_learn
 
     monkeypatch.setattr(module, 'TaskRunner', Runner)
     experiment = AttributionExperiment(tmp_path)
-    started = await experiment.start('finance_tickets_probe')
+    started = await experiment.start(mode)
     await experiment.tasks[started['id']]
     saved = experiment.get(started['id'])
     assert saved['status'] == 'completed'
     assert saved['protocol']['executionPolicy'] == 'parallel_dual_key'
     assert saved['protocol']['armOrder'].startswith('parallel dual-key')
-    assert [row['id'] for row in saved['manifest']] == ['F01', 'F02', 'T01', 'T02']
+    assert [row['id'] for row in saved['manifest']] == expected_ids
     assert saved['summary']['qualityGate'] is True
-    for task_id in ['F01', 'F02', 'T01', 'T02']:
+    assert saved['protocol']['maximumOnlineQualityGapTasks'] == 1
+    assert all(pair['experienceAfter']['noLearningVersions'] == 0 for pair in saved['pairs'])
+    for task_id in expected_ids:
         starts = [index for index, event in enumerate(events) if event[:2] == ('start', task_id)]
         dones = [index for index, event in enumerate(events) if event[:2] == ('done', task_id)]
         assert len(starts) == 2 and len(dones) == 2

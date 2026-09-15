@@ -1,3 +1,9 @@
+## 2026-09-15 工单独立归因运行线（最新）
+
+最终演示按两个独立证据上下文展示：财务继续读取已完成的12项候选实验 `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`，不重复运行；技术工单使用新的 `tickets_probe` / `tickets_formal`。工单清单在运行前从 `cross-domain-rsi-attribution-v1-48` 精确冻结 `T01–T12`，预检只运行 `T01,T02`。客服及此前跨场景失败完整保留在历史审计，不进入最终主展示。
+
+工单每个 pair 同时启动两臂：不学习臂使用主 Key，在线 RSI 使用 Secondary Key；两臂均固定 `qwen/qwen3.5-27b`、thinking关闭，共享提示、工具、恢复、预算和输入。全局调度 `run=2/model=2/read=1`，单臂内部仍为 `1/1/1`。两臂运行目录和经验文件隔离；不学习臂每项后强制验证版本数仍为0。工单 formal 必须由同 runtime、同资产且两臂全部通过的 `tickets_probe` 解锁。
+
 ## 2026-09-15 财务与技术工单双场景运行线
 
 `AttributionExperiment` 新增 `finance_tickets_probe` 和 `finance_tickets_formal`。它们从已有48项来源资产在运行前固定选择 `F01–F12` 与 `T01–T12`，不读取旧实验结果决定成员；四对预检只取两个场景的第1、2项，验证冷启动和首次复用。客服工件不删除，仍由旧实验深链审计。

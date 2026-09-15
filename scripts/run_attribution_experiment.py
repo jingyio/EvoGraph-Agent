@@ -14,7 +14,7 @@ from backend.attribution_experiment import AttributionExperiment
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=('smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'cross_domain_expand_48', 'finance_tickets_probe', 'finance_tickets_formal'))
+    parser.add_argument('mode', choices=('smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'cross_domain_expand_48', 'finance_tickets_probe', 'finance_tickets_formal', 'tickets_probe', 'tickets_formal'))
     parser.add_argument('--experiment-id')
     parser.add_argument('--root', default=str(REPOSITORY_ROOT))
     args = parser.parse_args()
