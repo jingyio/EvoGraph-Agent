@@ -206,6 +206,214 @@ const runExports = (run?: Run | null) => (run?.events || []).flatMap(event =>
     : [],
 );
 
+const TOOL_LABELS: Record<string, string> = {
+  workspace_list_sources: '确认当前附件',
+  workspace_get_schema: '识别字段结构',
+  workspace_profile_table: '统计资料概况',
+  workspace_preview_rows: '读取业务记录',
+  workspace_reconcile_keyed_sums: '订单级汇总核对',
+  workspace_aggregate_rows: '汇总业务指标',
+  workspace_aggregate_keyed: '按业务键聚合',
+  workspace_compare_values: '检查业务阈值',
+  workspace_filter_rows: '筛选关注记录',
+  workspace_get_row: '读取证据记录',
+  workspace_join_rows: '关联业务资料',
+  workspace_map_fields: '提取当前字段',
+  workspace_select_missing: '识别资料缺失',
+  workspace_align_keyed: '按业务键对齐',
+  workspace_distinct_values: '统计不同取值',
+  workspace_derive_values: '计算派生指标',
+  workspace_publish_report: '生成业务报告',
+  workspace_save_draft: '保存业务草稿',
+};
+const TABLE_LABELS: Record<string, string> = {
+  orders: '订单表', payments: '支付表', items: '商品明细表', customers: '客户表',
+  complaints: '投诉表', narratives: '投诉叙述', responses_dates: '响应日期表',
+  issues: '工单表', activity: '活动记录', labels: '标签表', issue_body: '工单正文',
+};
+const toolLabel = (name?: string) => name ? TOOL_LABELS[name] || name.replace(/^workspace_/, '').replaceAll('_', ' ') : '当前工具';
+const shortVersion = (value: unknown) => typeof value === 'string' && value ? value.slice(0, 8) : '';
+const tableLabel = (value: unknown) => {
+  if (typeof value !== 'string') return '';
+  const matched = Object.keys(TABLE_LABELS).find(name => value === name || value.endsWith(`_${name}`));
+  return matched ? TABLE_LABELS[matched] : value.length > 24 ? `${value.slice(0, 10)}…` : value;
+};
+const parsedEventArguments = (event: TraceEvent): Record<string, any> => {
+  try {
+    const value = typeof event.detail?.arguments === 'string' ? JSON.parse(event.detail.arguments) : event.detail?.arguments;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+};
+const thresholdLabel = (name: unknown, operator: unknown, value: unknown) => {
+  const key = String(name || '').toLowerCase();
+  const businessName = key.includes('installment') ? '分期' : key.includes('diff') || key.includes('amount') || key.includes('cent') ? '金额差异' : String(name || '阈值');
+  const operatorName: Record<string, string> = { abs_gt: '>', gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+  const unit = key.includes('installment') ? '期' : key.includes('diff') || key.includes('amount') || key.includes('cent') ? '分' : '';
+  return `${businessName} ${operatorName[String(operator || '')] || String(operator || '')} ${compactValue(value)}${unit}`.replace(/\s+/g, ' ').trim();
+};
+const firstThreshold = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    for (const item of value) { const found = firstThreshold(item); if (found) return found; }
+    return '';
+  }
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.comparisons)) {
+    const values = record.comparisons.slice(0, 2).map((item: any) => item?.threshold === undefined ? '' : thresholdLabel(item.name || item.leftAlias, item.operator, item.threshold)).filter(Boolean);
+    if (values.length) return values.join(' · ');
+  }
+  if (Array.isArray(record.filters)) {
+    const values = record.filters.slice(0, 2).map((item: any) => item?.value === undefined ? '' : thresholdLabel(item.field, item.operator, item.value)).filter(Boolean);
+    if (values.length) return values.join(' · ');
+  }
+  if (record.threshold !== undefined && ['number', 'string'].includes(typeof record.threshold)) return thresholdLabel(record.name || record.field, record.operator, record.threshold);
+  for (const nested of Object.values(record)) { const found = firstThreshold(nested); if (found) return found; }
+  return '';
+};
+const centsAsBrl = (value: unknown) => typeof value === 'number' ? `R$ ${(value / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
+type StageFact = { label: string; value: string };
+function eventStageLabel(event: TraceEvent): string {
+  if (event.type === 'model_start') return event.title === 'plan' ? '理解任务' : event.title === 'match' ? '匹配历史经验' : event.title === 'execute' ? '选择下一动作' : '模型决策';
+  if (event.type === 'model') return event.detail?.decisionStage === 'report_composition' ? '组织报告' : '模型决策';
+  if (event.type === 'plan') return '形成计划';
+  if (event.type === 'graph_created') return '构建执行图';
+  if (event.type === 'graph' || event.type === 'binding') return 'RSI 图执行';
+  if (event.type === 'action') return event.detail?.executor === 'graph' ? 'RSI 自动执行' : '调用业务工具';
+  if (event.type === 'observation') return event.detail?.ok === false ? '工具恢复' : '获得当前结果';
+  if (event.type === 'evaluation') return '核验成果';
+  if (event.type === 'finished') return '保存完成';
+  if (event.type === 'report_recovery' || event.type === 'fallback' || event.type === 'read_guard') return '有界恢复';
+  return '执行进展';
+}
+function notificationEventTitle(event: TraceEvent): string {
+  if (event.type === 'action') return toolLabel(event.title);
+  if (event.type === 'observation') return event.detail?.ok === false ? `${toolLabel(event.title)}需要恢复` : `${toolLabel(event.title)}已完成`;
+  if (event.type === 'graph') return `RSI 节点已完成 · ${event.title}`;
+  return eventTitle(event);
+}
+
+function eventStageFacts(event: TraceEvent, run: Run): StageFact[] {
+  const facts: StageFact[] = [];
+  const add = (label: string, value: unknown) => {
+    if (value === undefined || value === null || value === '') return;
+    facts.push({ label, value: compactValue(value) });
+  };
+  const detail = event.detail || {};
+  const args = parsedEventArguments(event);
+  if (event.type === 'model_start') {
+    add('模型', String(detail.model || '').replace('qwen/', ''));
+    add('可用动作', Array.isArray(detail.availableTools) ? `${detail.availableTools.length} 项` : '');
+  } else if (event.type === 'model') {
+    add('输入 token', detail.usage?.input != null ? formatCount(detail.usage.input) : '');
+    add('输出 token', detail.usage?.output != null ? formatCount(detail.usage.output) : '');
+    const calls = Array.isArray(detail.toolCalls) ? detail.toolCalls.map((call: any) => toolLabel(call?.function?.name)).filter(Boolean) : [];
+    add('下一动作', calls.length > 1 ? `${calls[0]}等 ${calls.length} 项` : calls[0]);
+  } else if (event.type === 'plan') {
+    const steps = Array.isArray(detail.steps) ? detail.steps : [];
+    add('计划步骤', `${steps.length} 项`);
+    const tables = [...new Set(steps.map((step: any) => TABLE_LABELS[step?.sourceTable] || step?.sourceTable).filter(Boolean))];
+    add('当前资料', tables.join(' · '));
+  } else if (event.type === 'graph_created') {
+    add('图节点', Array.isArray(detail.nodes) ? `${detail.nodes.length} 个` : '');
+    add('执行路径', run.evolution?.usedVersionId ? `复用 G ${shortVersion(run.evolution.usedVersionId)}` : '当前计划编译');
+    add('本地编译', run.evolution?.localCompileMs != null ? formatMs(run.evolution.localCompileMs) : '');
+  } else if (event.type === 'graph') {
+    const selections = Array.isArray(detail) ? detail : [];
+    add('已选择节点', selections.length ? `${selections.length} 个` : '');
+    add('当前工具', selections[0]?.tool ? toolLabel(selections[0].tool) : '');
+  } else if (event.type === 'binding') {
+    add('节点', detail.nodeId);
+    add('当前资料', tableLabel(args.tableId || args.anchorTableId));
+    add('当前阈值', firstThreshold(args));
+    if (!firstThreshold(args)) add('绑定耗时', detail.bindingMs != null ? formatMs(detail.bindingMs) : '');
+  } else if (event.type === 'action') {
+    add('业务动作', toolLabel(event.title));
+    add('当前资料', tableLabel(args.tableId || args.anchorTableId));
+    const threshold = firstThreshold(args);
+    add('当前阈值', threshold);
+    if (!threshold) add('运算', args.operation || (Array.isArray(args.aggregates) ? `${args.aggregates.length} 项聚合` : ''));
+  } else if (event.type === 'observation') {
+    const result = detail.result || {};
+    add(detail.ok === false ? '错误' : '工具结果', detail.ok === false ? detail.error : '成功');
+    add('当前资料', tableLabel(result.tableId));
+    const recordCount = Array.isArray(result.records) ? result.records.length : undefined;
+    const count = result.matchedCount ?? result.anchorCount ?? result.count ?? result.rowCount ?? recordCount;
+    add(result.anchorCount != null ? '复核主体' : '记录数量', count != null ? `${formatCount(count)} 条` : '');
+    add('支付合计', centsAsBrl(result.totals?.payment_sum));
+    add('商品及运费', centsAsBrl(result.totals?.goods_total ?? result.totals?.item_total));
+    add('缺失记录', result.missingAnyCount != null ? `${formatCount(result.missingAnyCount)} 条` : '');
+    add('报告', result.reportId ? '已保存' : '');
+  } else if (event.type === 'evaluation') {
+    add('校验状态', statusName[detail.status] || detail.status);
+    add('问题', Array.isArray(detail.issues) ? `${detail.issues.length} 项` : '');
+  } else if (event.type === 'finished') {
+    add('LLM 请求', `${formatCount(run.metrics.modelRequests)} 次`);
+    add('累计 token', formatCount(totalTokens(run.metrics)));
+    const generated = detail.evolution?.generatedVersionIds?.[0];
+    add(generated ? '新经验版本' : '结果', generated ? `G ${shortVersion(generated)}` : statusName[detail.status] || detail.status);
+  } else if (event.type === 'semantic_constraint' && Array.isArray(detail)) {
+    add('业务口径', detail[0]);
+  } else {
+    eventDetailLines(event).slice(0, 2).forEach((value, index) => add(index ? '当前值' : '状态', value));
+  }
+  return facts.slice(0, 3);
+}
+
+function LiveStageNotification({
+  id,
+  label,
+  run,
+  active,
+}: {
+  id: 'traditional' | 'rsi';
+  label: string;
+  run: Run | null;
+  active: boolean;
+}) {
+  const latest = run?.events.at(-1);
+  const eventKey = latest && run ? `${run.id}:${latest.seq}` : '';
+  const [shown, setShown] = useState<{ key: string; event: TraceEvent; run: Run } | null>(null);
+  const [dismissedKey, setDismissedKey] = useState('');
+  const activeInThisView = useRef(false);
+
+  useEffect(() => {
+    activeInThisView.current = false;
+    setShown(null);
+    setDismissedKey('');
+  }, [run?.id]);
+
+  useEffect(() => {
+    if (active) activeInThisView.current = true;
+    const mayAnnounce = active || activeInThisView.current;
+    if (!mayAnnounce || !latest || !run || !eventKey || eventKey === dismissedKey) return;
+    setShown({ key: eventKey, event: latest, run });
+    const timer = window.setTimeout(() => {
+      setShown(current => current?.key === eventKey ? null : current);
+      if (!active) activeInThisView.current = false;
+    }, 3100);
+    return () => window.clearTimeout(timer);
+  }, [active, eventKey, dismissedKey]);
+
+  if (!shown) return null;
+  const { event, run: shownRun } = shown;
+  const facts = eventStageFacts(event, shownRun);
+  const channel = event.detail?.ok === false ? 'error' : eventChannel(event);
+  return <article key={shown.key} className={`workspace-live-notification ${id} ${channel}`} data-event-seq={event.seq}>
+    <div className="workspace-live-notification-icon" aria-hidden="true">{id === 'rsi' ? <Sparkles size={18} /> : <Bot size={18} />}</div>
+    <div className="workspace-live-notification-copy">
+      <header><span>{label}</span><small>{eventStageLabel(event)} · {event.elapsedMs == null ? '刚刚' : formatMs(event.elapsedMs)}</small></header>
+      <strong>{notificationEventTitle(event)}</strong>
+      {facts.length > 0 && <dl>{facts.map((fact, index) => <div key={`${fact.label}-${index}`}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>}
+    </div>
+    <button type="button" onClick={() => {
+      setDismissedKey(shown.key);
+      setShown(null);
+      if (!active) activeInThisView.current = false;
+    }} aria-label={`关闭${label}阶段通知`}><X size={12} /></button>
+    <i className="workspace-live-notification-progress" aria-hidden="true" />
+  </article>;
+}
+
 function WorkspaceLiveOverlay({
   traditionalRun,
   rsiRun,
@@ -215,52 +423,10 @@ function WorkspaceLiveOverlay({
   rsiRun: Run | null;
   active: boolean;
 }) {
-  const comparisonKey = `${traditionalRun?.id || ''}:${rsiRun?.id || ''}`;
-  const [visible, setVisible] = useState(active);
-  const activePreviously = useRef(active);
-  const previousKey = useRef(comparisonKey);
-
-  useEffect(() => {
-    if (previousKey.current !== comparisonKey) {
-      previousKey.current = comparisonKey;
-      activePreviously.current = active;
-      setVisible(active);
-      return;
-    }
-    if (active) {
-      activePreviously.current = true;
-      setVisible(true);
-      return;
-    }
-    if (!activePreviously.current) {
-      setVisible(false);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setVisible(false);
-      activePreviously.current = false;
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [active, comparisonKey]);
-
-  if (!visible || (!traditionalRun && !rsiRun)) return null;
-  const arms = [
-    { id: 'traditional', label: '传统 Agent', run: traditionalRun },
-    { id: 'rsi', label: '在线 RSI Agent', run: rsiRun },
-  ] as const;
-
-  return <aside className="workspace-live-overlay" role="status" aria-live="polite" aria-label="双轨实时执行弹窗">
-    <button type="button" className="workspace-live-overlay-close" onClick={() => { setVisible(false); activePreviously.current = false; }} aria-label="关闭执行弹窗"><X size={14} /></button>
-    {arms.map(({ id, label, run }) => {
-      const latest = run?.events.at(-1);
-      const lines = latest ? eventDetailLines(latest).slice(0, 2) : [];
-      return <article key={id} className={id}>
-        <header><span>{label}</span><small>{activeRun(run) ? '实时执行中' : '已完成 · 即将收起'}</small></header>
-        <strong>{latest ? eventTitle(latest) : '等待后端返回首个真实事件'}</strong>
-        <p>{run ? `${run.events.length} 个真实事件 · ${optionalCount(run.metrics.modelRequests)} 次 LLM 请求` : '真实 run 正在创建'}</p>
-        {lines.length > 0 && <ul>{lines.map((line, index) => <li key={`${id}-${latest?.seq}-${index}`}>{line}</li>)}</ul>}
-      </article>;
-    })}
+  if (!traditionalRun && !rsiRun) return null;
+  return <aside className="workspace-live-overlay" role="status" aria-live="polite" aria-label="双轨实时阶段通知">
+    <LiveStageNotification id="traditional" label="传统 Agent" run={traditionalRun} active={active && activeRun(traditionalRun)} />
+    <LiveStageNotification id="rsi" label="在线 RSI Agent" run={rsiRun} active={active && activeRun(rsiRun)} />
   </aside>;
 }
 

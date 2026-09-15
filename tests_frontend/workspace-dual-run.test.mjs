@@ -97,17 +97,32 @@ test('paired comparison spans the workspace width and shows the full task once',
   assert.match(css, /\.workspace-comparison-task p\{[^}]*white-space:pre-wrap[^}]*overflow-wrap:anywhere/);
 });
 
-test('live execution uses an auto-dismissing two-arm overlay while history stays collapsed', () => {
+test('live execution uses transient Apple-style stage notifications with real values', () => {
   assert.match(source, /function WorkspaceLiveOverlay/);
+  assert.match(source, /function LiveStageNotification/);
   assert.match(source, /className="workspace-live-overlay" role="status" aria-live="polite"/);
   assert.match(source, /traditionalRun=\{traditionalRun\} rsiRun=\{rsiRun\} active=\{active\}/);
   assert.match(source, /run\?\.events\.at\(-1\)/);
+  assert.match(source, /activeInThisView = useRef\(false\)/);
+  assert.match(source, /const mayAnnounce = active \|\| activeInThisView\.current/);
+  assert.match(source, /active=\{active && activeRun\(traditionalRun\)\}/);
+  assert.match(source, /active=\{active && activeRun\(rsiRun\)\}/);
+  assert.match(source, /if \(!active\) activeInThisView\.current = false/);
+  assert.match(source, /notificationEventTitle\(event\)/);
+  assert.match(source, /if \(event\.type === 'action'\) return toolLabel\(event\.title\)/);
+  assert.match(source, /eventStageFacts\(event, shownRun\)/);
+  assert.match(source, /输入 token/);
+  assert.match(source, /当前阈值/);
+  assert.match(source, /记录数量/);
+  assert.match(source, /新经验版本/);
   assert.match(source, /window\.setTimeout\(\(\) => \{/);
-  assert.match(source, /\}, 3000\)/);
+  assert.match(source, /\}, 3100\)/);
   assert.match(source, /window\.clearTimeout\(timer\)/);
   assert.match(source, /<details className="workspace-event-history">/);
   assert.doesNotMatch(source, /<details className="workspace-event-history" open/);
-  assert.match(css, /\.workspace-live-overlay\{position:fixed/);
-  assert.match(css, /grid-template-columns:1fr 1fr/);
+  assert.match(css, /\.workspace-live-overlay\{position:fixed;top:82px;right:24px/);
+  assert.match(css, /backdrop-filter:blur\(28px\) saturate\(180%\)/);
+  assert.match(css, /@keyframes workspace-notification-cycle/);
+  assert.match(css, /@keyframes workspace-notification-progress/);
   assert.match(css, /\.workspace-event-history>summary/);
 });
