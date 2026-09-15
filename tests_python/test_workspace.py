@@ -735,12 +735,17 @@ async def test_workspace_train_induces_receipts_and_matches_current_table_slots(
     await runner.shutdown()
 
 
-async def test_workspace_delivery_contract_stays_out_of_model_prompt_and_private_validation(tmp_path):
+async def test_workspace_exposes_public_metric_meanings_without_private_validation(tmp_path):
     bank = TaskBank()
     bank.load()
     manager = WorkspaceManager(tmp_path)
     _, public_task = install_workpack(manager, bank, 'finance-cancel-installments-01')
-    internal = manager.task(public_task['id'])
+    internal = manager.tasks[public_task['id']]
+    internal['deliveryContract']['metricDescriptions'] = {
+        name: f'{name} 必须从当前附件的公开字段计算。'
+        for name in internal['privateValidation']['metrics']
+    }
+    public_task = manager.public_task(public_task['id'])
     expected = internal['privateValidation']
     captured = []
 
@@ -776,6 +781,8 @@ async def test_workspace_delivery_contract_stays_out_of_model_prompt_and_private
     contract_json = json.dumps(public_task['deliveryContract'], ensure_ascii=False, sort_keys=True)
     assert contract_json not in model_text
     assert 'requiredTableSlots' not in model_text
+    for description in public_task['deliveryContract']['metricDescriptions'].values():
+        assert description in model_text
     assert run['evaluation']['status'] == 'passed'
     await runner.shutdown()
 
@@ -859,7 +866,7 @@ async def test_workspace_deadline_guard_reserves_completed_scope_for_report(tmp_
     internal = manager.task(public_task['id'])
     expected = internal['privateValidation']
     tables = manager.public_workspace(internal['workspaceId'])['tables']
-    monkeypatch.setattr(runner_module.config, 'RUN_TIMEOUT', .5)
+    monkeypatch.setattr(runner_module.config, 'RUN_TIMEOUT', .6)
     monkeypatch.setattr(runner_module.config, 'MODEL_TIMEOUT', .3)
 
     class DeadlineModel:
@@ -899,6 +906,165 @@ async def test_workspace_deadline_guard_reserves_completed_scope_for_report(tmp_
     assert run['metrics']['deadlineFinalizationGuards'] == 1
     assert not any(trace['tool'] == 'workspace_save_draft' for trace in run['toolTrace'])
     assert any(event['type'] == 'deadline_guard' for event in run['events'])
+    await runner.shutdown()
+
+
+async def test_workspace_does_not_start_model_request_without_provider_deadline_budget(tmp_path, monkeypatch):
+    import backend.task_runner as runner_module
+
+    bank = TaskBank()
+    bank.load()
+    manager = WorkspaceManager(tmp_path)
+    _, public_task = install_workpack(manager, bank, 'support-policy-draft-01')
+    tables = manager.public_workspace(manager.task(public_task['id'])['workspaceId'])['tables']
+    monkeypatch.setattr(runner_module.config, 'RUN_TIMEOUT', .5)
+    monkeypatch.setattr(runner_module.config, 'MODEL_TIMEOUT', .3)
+
+    class DeadlineRejectModel:
+        model = 'deadline-reject-regression'
+        settings = {}
+        calls = 0
+
+        async def complete(self, messages, tools):
+            self.calls += 1
+            assert self.calls == 1
+            await asyncio.sleep(.22)
+            return {
+                'message': {
+                    'role': 'assistant', 'content': '读取完整公开范围。',
+                    'tool_calls': [
+                        {'id': 'preview-' + str(index), 'type': 'function', 'function': {
+                            'name': 'workspace_preview_rows',
+                            'arguments': json.dumps({'tableId': table['id'], 'page': 1, 'pageSize': 200}),
+                        }}
+                        for index, table in enumerate(tables, start=1)
+                    ],
+                },
+                'usage': {'input': 4, 'output': 1}, 'finishReason': 'stop',
+            }
+
+    model = DeadlineRejectModel()
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: model, learning_enabled=False,
+                        run_directory=tmp_path / 'runs', evolution_path=tmp_path / 'experience.json')
+    run = await runner.start(TaskRunRequest(taskId=public_task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'limited'
+    assert run['phase'] == '预算耗尽'
+    assert run['metrics']['modelRequests'] == 1
+    assert run['metrics']['modelProviderAttempts'] == 1
+    assert run['metrics']['modelDeadlineRejects'] == 1
+    assert run['metrics']['usageComplete'] is True
+    assert any(event['type'] == 'model_deadline_reject' for event in run['events'])
+    await runner.shutdown()
+
+
+async def test_workspace_report_only_invalid_tools_terminate_after_one_correction(tmp_path, monkeypatch):
+    bank = TaskBank()
+    bank.load()
+    manager = WorkspaceManager(tmp_path)
+    _, public_task = install_workpack(manager, bank, 'support-policy-draft-01')
+    internal = manager.task(public_task['id'])
+    expected = internal['privateValidation']
+    tables = manager.public_workspace(internal['workspaceId'])['tables']
+    monkeypatch.setattr(TaskRunner, 'canonical_report_evidence', staticmethod(
+        lambda task, tool_name, args, observed: (args, None)
+    ))
+
+    class InvalidFinalizationModel:
+        model = 'invalid-finalization-regression'
+        settings = {}
+        calls = 0
+
+        async def complete(self, messages, tools):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    'message': {
+                        'role': 'assistant', 'content': '读取完整公开范围。',
+                        'tool_calls': [
+                            {'id': 'preview-' + str(index), 'type': 'function', 'function': {
+                                'name': 'workspace_preview_rows',
+                                'arguments': json.dumps({'tableId': table['id'], 'page': 1, 'pageSize': 200}),
+                            }}
+                            for index, table in enumerate(tables, start=1)
+                        ],
+                    },
+                    'usage': {'input': 4, 'output': 1}, 'finishReason': 'stop',
+                }
+            if self.calls == 2:
+                return response('workspace_publish_report', {
+                    'metrics': expected['metrics'], 'selectedIds': expected['selectedIds'],
+                    'evidenceIds': [], 'summary': '证据格式错误用于进入恢复。',
+                })
+            assert {tool.name for tool in tools} == {'workspace_publish_report'}
+            return response('workspace_get_schema', {})
+
+    model = InvalidFinalizationModel()
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: model, learning_enabled=False,
+                        run_directory=tmp_path / 'runs', evolution_path=tmp_path / 'experience.json')
+    run = await runner.start(TaskRunRequest(taskId=public_task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'limited'
+    assert run['phase'] == '终态报告协议已终止'
+    assert run['metrics']['modelRequests'] == 4
+    assert run['metrics']['modelProviderAttempts'] == 4
+    assert run['metrics']['reportOnlyToolViolations'] == 2
+    assert run['metrics']['usageComplete'] is True
+    assert sum(event['type'] == 'report_only_violation' for event in run['events']) == 2
+    assert sum(trace['tool'] == 'workspace_get_schema' for trace in run['toolTrace']) == 1
+    await runner.shutdown()
+
+
+async def test_workspace_budget_guard_reserves_final_model_request_for_report(tmp_path, monkeypatch):
+    import backend.task_runner as runner_module
+
+    bank = TaskBank()
+    bank.load()
+    manager = WorkspaceManager(tmp_path)
+    _, public_task = install_workpack(manager, bank, 'support-policy-draft-01')
+    internal = manager.task(public_task['id'])
+    expected = internal['privateValidation']
+    tables = manager.public_workspace(internal['workspaceId'])['tables']
+    monkeypatch.setattr(runner_module.config, 'MAX_STEPS', 2)
+
+    class BudgetModel:
+        model = 'budget-guard-regression'
+        settings = {}
+
+        async def complete(self, messages, tools):
+            prior_calls = [call for message in messages for call in message.get('tool_calls') or []]
+            if not prior_calls:
+                return {
+                    'message': {
+                        'role': 'assistant', 'content': '读取完整公开范围。',
+                        'tool_calls': [
+                            {'id': 'preview-' + str(index), 'type': 'function', 'function': {
+                                'name': 'workspace_preview_rows',
+                                'arguments': json.dumps({'tableId': table['id'], 'page': 1, 'pageSize': 200}),
+                            }}
+                            for index, table in enumerate(tables, start=1)
+                        ],
+                    },
+                    'usage': {'input': 4, 'output': 1}, 'finishReason': 'stop',
+                }
+            assert {tool.name for tool in tools} == {'workspace_publish_report'}
+            return response('workspace_publish_report', {
+                'metrics': expected['metrics'], 'selectedIds': expected['selectedIds'],
+                'evidenceIds': _evidence_from_messages(messages), 'summary': '在请求预算内完成最终报告。',
+            })
+
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: BudgetModel(), learning_enabled=False,
+                        run_directory=tmp_path / 'runs', evolution_path=tmp_path / 'experience.json')
+    run = await runner.start(TaskRunRequest(taskId=public_task['id'], strategy='react'))
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'completed'
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['modelRequests'] == 2
+    assert run['metrics']['budgetFinalizationGuards'] == 1
+    assert any(event['type'] == 'budget_guard' for event in run['events'])
     await runner.shutdown()
 
 

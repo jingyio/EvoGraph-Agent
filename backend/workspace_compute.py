@@ -52,13 +52,19 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
             'truncated': len(values) > max_rows, **extra,
         }
 
-    def publish_mapped(context, source, rows):
+    def publish_mapped(context, source, rows, restricted_to_keys=None):
         keys = sorted({row['key'] for row in rows})
         evidence = {key: deepcopy(source['evidenceByKey'].get(key, [])) for key in keys}
-        receipt = store(context, {
+        data = {
             'kind': 'mapped_rows', 'rows': deepcopy(rows),
             'columns': deepcopy(source['columns']), 'evidenceByKey': evidence,
-        })
+        }
+        scope = restricted_to_keys
+        if scope is None and 'restrictedToKeys' in source:
+            scope = source['restrictedToKeys']
+        if scope is not None:
+            data['restrictedToKeys'] = sorted(set(scope))
+        receipt = store(context, data)
         return {
             'receiptId': receipt, 'kind': 'mapped_rows', 'rowCount': len(rows),
             'keyCount': len(keys), 'columns': deepcopy(source['columns']),
@@ -172,12 +178,19 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
             allowed = set(selected['perKey'])
         else:
             raise ValueError('键来源必须是 finding、筛选后映射行或键控数值收据')
+        prior_scope = set(source['restrictedToKeys']) if 'restrictedToKeys' in source else None
+        scope = allowed if prior_scope is None else prior_scope & allowed
         if source['kind'] == 'mapped_rows':
-            return publish_mapped(context, source, [row for row in source['rows'] if row['key'] in allowed])
+            return publish_mapped(
+                context, source,
+                [row for row in source['rows'] if row['key'] in allowed],
+                restricted_to_keys=scope,
+            )
         return publish(context, {
             'kind': 'keyed_values', 'columns': deepcopy(source['columns']),
             'perKey': {key: deepcopy(value) for key, value in source['perKey'].items() if key in allowed},
             'evidenceByKey': {key: deepcopy(value) for key, value in source['evidenceByKey'].items() if key in allowed},
+            'restrictedToKeys': sorted(scope),
         })
 
     def count_keyed(args, context):
@@ -185,11 +198,14 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
         counts = {}
         for row in source['rows']:
             counts[row['key']] = counts.get(row['key'], 0) + 1
-        return publish(context, {
+        data = {
             'kind': 'keyed_values', 'columns': [args['alias']],
             'perKey': {key: {args['alias']: value} for key, value in sorted(counts.items())},
             'evidenceByKey': source['evidenceByKey'],
-        })
+        }
+        if 'restrictedToKeys' in source:
+            data['restrictedToKeys'] = deepcopy(source['restrictedToKeys'])
+        return publish(context, data)
 
     def aggregate(args, context):
         source = load(context, args['receiptId'], 'mapped_rows')
@@ -213,10 +229,13 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
                     raise ValueError('聚合字段必须为完整有限数值列，缺失不得按零计算')
                 output[measure['alias']] = {'sum': sum, 'max': max, 'min': min}[measure['operation']](values)
             per_key[key] = output
-        return publish(context, {
+        data = {
             'kind': 'keyed_values', 'columns': aliases,
             'perKey': per_key, 'evidenceByKey': source['evidenceByKey'],
-        })
+        }
+        if 'restrictedToKeys' in source:
+            data['restrictedToKeys'] = deepcopy(source['restrictedToKeys'])
+        return publish(context, data)
 
     def align(args, context):
         anchor = manager.table(workspace_id, args['anchorTableId'])
@@ -229,9 +248,18 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
             key = str(raw_key)
             per_key.setdefault(key, {})
             evidence.setdefault(key, set()).add(f'workspace:{workspace_id}:{row["rowId"]}')
+        anchor_keys = set(per_key)
         columns = []
+        restricted_input = False
         for receipt in args['receiptIds']:
             source = load(context, receipt, 'keyed_values')
+            if 'restrictedToKeys' in source:
+                restricted_input = True
+                if not anchor_keys <= set(source['restrictedToKeys']):
+                    raise ValueError(
+                        '受限键控收据不能对齐到范围外主表业务键；'
+                        '请使用未限制的全域收据，或保持相同业务键范围'
+                    )
             if set(columns) & set(source['columns']):
                 raise ValueError('关联收据的数值别名不能重叠')
             columns.extend(source['columns'])
@@ -239,11 +267,14 @@ def tools_for(manager, workspace_id, table_schema, max_rows=200):
                 per_key[key].update({name: source['perKey'].get(key, {}).get(name) for name in source['columns']})
                 evidence[key].update(source['evidenceByKey'].get(key, []))
         manager._record_evidence(workspace_id, context, anchor['rows'])
-        return publish(context, {
+        data = {
             'kind': 'keyed_values', 'columns': columns,
             'perKey': dict(sorted(per_key.items())),
             'evidenceByKey': {key: sorted(value) for key, value in evidence.items()},
-        }, anchorRowCount=len(anchor['rows']))
+        }
+        if restricted_input:
+            data['restrictedToKeys'] = sorted(anchor_keys)
+        return publish(context, data, anchorRowCount=len(anchor['rows']))
 
     def derive(args, context):
         data = deepcopy(load(context, args['receiptId'], 'keyed_values'))

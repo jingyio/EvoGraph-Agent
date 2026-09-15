@@ -301,7 +301,8 @@ class TaskRunner:
                                 contextDuplicateObservationCompactions=0, contextCompactedCharacters=0, deterministicScopeRecoveryReads=0, deterministicReportResubmits=0,
                                 deterministicFactRecoveryComputes=0, deterministicFactRecoveryFailures=0,
                                 deterministicFactRecoveryReplays=0,
-                                deadlineFinalizationGuards=0,
+                                deadlineFinalizationGuards=0, budgetFinalizationGuards=0, modelDeadlineRejects=0,
+                                reportOnlyToolViolations=0,
                                 semanticConstraintGuards=0, runtimeOverheadMs=0, localComputeCalls=0, localComputeMs=0),
                    phaseMetrics={phase: dict(requests=0, inputTokens=0, outputTokens=0, usageComplete=True) for phase in ['plan', 'composition', 'graph', 'execute', 'match', 'compile']},
                    executionStageMetrics={},
@@ -372,6 +373,7 @@ class TaskRunner:
         report_recovery, pagination = dict(active=False, attempts=0, signatures=[], kind=None, termination=None), {}
         deterministic_fact_recovery = dict(attempted=False, tools=[], failures=[])
         deadline_finalization = dict(active=False)
+        report_only_tool_violations = 0
         current_intent = task['task']
         trajectory_residual_complete = False
         ratio_condition = bool(re.search(r'(?:\d+(?:\.\d+)?\s*%|百分之|占比|比例)', current_intent))
@@ -386,6 +388,22 @@ class TaskRunner:
                         + json.dumps(required_group_names, ensure_ascii=False)
                         + '。每个原因都必须显式提交；没有命中时仍提交 count=0、selectedIds=[]、evidenceIds=[]。这是交付格式，不规定读取或计算步骤。',
             ))
+
+        metric_descriptions = ((delivery_contract or {}).get('metricDescriptions') or {}) \
+            if isinstance(delivery_contract, dict) else {}
+        if isinstance(metric_descriptions, dict) and metric_descriptions:
+            public_metrics = {
+                str(name): str(description)
+                for name, description in metric_descriptions.items()
+                if isinstance(name, str) and isinstance(description, str) and description.strip()
+            }
+            if public_metrics:
+                messages.append(dict(
+                    role='system',
+                    content='报告指标的公开业务口径如下：'
+                            + json.dumps(public_metrics, ensure_ascii=False, separators=(',', ':'))
+                            + '。这些定义只约束最终业务事实，不规定读取、计算或工具调用顺序；组合条件必须按完整定义计算。',
+                ))
 
         field_value_notes = ((delivery_contract or {}).get('fieldValueNotes')
                              if isinstance(delivery_contract, dict) else None)
@@ -581,6 +599,22 @@ class TaskRunner:
                 metrics['modelQueueMs'] += round((time.monotonic() - wait_start) * 1000)
                 if metrics['modelRequests'] >= config.MAX_STEPS:
                     raise BudgetExceeded('达到模型请求预算（含 Plan 与图选择）')
+                # Do not start a provider request that the outer run deadline
+                # cannot let finish.  Otherwise asyncio.wait_for cancels the
+                # request first, loses its usage, and turns an ordinary task
+                # failure into an infrastructure stop for the whole campaign.
+                deadline_margin_s = min(5.0, max(0.01, config.MODEL_TIMEOUT * 0.1))
+                remaining_s = config.RUN_TIMEOUT - (time.monotonic() - started)
+                required_s = config.MODEL_TIMEOUT + deadline_margin_s
+                if remaining_s <= required_s:
+                    metrics['modelDeadlineRejects'] += 1
+                    event('model_deadline_reject', '剩余总时限不足，未发起新的模型请求', dict(
+                        phase=phase,
+                        remainingMs=round(remaining_s * 1000, 3),
+                        requiredMs=round(required_s * 1000, 3),
+                        providerTimeoutMs=round(config.MODEL_TIMEOUT * 1000, 3),
+                    ))
+                    raise BudgetExceeded('剩余总时限不足以完成新的模型请求')
                 self.active_models += 1
                 self.peaks['models'] = max(self.peaks['models'], self.active_models)
                 metrics['modelRequests'] += 1
@@ -913,7 +947,7 @@ class TaskRunner:
             deterministic_fact_recovery['attempted'] = True
             declarations = (delivery_contract or {}).get('deterministicFactRecovery')
             bindings = task.get('tableBindings') or {}
-            observed_computes = [
+            all_observed_computes = [
                 {
                     'tool': trace.get('tool'),
                     'arguments': deepcopy(trace.get('arguments') or {}),
@@ -921,7 +955,23 @@ class TaskRunner:
                 }
                 for trace in run.get('toolTrace', [])
                 if trace.get('ok') is True and trace.get('effect') == 'compute' and trace.get('result') is not None
-            ][-8:]
+            ]
+            # Keep the recovery context bounded while retaining every final
+            # finding that may define a submitted group.  Replaying only the
+            # last few generic receipts can omit one side of a conjunction
+            # (for example ``narrative present`` AND ``public response
+            # missing``), leaving the model unable to repair the business
+            # facts without another read.
+            findings = [row for row in all_observed_computes
+                        if isinstance(row.get('result'), dict) and row['result'].get('kind') == 'finding']
+            observed_computes = []
+            seen_compute_signatures = set()
+            for row in [*findings[-8:], *all_observed_computes[-8:]]:
+                signature = canonical([row.get('tool'), row.get('arguments'), row.get('result')])
+                if signature in seen_compute_signatures:
+                    continue
+                seen_compute_signatures.add(signature)
+                observed_computes.append(row)
             if observed_computes:
                 metrics['deterministicFactRecoveryReplays'] += len(observed_computes)
                 deterministic_fact_recovery['tools'].extend(row['tool'] for row in observed_computes)
@@ -1057,7 +1107,7 @@ class TaskRunner:
                 return False
 
         async def workflow():
-            nonlocal current_intent, trajectory_residual_complete
+            nonlocal current_intent, trajectory_residual_complete, report_only_tool_violations
             replayed = False
             if task.get('workspaceId') and run['strategy'] == 'graph_rsi' and 'evaluationContext' not in run:
                 replayed = await replay_trajectory()
@@ -1274,11 +1324,21 @@ class TaskRunner:
                 # non-terminal draft or redundant exploration to consume it.
                 # This is shared runtime control, not a report rewrite: the
                 # model still supplies every metric, selection and evidence.
+                # Leave a small orchestration margin beyond the provider's
+                # own timeout.  Otherwise a report request started with
+                # exactly MODEL_TIMEOUT remaining can be cancelled first by
+                # the outer run timeout and lose its final usage record.
+                guard_margin_s = min(10.0, max(0.02, config.MODEL_TIMEOUT * 0.25))
                 deadline_finalization['active'] = (
                     not report_only
                     and not fact_repair
                     and scope_is_complete()
-                    and remaining_ms <= config.MODEL_TIMEOUT * 1000
+                    and remaining_ms <= (config.MODEL_TIMEOUT + guard_margin_s) * 1000
+                )
+                budget_finalization = (
+                    not report_recovery['active']
+                    and scope_is_complete()
+                    and metrics['modelRequests'] >= config.MAX_STEPS - 1
                 )
                 if trajectory_residual_complete and not report_recovery['active']:
                     # A successful match explicitly declared that the selected,
@@ -1292,6 +1352,18 @@ class TaskRunner:
                     event('trajectory_report_boundary', '轨迹已覆盖公开计算义务，进入报告边界', dict(
                         allowedTools=[tool.name for tool in report_tools],
                         qualityGate='deterministic_report_evaluation',
+                    ))
+                elif budget_finalization:
+                    available = report_tools
+                    metrics['budgetFinalizationGuards'] += 1
+                    event('budget_guard', '为终态报告保留最后一次模型请求', dict(
+                        modelRequests=metrics['modelRequests'],
+                        maximumModelRequests=config.MAX_STEPS,
+                        allowedTools=[tool.name for tool in report_tools],
+                    ))
+                    messages.append(dict(
+                        role='user',
+                        content='当前公开资料范围已完整观察，且只剩最后一次模型请求。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，严格按公开指标定义和原因组提交完整结果。',
                     ))
                 elif deadline_finalization['active']:
                     available = report_tools
@@ -1328,10 +1400,33 @@ class TaskRunner:
                     available = [t for t in tools if t.name in names] + [discovery]
                 else:
                     available = tools
+                finalization_tools_only = bool(available) and {tool.name for tool in available}.issubset(report_tool_names)
                 response = await complete(executor, 'execute', messages, available, require_tool=True)
                 message = response['message']
                 messages.append(deepcopy(message))
                 calls = message.get('tool_calls') or []
+                invalid_finalization_calls = [
+                    call['function']['name'] for call in calls
+                    if call.get('function', {}).get('name') not in report_tool_names
+                ] if finalization_tools_only else []
+                if invalid_finalization_calls and not any(
+                    call.get('function', {}).get('name') in report_tool_names for call in calls
+                ):
+                    report_only_tool_violations += 1
+                    metrics['reportOnlyToolViolations'] += 1
+                    detail = dict(
+                        attempt=report_only_tool_violations,
+                        returnedTools=invalid_finalization_calls,
+                        allowedTools=sorted(report_tool_names),
+                    )
+                    event('report_only_violation', '终态报告阶段返回了不可用工具', detail)
+                    if report_only_tool_violations >= 2:
+                        run.update(
+                            status='limited',
+                            phase='终态报告协议已终止',
+                            error='终态报告阶段连续返回非报告工具',
+                        )
+                        return
                 if not calls:
                     if run['evaluation']['status'] not in ['passed', 'user_review_required'] and repair_rounds < 2:
                         repair_rounds += 1
@@ -1489,7 +1584,9 @@ class TaskRunner:
                             recovery_message = ('运行时已按公开交付契约执行一次确定性事实计算，结果已作为本次工具观察提供；请直接使用这些结果修正报告，不要自行改写计算口径。'
                                                 if recovered_facts else '')
                             messages.append(dict(role='user', content='报告未通过的类别：' + json.dumps(issues, ensure_ascii=False) + '。请仅依据当前已观察数据修正 metrics、selectedIds 或 evidenceIds；不要猜测标准答案，也不要重复已成功的相同读取。' + selected_id_instruction() + ' 只有原任务没有要求任何记录清单时才使用空数组。' + recovery_message +
-                                                 ('原任务条件仍然有效：' + ' '.join(constraints) if constraints else '') + contract_message))
+                                                 ('指标公开口径仍然有效：' + json.dumps(metric_descriptions, ensure_ascii=False, separators=(',', ':')) + '。' if metric_descriptions else '')
+                                                 + '每个原因组的 count、selectedIds 与对应 *_count 指标必须来自同一个最终 finding；顶层 selectedIds 再按原因组并集生成。'
+                                                 + ('原任务条件仍然有效：' + ' '.join(constraints) if constraints else '') + contract_message))
                     else:
                         # A successful report is the task's declared artifact.
                         # Do not pay for another model turn merely to hear it

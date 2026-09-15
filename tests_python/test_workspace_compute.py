@@ -372,3 +372,80 @@ async def test_mapped_filter_key_restriction_and_count_compile_for_reuse(tmp_pat
     serialized = json.dumps(proposal['nodes'])
     assert 'receipt_' not in serialized
     assert serialized.count('$output') >= 6
+
+
+async def _ticket_scope_tools(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    workspace = manager.create('tickets')
+    manager.add_source(workspace['id'], 'tickets.json', json.dumps({
+        'issues': [
+            {'issue_id': 'a', 'state': 'open'},
+            {'issue_id': 'b', 'state': 'closed'},
+            {'issue_id': 'c', 'state': 'closed'},
+        ],
+        'activity': [
+            {'issue_id': 'a', 'comments': 2},
+            {'issue_id': 'b', 'comments': 3},
+            {'issue_id': 'c', 'comments': 4},
+        ],
+    }).encode())
+    public, _ = manager.create_task(workspace['id'], '复核当前事项活动。', split='train')
+    task = manager.tasks[public['id']]
+    task['computeInterface'] = 'granular-compute-v1'
+    return manager, task, {tool.name: tool for tool in manager.tools(task['id'])}, ToolContext({'id': 'scope'})
+
+
+@pytest.mark.asyncio
+async def test_restricted_keyed_receipt_rejects_alignment_outside_business_scope(tmp_path):
+    _, task, tools, context = await _ticket_scope_tools(tmp_path)
+    bindings = task['tableBindings']
+    issues = await tools['workspace_map_fields'].execute({
+        'tableId': bindings['issues'], 'keyField': 'issue_id', 'fields': ['state'],
+    }, context)
+    open_issues = await tools['workspace_filter_mapped_rows'].execute({
+        'receiptId': issues['receiptId'],
+        'filters': [{'field': 'state', 'operator': 'equals', 'value': 'open'}],
+    }, context)
+    activity = await tools['workspace_map_fields'].execute({
+        'tableId': bindings['activity'], 'keyField': 'issue_id', 'fields': ['comments'],
+    }, context)
+    counts = await tools['workspace_count_keyed'].execute({
+        'receiptId': activity['receiptId'], 'alias': 'activity_count',
+    }, context)
+    restricted = await tools['workspace_restrict_to_keys'].execute({
+        'receiptId': counts['receiptId'], 'keysReceiptId': open_issues['receiptId'],
+    }, context)
+
+    assert context.computations[restricted['receiptId']]['restrictedToKeys'] == ['a']
+    with pytest.raises(ValueError, match='受限键控收据不能对齐到范围外主表业务键'):
+        await tools['workspace_align_keyed'].execute({
+            'anchorTableId': bindings['issues'], 'keyField': 'issue_id',
+            'receiptIds': [restricted['receiptId']],
+        }, context)
+
+
+@pytest.mark.asyncio
+async def test_unrestricted_filtered_receipt_can_align_to_full_business_scope(tmp_path):
+    _, task, tools, context = await _ticket_scope_tools(tmp_path)
+    bindings = task['tableBindings']
+    activity = await tools['workspace_map_fields'].execute({
+        'tableId': bindings['activity'], 'keyField': 'issue_id', 'fields': ['comments'],
+    }, context)
+    positive = await tools['workspace_filter_mapped_rows'].execute({
+        'receiptId': activity['receiptId'],
+        'filters': [{'field': 'comments', 'operator': 'gt', 'value': 2}],
+    }, context)
+    counts = await tools['workspace_count_keyed'].execute({
+        'receiptId': positive['receiptId'], 'alias': 'positive_activity_count',
+    }, context)
+    aligned = await tools['workspace_align_keyed'].execute({
+        'anchorTableId': bindings['issues'], 'keyField': 'issue_id',
+        'receiptIds': [counts['receiptId']],
+    }, context)
+
+    assert 'restrictedToKeys' not in context.computations[counts['receiptId']]
+    assert aligned['perKey'] == {
+        'a': {'positive_activity_count': None},
+        'b': {'positive_activity_count': 1},
+        'c': {'positive_activity_count': 1},
+    }
