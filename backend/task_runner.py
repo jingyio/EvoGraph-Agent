@@ -282,7 +282,7 @@ class TaskRunner:
                    metrics=dict(modelRequests=0, modelProviderAttempts=0, modelTransportRetries=0, toolCalls=0, toolErrors=0, inputTokens=0, outputTokens=0, reasoningTokens=0,
                                 usageComplete=True, durationMs=0, queueMs=0, modelQueueMs=0, peakReads=0, retrievalCalls=0, controlErrors=0, elidedToolCalls=0, recoveryToolCalls=0,
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
-                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0,
+                                reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0, reportSelectionCanonicalizations=0,
                                 reportEvidenceCoverageGaps=0, reportEvidenceFormatFailures=0, paginationGuardRejects=0,
                                 duplicateReadGuardRejects=0, duplicateComputeGuardRejects=0, observedScopeCompletions=0, contextEvidenceReferenceCompactions=0,
                                 contextDuplicateObservationCompactions=0, contextCompactedCharacters=0, deterministicScopeRecoveryReads=0, deterministicReportResubmits=0,

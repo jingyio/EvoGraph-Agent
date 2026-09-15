@@ -64,6 +64,7 @@ async def test_phase_routing_queue_isolation_and_bounded_concurrency(tmp_path):
         assert run['metrics']['modelRequests'] == 2 and run['metrics']['inputTokens'] == 20
         assert run['models']['distinctModels'] and run['graph']['status'] == 'done'
         assert run['metrics']['toolCalls'] == 2
+        assert run['metrics']['reportSelectionCanonicalizations'] == 0
         assert run['graphSelection'][0]['selection'] == 'local-retrieval-and-contract'
     assert not runner.tasks
     restored = TaskRunner(Bank(tmp_path), lambda role: Model(role, []))
