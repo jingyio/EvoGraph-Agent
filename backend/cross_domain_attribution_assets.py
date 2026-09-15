@@ -187,7 +187,8 @@ def install(manager: WorkspaceManager, root: Path, spec: dict):
         'fieldValueNotes': FIELD_VALUE_NOTES[role],
         'requiredGroupNames': list(spec['requiredGroupNames']),
         'selectedIdField': IDENTIFIERS[role],
-        'selectedIdPolicy': f'Machine selections use current {IDENTIFIERS[role]} values; evidence uses current workspace row references.',
+        'selectedIdPolicy': f'Machine selections use current {IDENTIFIERS[role]} values; top-level selectedIds is the deduplicated union of groups[].selectedIds; evidence uses current workspace row references.',
+        'selectedIdsPolicy': 'union_of_groups',
         'evidenceScope': 'current attachment rows only',
     }
     manager._persist(manager.workspace(workspace['id']))

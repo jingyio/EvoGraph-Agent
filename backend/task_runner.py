@@ -87,6 +87,31 @@ class TaskRunner:
                                 observedEvidenceCount=len(observed))
 
     @staticmethod
+    def canonical_report_selection(task, tool_name, args):
+        """Derive the public top-level worklist from submitted reason groups.
+
+        Some evaluation assets expose the same business selection twice: once
+        partitioned by reason and once as a deduplicated top-level worklist. If
+        the public delivery contract declares that relationship, copying the
+        list is a format concern rather than another model decision.
+        """
+        contract = task.get('deliveryContract') or {}
+        if (not tool_name.endswith('publish_report') or not isinstance(args, dict)
+                or contract.get('selectedIdsPolicy') != 'union_of_groups'):
+            return args, None
+        groups = args.get('groups')
+        if not isinstance(groups, list) or any(not isinstance(group, dict) for group in groups):
+            return args, None
+        selected = sorted({str(item) for group in groups for item in (group.get('selectedIds') or [])})
+        if args.get('selectedIds') == selected:
+            return args, None
+        normalized = deepcopy(args)
+        supplied = normalized.get('selectedIds')
+        normalized['selectedIds'] = selected
+        return normalized, {'policy': 'union_of_groups', 'suppliedSelectedIds': supplied,
+                            'normalizedSelectedIds': selected}
+
+    @staticmethod
     def missing_task_evidence(task, observed):
         """Return task-scope evidence not actually observed in this run."""
         private_validation = {} if 'publicScopeEvidenceIds' in task else task.get('privateValidation') or {}
@@ -684,6 +709,11 @@ class TaskRunner:
                         group['evidenceIds'] = refs
                     if resolved_refs:
                         event('group_evidence_binding', '分组证据按本次唯一观察引用绑定', resolved_refs)
+                args, selection_canonicalization = self.canonical_report_selection(task, name, args)
+                if selection_canonicalization:
+                    metrics['reportSelectionCanonicalizations'] += 1
+                    event('report_selection', '已由原因组规范化顶层业务清单', dict(
+                        tool=name, executor=owner, nodeId=node_id, **selection_canonicalization))
                 args, canonicalization = self.canonical_report_evidence(task, name, args, context.evidence)
                 if canonicalization:
                     metrics['reportEvidenceCanonicalizations'] += 1

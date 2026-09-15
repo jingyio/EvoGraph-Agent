@@ -60,6 +60,7 @@ def test_cross_domain_install_uses_granular_tools_and_public_metric_semantics(
     assert public['scenario'] == scenario
     assert internal['computeInterface'] == 'granular-compute-v1'
     assert contract['selectedIdField'] == selected_field
+    assert contract['selectedIdsPolicy'] == 'union_of_groups'
     assert set(contract['metricDescriptions']) == set(contract['requiredMetricKeys'])
     assert all(isinstance(value, str) and value for value in contract['metricDescriptions'].values())
     assert contract['fieldValueNotes'] == assets.FIELD_VALUE_NOTES[scenario]

@@ -156,6 +156,30 @@ def test_report_evidence_canonicalization_requires_complete_observations():
     assert missing is None
 
 
+def test_report_selection_canonicalization_uses_only_submitted_groups():
+    task = {'deliveryContract': {'selectedIdsPolicy': 'union_of_groups'}}
+    supplied = {
+        'selectedIds': ['all', 'records'],
+        'groups': [
+            {'name': 'a', 'selectedIds': ['two', 'one']},
+            {'name': 'b', 'selectedIds': ['two', 'three']},
+        ],
+        'metrics': {'count': 3},
+    }
+    normalized, detail = TaskRunner.canonical_report_selection(
+        task, 'support_publish_report', supplied,
+    )
+    assert normalized['selectedIds'] == ['one', 'three', 'two']
+    assert normalized['groups'] == supplied['groups']
+    assert normalized['metrics'] == supplied['metrics']
+    assert detail['suppliedSelectedIds'] == ['all', 'records']
+    unchanged, missing = TaskRunner.canonical_report_selection(
+        {}, 'support_publish_report', supplied,
+    )
+    assert unchanged == supplied
+    assert missing is None
+
+
 def test_runtime_overhead_is_a_separate_non_token_ledger():
     run = dict(metrics=dict(bindingMs=.5), evolution=dict(lookupMs=1, localCompileMs=5,
                                                            compositionLocalMs=2, compositionModelWallMs=200,
