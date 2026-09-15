@@ -18,6 +18,9 @@ from .workspace import WorkspaceManager
 VERSION = 'cross-domain-rsi-attribution-v1-48'
 ROLE_LABELS = {'finance': '财务', 'support': '客服', 'tickets': '技术工单'}
 IDENTIFIERS = {'finance': 'order_id', 'support': 'complaint_id', 'tickets': 'issue_id'}
+CAMPAIGN_STAGE1_POSITIONS = frozenset({1, 5, 10, 11})
+CAMPAIGN_STAGE2_POSITIONS = frozenset({2, 6, 12, 16})
+CAMPAIGN_STAGE3_POSITIONS = frozenset(range(1, 17)) - CAMPAIGN_STAGE1_POSITIONS - CAMPAIGN_STAGE2_POSITIONS
 REQUIRED_TABLES = {
     ('finance', 'reconcile'): ('orders', 'payments', 'items'),
     ('finance', 'payment'): ('orders', 'payments'),
@@ -81,6 +84,40 @@ def _opportunity(spec: dict) -> str:
     return 'continued_reuse_or_revision'
 
 
+def campaign_plan(tasks: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    stage1 = [row for row in tasks if row.get('scenarioPosition') in CAMPAIGN_STAGE1_POSITIONS]
+    stage2 = [row for row in tasks if row.get('scenarioPosition') in CAMPAIGN_STAGE2_POSITIONS]
+    stage3 = [row for row in tasks if row.get('scenarioPosition') in CAMPAIGN_STAGE3_POSITIONS]
+    if (len(stage1), len(stage2), len(stage3)) != (12, 12, 24):
+        raise ValueError('跨场景展示 campaign 必须冻结12、12、24对的三个阶段')
+    ordered_ids = [row['id'] for row in stage1 + stage2 + stage3]
+    if len(ordered_ids) != 48 or len(set(ordered_ids)) != 48:
+        raise ValueError('跨场景展示 campaign 必须包含48个唯一任务')
+    stage_ids = [{row['id'] for row in stage} for stage in (stage1, stage2, stage3)]
+    if any(stage_ids[left] & stage_ids[right] for left, right in ((0, 1), (0, 2), (1, 2))):
+        raise ValueError('跨场景展示 campaign 三阶段任务不得重叠')
+    if set().union(*stage_ids) != {row['id'] for row in tasks}:
+        raise ValueError('跨场景展示 campaign 三阶段必须覆盖全部48对任务')
+    selected = stage1 + stage2
+    counts = {scenario: sum(row['scenario'] == scenario for row in selected) for scenario in ROLE_LABELS}
+    if counts != {'finance': 8, 'support': 8, 'tickets': 8}:
+        raise ValueError('跨场景展示 campaign 前24对必须在每个场景冻结8对任务')
+    return stage1, stage2, stage3
+
+
+def campaign_stages(tasks: list[dict]) -> tuple[list[dict], list[dict]]:
+    stage1, stage2, _ = campaign_plan(tasks)
+    return stage1, stage2
+
+
+def verify_task_files(root: Path, spec: dict) -> None:
+    directory = Path(root) / 'artifacts' / VERSION / spec['id']
+    for filename, field in (('inputs.json', 'inputHash'), ('request.txt', 'requestHash'), ('private.json', 'scoreHash')):
+        path = directory / filename
+        if not path.is_file() or _sha(path) != spec.get(field):
+            raise ValueError(f'冻结跨场景资产已变化：{spec["id"]}/{filename}')
+
+
 def build(root: Path) -> dict:
     root = Path(root)
     source = build_source(root)
@@ -106,6 +143,11 @@ def build(root: Path) -> dict:
                 'tickets-activity-triage:8', 'tickets-delivery-readiness:8',
             ],
             'precheckPairs': 12,
+            'demoCampaignPairs': 24,
+            'demoCampaignStage1Positions': sorted(CAMPAIGN_STAGE1_POSITIONS),
+            'demoCampaignStage2Positions': sorted(CAMPAIGN_STAGE2_POSITIONS),
+            'fullCampaignPairs': 48,
+            'fullCampaignStage3Positions': sorted(CAMPAIGN_STAGE3_POSITIONS),
         },
         'tasks': [],
     }
@@ -127,6 +169,9 @@ def build(root: Path) -> dict:
             'scenarioPosition': source_spec.get('position'),
             'position': sequence,
             'opportunity': _opportunity(source_spec),
+            'campaignStage': (1 if source_spec.get('position') in CAMPAIGN_STAGE1_POSITIONS
+                              else 2 if source_spec.get('position') in CAMPAIGN_STAGE2_POSITIONS
+                              else 3),
             'sourceInputHash': source_spec.get('inputHash'),
             'sourceRequestHash': source_spec.get('requestHash'),
             'inputHash': _sha(task_dir / 'inputs.json'),
@@ -137,6 +182,7 @@ def build(root: Path) -> dict:
         })
     if len(manifest['tasks']) != 48:
         raise ValueError('跨场景归因资产必须恰好包含48个冻结train任务')
+    campaign_plan(manifest['tasks'])
     write_private(output / 'manifest.json', manifest)
     write_private(root / 'benchmarks' / f'{VERSION}.json', manifest)
     return manifest
@@ -144,6 +190,7 @@ def build(root: Path) -> dict:
 
 def install(manager: WorkspaceManager, root: Path, spec: dict):
     root = Path(root)
+    verify_task_files(root, spec)
     directory = root / 'artifacts' / VERSION / spec['id']
     role = spec['scenario']
     workspace = manager.create(

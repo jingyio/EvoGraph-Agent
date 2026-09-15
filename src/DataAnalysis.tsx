@@ -21,6 +21,10 @@ import {
   evolutionSignals,
   normalizedRevisionEvidence,
   releaseAllowsCostClaims,
+  revisionIsAuditable,
+  revisionVisualState,
+  scopeAllowsCostClaims,
+  scopedRevisionEvidence,
   type CumulativeMeasures,
   type RevisionEvidence,
 } from "./dataAnalysisMath";
@@ -73,6 +77,7 @@ type Point = {
   opportunity?: string;
   scenario: Scenario;
   workflowType: string;
+  cohortId?: string;
   round?: number;
   status?: string;
   baseline: Arm;
@@ -597,6 +602,12 @@ export function analysisPoints(detail: Detail): Point[] {
           asString(spec.workflowType) ||
           asString(curveRow.workflowType) ||
           "财务复核",
+        cohortId:
+          asString(row.cohortId) ||
+          asString(spec.cohortId) ||
+          asString(spec.cohort) ||
+          asString(curveRow.cohortId) ||
+          undefined,
         round: asNumber(row.round) ?? asNumber(curveRow.round) ?? undefined,
         status: asString(row.status),
         baseline,
@@ -945,37 +956,38 @@ export default function DataAnalysis() {
     () => (detail ? analysisPoints(detail) : []),
     [detail],
   );
-  const timelineEntries = plan.length
-    ? plan.map(
-        (task) => points.find((point) => point.index === task.index) || task,
-      )
-    : points;
   const scenarios = useMemo(
     () => Array.from(new Set(points.map((point) => point.scenario))),
     [points],
   );
-  const workflows = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          points
-            .filter(
-              (point) => scenario === "all" || point.scenario === scenario,
-            )
-            .map((point) => point.workflowType),
-        ),
-      ),
-    [points, scenario],
-  );
+  const workflows = useMemo(() => {
+    const options = new Map<string, string>();
+    points
+      .filter((point) => scenario === "all" || point.scenario === scenario)
+      .forEach((point) =>
+        options.set(point.cohortId || point.workflowType, point.workflowType),
+      );
+    return Array.from(options, ([id, label]) => ({ id, label }));
+  }, [points, scenario]);
   const visible = useMemo(
     () =>
       points.filter(
         (point) =>
           (scenario === "all" || point.scenario === scenario) &&
-          (workflow === "all" || point.workflowType === workflow),
+          (workflow === "all" ||
+            (point.cohortId || point.workflowType) === workflow),
       ),
     [points, scenario, workflow],
   );
+  const visibleIndexes = new Set(visible.map((point) => point.index));
+  const timelineEntries = plan.length
+    ? plan
+        .filter((task) => visibleIndexes.has(task.index))
+        .map(
+          (task) => points.find((point) => point.index === task.index) || task,
+        )
+    : visible;
+  const scopedRevisions = scopedRevisionEvidence(revisions, visible);
   const curve = useMemo(() => cumulativePoints(visible), [visible]);
   const selected =
     curve.find((point) => point.index === selectedIndex) ||
@@ -1121,14 +1133,23 @@ export default function DataAnalysis() {
     0,
   );
   const actualGraphUse = detail?.summary?.actualGraphUse;
-  const graphRevisions = revisions.filter(
-    (revision) => revision.graphChanged === true,
+  const scopeActualGraphUse = visible.length === points.length
+    ? actualGraphUse
+    : null;
+  const scopeVersionUses = visible.filter(
+    (point) => Boolean(point.rsi.usedVersionId),
+  ).length;
+  const graphRevisions = scopedRevisions.filter((revision) =>
+    revisionIsAuditable(revision, "graph"),
   );
-  const matchingRevisions = revisions.filter(
-    (revision) => revision.matchingChanged === true,
+  const matchingRevisions = scopedRevisions.filter((revision) =>
+    revisionIsAuditable(revision, "matching"),
   );
-  const usedRevisions = revisions.filter(
-    (revision) => revision.subsequentUses?.length,
+  const usedRevisions = scopedRevisions.filter(
+    (revision) =>
+      (revisionIsAuditable(revision, "graph") ||
+        revisionIsAuditable(revision, "matching")) &&
+      Boolean(revision.subsequentUses?.some((use) => use.runId)),
   );
   const completedPairs = visible.filter(
     (point) => point.baseline.runId && point.rsi.runId,
@@ -1146,10 +1167,21 @@ export default function DataAnalysis() {
   ).length;
   const selectedCohort = workflow === "all"
     ? undefined
-    : cohortSummaries.find((cohort) => cohort.label === workflow);
-  const scopeCostConclusionAllowed =
-    releaseCostConclusionAllowed ||
-    (isAttribution && selectedCohort?.costConclusionAllowed === true);
+    : cohortSummaries.find((cohort) => cohort.cohortId === workflow);
+  const scopeQualityComparable =
+    visible.length > 0 &&
+    visible.every(
+      (point) =>
+        point.baseline.passed === true &&
+        point.rsi.passed === true &&
+        point.baseline.usageComplete === true &&
+        point.rsi.usageComplete === true,
+    );
+  const scopeCostConclusionAllowed = scopeAllowsCostClaims(
+    visible,
+    releaseCostConclusionAllowed,
+    isAttribution && selectedCohort?.costConclusionAllowed === true,
+  );
   const qualityGate = detail?.summary?.qualityGate;
   const qualityGateFailed =
     qualityGate === false ||
@@ -1157,9 +1189,18 @@ export default function DataAnalysis() {
       qualityGate.status != null &&
       qualityGate.status !== "passed");
   const claimRestriction =
-    selectedCohort && !selectedCohort.costConclusionAllowed
+    !scopeQualityComparable
       ? {
-          title: "该冻结子簇质量不等",
+          title: incompleteUsage > 0
+            ? "当前筛选 usage 不完整，不计算收益"
+            : "当前筛选质量不等，不计算收益",
+          detail: incompleteUsage > 0
+            ? "至少一个保存运行缺少完整 token usage，保留已知绝对值和失败记录。"
+            : "当前筛选中至少一臂存在失败或未完成评分，保留绝对成本、准确率和全部失败。",
+        }
+      : selectedCohort && !selectedCohort.costConclusionAllowed
+      ? {
+          title: "该冻结子簇不允许成本结论",
           detail: selectedCohort.qualityGate.reason,
         }
       : metadata?.status === "candidate" && qualityGateFailed
@@ -1306,7 +1347,7 @@ export default function DataAnalysis() {
                     : "当前候选版本尚未完成正式对照"}
                 </strong>
                 <span>
-                  全量十二任务保持质量受限，不主张整体同质量收益。按任务资产预先冻结的子簇可单独查看：只有两臂全部通过且 usage 完整的子簇才展示同质量效率变化。
+                  {points.length} 项全量账本保持质量受限，不主张整体同质量收益。按任务资产预先冻结的子簇可单独查看：只有两臂全部通过且 usage 完整的子簇才展示同质量效率变化。
                 </span>
               </div>
             </section>
@@ -1364,19 +1405,26 @@ export default function DataAnalysis() {
               <div className="analysis-cohort-grid">
                 {cohortSummaries.map((cohort) => {
                   const comparable = cohort.costConclusionAllowed;
+                  const cohortScenario = points.find((point) =>
+                    cohort.pairIds.includes(point.pairId || point.workpackId),
+                  )?.scenario;
                   return (
                     <button
                       type="button"
                       key={cohort.cohortId}
-                      className={workflow === cohort.label ? "selected" : ""}
-                      aria-pressed={workflow === cohort.label}
+                      className={workflow === cohort.cohortId ? "selected" : ""}
+                      aria-pressed={workflow === cohort.cohortId}
                       onClick={() => {
-                        setScenario("finance");
-                        setWorkflow(cohort.label);
+                        setScenario(cohortScenario || "all");
+                        setWorkflow(cohort.cohortId);
                         setSelectedIndex(null);
                       }}
                     >
-                      <span>{cohort.pairIds.join("–")}</span>
+                      <span>
+                        {cohortScenario
+                          ? scenarioNames[cohortScenario] || cohortScenario
+                          : "未标注场景"} · {cohort.pairIds.length} 项 · {cohort.pairIds.at(0) || "—"}–{cohort.pairIds.at(-1) || "—"}
+                      </span>
                       <strong>{cohort.label}</strong>
                       <b>{cohort.baseline.passed}/{cohort.baseline.attempts} → {cohort.rsi.passed}/{cohort.rsi.attempts}</b>
                       <dl>
@@ -1391,7 +1439,7 @@ export default function DataAnalysis() {
                   );
                 })}
               </div>
-              <p className="analysis-cohort-note">双方都通过的 11 项仅属于事后敏感性分析，不进入这些主卡片，也不替代全量 12 项质量结论。</p>
+              <p className="analysis-cohort-note">事后删去失败项的敏感性分析不进入主卡片，也不替代当前 {points.length} 项全量账本的质量结论。</p>
             </section>
           )}
 
@@ -1407,7 +1455,7 @@ export default function DataAnalysis() {
               <div className="analysis-maintenance-boundary">
                 <ShieldCheck size={17} />
                 <p>
-                  此诊断不进入正式六任务 KPI、累计曲线、成功率或收益。下面只对照同一业务任务在原 formal
+                  此诊断不进入当前发布 KPI、累计曲线、成功率或收益。下面只对照同一业务任务在原 formal
                   运行与修复后 runtime 的一次维护观察。
                 </p>
               </div>
@@ -1431,7 +1479,7 @@ export default function DataAnalysis() {
                     </dl>
                     <p>
                       {kind === "formal"
-                        ? "正式运行未实际复用历史图，安全回退后完成；这些开销已经计入正式六任务结果。"
+                        ? "正式运行未实际复用历史图，安全回退后完成；这些开销已经计入对应发布结果。"
                         : `实际选择 ${number(run.selectedGraphNodeCount)} 个图节点，使用 G2 / M2，并按当前任务重新绑定参数；未覆盖义务交回模型。`}
                     </p>
                     <code>{run.runtimeRevision}</code>
@@ -1499,8 +1547,8 @@ export default function DataAnalysis() {
                 >
                   <option value="all">全部任务类型</option>
                   {workflows.map((item) => (
-                    <option key={item} value={item}>
-                      {item.replaceAll("-", " ")}
+                    <option key={item.id} value={item.id}>
+                      {item.label.replaceAll("-", " ")}
                     </option>
                   ))}
                 </select>
@@ -1625,29 +1673,47 @@ export default function DataAnalysis() {
                           usedVersionId: point.rsi.usedVersionId,
                           usedMatchVersion: point.rsi.usedMatchVersion,
                         },
-                        revisions,
+                        scopedRevisions,
+                      )
+                    : null;
+                  const revisionState = point
+                    ? revisionVisualState(
+                        { pairId: point.pairId, workpackId: point.workpackId },
+                        scopedRevisions,
                       )
                     : null;
                   const evidence = signals
                     ? ([
                         signals.createdGraph && "保存 G 版本",
                         signals.createdMatching && "保存 M 版本",
-                        signals.graphRevision && "G 覆盖扩展",
-                        signals.matchingRevision && "M 描述扩展",
-                        signals.usedGraphRevision && "后续实际使用修订 G",
-                        signals.usedMatchingRevision && "后续实际使用修订 M",
-                        !signals.usedGraphRevision &&
+                        revisionState?.graphRevision && "G 结构实质修订",
+                        revisionState?.matchingRevision && "M 匹配实质修订",
+                        revisionState?.usesGraphRevision && "后续实际执行修订 G",
+                        revisionState?.usesMatchingRevision && "后续实际使用修订 M",
+                        !revisionState?.usesGraphRevision &&
                           signals.usedGraph &&
-                          "实际复用 G",
-                        !signals.usedMatchingRevision &&
+                          "复用 G 版本",
+                        !revisionState?.usesMatchingRevision &&
                           signals.usedMatching &&
-                          "实际复用 M",
+                          "复用 M 版本",
                       ].filter(Boolean) as string[])
                     : [];
+                  const timelineClassName = [
+                    point ? "recorded" : "pending",
+                    revisionState?.graphRevision ? "graph-evolution" : "",
+                    revisionState?.matchingRevision ? "matching-evolution" : "",
+                    revisionState?.verifiedLaterUse ? "verified-use" : "",
+                    revisionState?.usesGraphRevision ||
+                    revisionState?.usesMatchingRevision
+                      ? "revision-use"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
                   return (
                     <li
                       key={entry.index}
-                      className={point ? "recorded" : "pending"}
+                      className={timelineClassName}
                       role={point ? "button" : undefined}
                       tabIndex={point ? 0 : undefined}
                       onKeyDown={(event) => {
@@ -1678,11 +1744,13 @@ export default function DataAnalysis() {
                         </p>
                       </div>
                       <em>
-                        {point
-                          ? point.baseline.runId && point.rsi.runId
-                            ? "已配对"
-                            : "未完成配对"
-                          : "待运行"}
+                        {revisionState?.verifiedLaterUse
+                          ? "已验证使用"
+                          : point
+                            ? point.baseline.runId && point.rsi.runId
+                              ? "已配对"
+                              : "未完成配对"
+                            : "待运行"}
                       </em>
                     </li>
                   );
@@ -1862,8 +1930,11 @@ export default function DataAnalysis() {
                   <>
                     <p>
                       当前保存结果包含 {number(scopeG0)} 个 G 版本、
-                      {number(scopeM0)} 个 M 版本；历史图实际执行 {number(actualGraphUse?.hits)}/{number(actualGraphUse?.attempts)}
-                      （{percent(actualGraphUse?.rate)}）；确认 {graphRevisions.length}{" "}
+                      {number(scopeM0)} 个 M 版本；
+                      {scopeActualGraphUse
+                        ? <>历史图实际执行 {number(scopeActualGraphUse.hits)}/{number(scopeActualGraphUse.attempts)}（{percent(scopeActualGraphUse.rate)}）</>
+                        : <>当前筛选有 {number(scopeVersionUses)} 项历史版本选择记录；版本选择不等于严格图执行，执行状态请从下方逐任务轨迹审计</>}
+                      ；确认 {graphRevisions.length}{" "}
                       次 G 实质修订、{matchingRevisions.length} 次 M
                       实质修订，其中 {usedRevisions.length}{" "}
                       个修订具有后续实际使用记录。只有复用而没有修订时，本页明确只支持经验复用结论。
@@ -1927,8 +1998,9 @@ export default function DataAnalysis() {
                 <strong>{incompleteUsage}</strong>
               </div>
               <p>
-                {detail?.summary?.reliability?.note ||
-                  "失败、恢复、超时与不完整用量保留在逐任务轨迹中；未知用量不按 0 计算。"}
+                {visible.length === points.length && detail?.summary?.reliability?.note
+                  ? detail.summary.reliability.note
+                  : `当前筛选保留 ${completedPairs} 个已运行配对、全部失败、工具错误和串行耗时；未知 token 不按 0 补齐。`}
               </p>
             </section>
           )}
@@ -2012,32 +2084,32 @@ export default function DataAnalysis() {
                       : "RSI 执行路径"}
                   </small>
                   <strong>
-                    {releaseCostConclusionAllowed
+                    {scopeCostConclusionAllowed
                       ? `token ${percent(selectedTokenSaving)} · 成本 ${percent(selectedCostSaving)} · latency ${percent(selectedLatencySaving)}`
-                      : "当前实验不计算收益"}
+                      : "当前筛选不计算收益"}
                   </strong>
                   <span>
                     {selected.rsi.usedVersionId
-                      ? `实际使用 G ${selected.rsi.usedVersionId}`
-                      : "本任务未记录图版本使用"}
+                      ? `记录选择 G ${selected.rsi.usedVersionId}；严格图执行见真实轨迹`
+                      : "本任务未记录图版本选择"}
                   </span>
                   <span>
                     {selected.rsi.usedMatchVersion != null
-                      ? `实际使用 M ${selected.rsi.usedMatchVersion}`
-                      : "本任务未记录匹配版本使用"}
+                      ? `记录选择 M ${selected.rsi.usedMatchVersion}`
+                      : "本任务未记录匹配版本选择"}
                   </span>
                   <code>{selected.workpackId}</code>
                 </article>
               </div>
               {isAttribution &&
-                revisions.some(
+                scopedRevisions.some(
                   (revision) =>
                     revision.sourcePairId === selected.pairId ||
                     revision.sourceTaskId === selected.workpackId,
                 ) && (
                   <details className="analysis-revision-audit">
                     <summary>展开本任务产生的 G / M diff</summary>
-                    {revisions
+                    {scopedRevisions
                       .filter(
                         (revision) =>
                           revision.sourcePairId === selected.pairId ||
@@ -2099,14 +2171,26 @@ export default function DataAnalysis() {
                           usedVersionId: point.rsi.usedVersionId,
                           usedMatchVersion: point.rsi.usedMatchVersion,
                         },
-                        revisions,
+                        scopedRevisions,
                       );
-                      const evidence =
-                        signals.graphRevision || signals.matchingRevision
-                          ? "产生实质修订"
-                          : signals.usedGraphRevision ||
-                              signals.usedMatchingRevision
-                            ? "实际使用修订"
+                      const revisionState = revisionVisualState(
+                        {
+                          pairId: point.pairId,
+                          workpackId: point.workpackId,
+                        },
+                        scopedRevisions,
+                      );
+                      const evidence = revisionState.graphRevision
+                        ? revisionState.verifiedLaterUse
+                          ? "G 实质修订 · 已验证使用"
+                          : "G 结构实质修订"
+                        : revisionState.matchingRevision
+                          ? revisionState.verifiedLaterUse
+                            ? "M 实质修订 · 已验证使用"
+                            : "M 匹配实质修订"
+                          : revisionState.usesGraphRevision ||
+                              revisionState.usesMatchingRevision
+                            ? "后续实际使用修订"
                             : signals.usedGraph || signals.usedMatching
                               ? "复用已有经验"
                               : signals.createdGraph || signals.createdMatching
@@ -2156,7 +2240,7 @@ export default function DataAnalysis() {
                           </td>
                           <td>
                             <span
-                              className={`path-badge ${signals.graphRevision || signals.matchingRevision ? "revision" : point.rsi.planningPath || "unknown"}`}
+                              className={`path-badge ${revisionState.graphRevision ? "graph-revision" : revisionState.matchingRevision ? "matching-revision" : revisionState.usesGraphRevision || revisionState.usesMatchingRevision ? "revision-use" : point.rsi.planningPath || "unknown"}`}
                             >
                               {evidence}
                             </span>

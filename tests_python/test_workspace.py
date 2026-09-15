@@ -978,3 +978,68 @@ async def test_reconcile_tool_explains_text_keys_and_rejects_text_aggregate_fiel
             'anchorTableId': tables['orders'], 'keyField': 'order_id',
             'aggregates': [{'tableId': tables['payments'], 'keyField': 'order_id', 'field': 'order_id', 'alias': 'bad'}],
         }, context)
+
+
+async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state(tmp_path, monkeypatch):
+    class Bank:
+        def __init__(self):
+            self.root = tmp_path
+            self.tasks, self.gold, self.manifest = {}, {}, None
+
+        def load(self):
+            pass
+
+    monkeypatch.setattr('backend.app.TaskBank', Bank)
+    app = create_app(RunService(tmp_path / 'legacy'))
+    async with app.router.lifespan_context(app):
+        manager = app.state.workspace_manager
+        workspace = manager.create('finance', label='金融双臂测试')
+        manager.add_source(workspace['id'], 'orders.csv', b'order_id,amount_cents\no-1,100\n')
+        task, questions = manager.create_task(workspace['id'], '统计当前订单并形成有资料依据的内部复核简报。')
+        assert task and not questions
+
+        # Keep both real runner jobs queued so this API contract test cannot
+        # make provider calls. Production uses the configured strict serial
+        # semaphore and exposes the same queued/running states.
+        app.state.workspace_runner.run_slots = asyncio.Semaphore(0)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            denied = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': False})
+            assert denied.status_code == 400
+
+            started = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
+            assert started.status_code == 202
+            payload = started.json()
+            assert payload['taskId'] == task['id']
+            assert payload['status'] == 'queued'
+            assert payload['executionPolicy'] == 'strict_serial'
+            assert [(arm['label'], arm['strategy']) for arm in payload['arms']] == [
+                ('传统 Agent · 每次规划', 'plan_react'),
+                ('Graph RSI · 历史图执行', 'graph_rsi'),
+            ]
+            assert len({arm['runId'] for arm in payload['arms']}) == 2
+            assert {arm['taskId'] for arm in payload['arms']} == {task['id']}
+
+            first = payload['arms'][0]
+            saved = app.state.workspace_runner.runs[first['runId']]
+            saved['status'] = 'running'
+            saved['phase'] = '读取资料'
+            saved['events'] = [{'seq': 1, 'type': 'phase', 'title': '读取资料', 'detail': {'source': 'orders.csv'}}]
+            saved['metrics']['modelRequests'] = 2
+            saved['evaluation'] = {'status': 'failed', 'issues': ['missing_report']}
+
+            polled = await client.get('/api/workspaces/comparison-runs/' + payload['id'])
+            assert polled.status_code == 200
+            current = polled.json()
+            assert current['status'] == 'running'
+            current_first = current['arms'][0]
+            assert current_first['timeline'] == saved['events']
+            assert current_first['metrics'] == saved['metrics']
+            assert current_first['evaluation'] == saved['evaluation']
+            assert first['runId'] in current_first['pollUrl']
+            assert first['runId'] in current_first['reportUrl']
+            assert first['runId'] in current_first['reportDownloadUrl']
+            assert first['runId'] in current_first['selectionDownloadUrl']
+            assert 'progressPercent' not in json.dumps(current)
+
+            conflict = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
+            assert conflict.status_code == 409

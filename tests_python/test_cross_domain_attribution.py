@@ -34,6 +34,12 @@ def test_cross_domain_asset_freezes_48_tasks_and_six_cohorts():
         'C01', 'C04', 'C10', 'C11',
         'T01', 'T04', 'T10', 'T11',
     ]
+    stage1, stage2, stage3 = assets.campaign_plan(manifest['tasks'])
+    assert (len(stage1), len(stage2), len(stage3)) == (12, 12, 24)
+    assert len({row['id'] for row in stage1 + stage2 + stage3}) == 48
+    assert [row['campaignStage'] for row in stage1 + stage2 + stage3] == [1] * 12 + [2] * 12 + [3] * 24
+    assert {scenario: sum(row['scenario'] == scenario for row in stage1 + stage2)
+            for scenario in ('finance', 'support', 'tickets')} == {'finance': 8, 'support': 8, 'tickets': 8}
     for row in manifest['tasks']:
         directory = ROOT / 'artifacts' / assets.VERSION / row['id']
         source = ROOT / 'artifacts' / assets.SOURCE_VERSION / row['sourceTaskId']
@@ -72,6 +78,41 @@ def test_cross_domain_install_uses_granular_tools_and_public_metric_semantics(
         assert contract['requiredTableSlots'] == ['complaints', 'responses']
         assert len(internal['publicScopeEvidenceIds']) == 20
         assert 'workspace_compare_datetimes' in {tool.name for tool in manager.tools(public['id'])}
+
+
+def test_cross_domain_expansion_gate_allows_more_reliable_online_arm_without_cost_claim():
+    from backend.attribution_experiment import summarize
+
+    def run(status='passed', used=False):
+        return {
+            'id': status + ('-used' if used else ''),
+            'status': 'completed' if status == 'passed' else 'limited',
+            'evaluation': {'status': status},
+            'metrics': {
+                'usageComplete': True, 'inputTokens': 10, 'outputTokens': 2,
+                'modelRequests': 1, 'toolCalls': 1, 'toolErrors': 0,
+                'durationMs': 10,
+            },
+            'evolution': {'usedVersionId': 'g0' if used else None},
+            'toolTrace': ([{'ok': True, 'executor': 'graph'}] if used else []),
+        }
+
+    item = {
+        'mode': 'cross_domain_probe', 'status': 'completed',
+        'manifest': [{'id': 'one'}, {'id': 'two'}],
+        'protocol': {'actualGraphUseMinimumRate': .5},
+        'pairs': [
+            {'status': 'completed', 'spec': {'id': 'one', 'position': 1, 'title': 'one', 'opportunity': 'create', 'sourceTaskId': 'one'},
+             'no_learning': run(), 'online_rsi': run()},
+            {'status': 'completed', 'spec': {'id': 'two', 'position': 2, 'title': 'two', 'opportunity': 'reuse', 'sourceTaskId': 'two'},
+             'no_learning': run('failed'), 'online_rsi': run(used=True)},
+        ],
+    }
+    result = summarize(item)
+    assert result['qualityGate'] is False
+    assert result['expansionGate'] is True
+    assert result['costConclusionAllowed'] is False
+    assert result['comparativeConclusionAllowed'] is False
 
 
 @pytest.mark.asyncio
@@ -123,4 +164,217 @@ async def test_cross_domain_probe_selects_twelve_frozen_precheck_pairs(tmp_path,
     assert started['protocol']['taskCountPerArm'] == 12
     assert started['protocol']['actualGraphUseMinimumRate'] == .5
     assert started['summary']['costConclusionAllowed'] is False
+    assert started['summary']['expansionGate'] is False
     captured['coro'].close()
+    experiment.tasks.clear()
+    captured.clear()
+    formal = await experiment.start('cross_domain_formal')
+    assert formal['predecessorId'] is None
+    assert len(formal['manifest']) == 24
+    assert len(formal['campaign']['stage1']['taskIds']) == 12
+    assert len(formal['campaign']['stage2']['taskIds']) == 12
+    assert len(formal['campaign']['stage3']['taskIds']) == 24
+    assert len(formal['campaign']['allTaskIds']) == 48
+    assert formal['campaign']['stage3']['status'] == 'frozen_waiting_for_explicit_expansion'
+    captured['coro'].close()
+
+@pytest.mark.asyncio
+async def test_cross_domain_campaign_runs_24_then_restores_same_experience_for_48(tmp_path, monkeypatch):
+    from backend import attribution_experiment as module
+
+    fake_tasks = []
+    for index in range(48):
+        scenario = ('finance', 'support', 'tickets')[index // 16]
+        scenario_position = index % 16 + 1
+        fake_tasks.append({
+            'id': f'{scenario[0].upper()}{scenario_position:02d}',
+            'position': index + 1,
+            'title': str(index + 1),
+            'opportunity': 'test',
+            'sourceTaskId': f'source-{index + 1}',
+            'scenario': scenario,
+            'scenarioPosition': scenario_position,
+            'campaignStage': (1 if scenario_position in assets.CAMPAIGN_STAGE1_POSITIONS
+                              else 2 if scenario_position in assets.CAMPAIGN_STAGE2_POSITIONS else 3),
+        })
+    frozen_asset = {'version': assets.VERSION, 'tasks': deepcopy(fake_tasks)}
+    monkeypatch.setattr(assets, 'build', lambda root: deepcopy(frozen_asset))
+    verified = []
+    monkeypatch.setattr(assets, 'verify_task_files', lambda root, spec: verified.append(spec['id']))
+    runtime_digest = ['runtime']
+    monkeypatch.setattr(module, 'fingerprint', lambda root: {'files': {}, 'digest': runtime_digest[0]})
+    monkeypatch.setattr(AttributionExperiment, '_validate_model', lambda self: None)
+    installed = []
+
+    def fake_install(manager, root, spec):
+        installed.append(spec['id'])
+        return {'id': 'workspace-' + spec['id']}, {'id': 'task-' + spec['id']}
+
+    monkeypatch.setattr(assets, 'install', fake_install)
+
+    class FakeEvolution:
+        stores = {}
+        restore_calls = []
+
+        def __init__(self, path, learning_enabled):
+            self.path = str(path)
+            self.learning_enabled = learning_enabled
+            self.versions = []
+
+        def restore(self):
+            self.restore_calls.append((self.path, self.learning_enabled))
+            self.versions = deepcopy(self.stores.get(self.path, []))
+
+        def persist(self):
+            self.stores[self.path] = deepcopy(self.versions)
+
+    class FakeRunner:
+        starts = []
+
+        def __init__(self, bank, provider_factory=None, run_limit=None, model_limit=None, read_limit=None,
+                     run_directory=None, evolution_path=None, learning_enabled=True):
+            self.learning_enabled = learning_enabled
+            self.evolution = FakeEvolution(evolution_path, learning_enabled)
+            self.tasks = {}
+
+        def restore(self):
+            self.evolution.restore()
+
+        async def start(self, request, *, evaluation_context=None):
+            task_id = request.taskId.removeprefix('task-')
+            self.starts.append((self.learning_enabled, task_id))
+            run_id = f'{"online" if self.learning_enabled else "baseline"}-{task_id}'
+            used = self.learning_enabled and bool(self.evolution.versions)
+            run = {
+                'id': run_id,
+                'taskId': request.taskId,
+                'status': 'completed',
+                'evaluation': {'status': 'passed'},
+                'metrics': {
+                    'usageComplete': True, 'inputTokens': 10, 'outputTokens': 2,
+                    'modelRequests': 1, 'toolCalls': 1, 'toolErrors': 0, 'durationMs': 10,
+                },
+                'evolution': {'usedVersionId': self.evolution.versions[-1]['id'] if used else None},
+                'toolTrace': ([{'ok': True, 'executor': 'graph'}] if used else []),
+            }
+            if not self.learning_enabled and task_id == fake_tasks[1]['id']:
+                run.update(status='limited', evaluation={'status': 'failed'})
+            if self.learning_enabled:
+                self.evolution.versions.append({
+                    'id': 'graph-' + task_id, 'generation': 0, 'matchVersion': 0,
+                    'sourceRunId': run_id, 'patches': [], 'matchPatches': [],
+                })
+                self.evolution.persist()
+            self.tasks[run_id] = asyncio.create_task(asyncio.sleep(0))
+            return run
+
+        async def shutdown(self):
+            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+
+    monkeypatch.setattr(module, 'TaskRunner', FakeRunner)
+    experiment = AttributionExperiment(tmp_path)
+    started = await experiment.start('cross_domain_formal')
+    experiment_id = started['id']
+    initial_task = experiment.tasks[experiment_id]
+    await initial_task
+    first = experiment.get(experiment_id)
+    stage1, stage2, stage3 = assets.campaign_plan(fake_tasks)
+    first_24 = [row['id'] for row in stage1 + stage2]
+    all_48 = [row['id'] for row in stage1 + stage2 + stage3]
+    assert first['status'] == 'completed'
+    assert first['campaign']['status'] == 'completed_24'
+    assert first['campaign']['stage1']['gate']['expansionGate'] is True
+    assert first['campaign']['stage2']['status'] == 'completed'
+    assert first['campaign']['stage3']['status'] == 'frozen_waiting_for_explicit_expansion'
+    assert [pair['spec']['id'] for pair in first['pairs']] == first_24
+    assert installed == first_24
+    online_path = str(tmp_path / 'artifacts' / 'attribution-experiments' / experiment_id / 'online_rsi' / 'experience.json')
+    assert len(FakeEvolution.stores[online_path]) == 24
+
+    runtime_digest[0] = 'changed'
+    with pytest.raises(ValueError, match='runtime changed'):
+        await experiment.continue_campaign(experiment_id, target_pairs=48)
+    assert len(experiment.get(experiment_id)['manifest']) == 24
+    runtime_digest[0] = 'runtime'
+    resumed = await experiment.continue_campaign(experiment_id, target_pairs=48)
+    assert resumed['id'] == experiment_id
+    continuation_task = experiment.tasks[experiment_id]
+    await continuation_task
+    final = experiment.get(experiment_id)
+    assert final['status'] == 'completed'
+    assert final['campaign']['status'] == 'expanded_to_48'
+    assert final['campaign']['stage3']['status'] == 'completed'
+    assert [pair['spec']['id'] for pair in final['pairs']] == all_48
+    assert len({pair['spec']['id'] for pair in final['pairs']}) == 48
+    assert installed == all_48
+    assert [task_id for learning, task_id in FakeRunner.starts if learning] == all_48
+    assert (online_path, True) in FakeEvolution.restore_calls
+    assert len(FakeEvolution.stores[online_path]) == 48
+    assert set(verified) == {row['id'] for row in stage3}
+
+@pytest.mark.asyncio
+async def test_cross_domain_campaign_gate_failure_stops_before_stage2(tmp_path, monkeypatch):
+    from backend import attribution_experiment as module
+
+    fake_tasks = []
+    for index in range(48):
+        scenario = ('finance', 'support', 'tickets')[index // 16]
+        scenario_position = index % 16 + 1
+        fake_tasks.append({
+            'id': f'{scenario[0].upper()}{scenario_position:02d}', 'position': index + 1,
+            'title': str(index + 1), 'opportunity': 'test', 'sourceTaskId': f'source-{index + 1}',
+            'scenario': scenario, 'scenarioPosition': scenario_position,
+            'campaignStage': (1 if scenario_position in assets.CAMPAIGN_STAGE1_POSITIONS
+                              else 2 if scenario_position in assets.CAMPAIGN_STAGE2_POSITIONS else 3),
+        })
+    monkeypatch.setattr(assets, 'build', lambda root: {'version': assets.VERSION, 'tasks': deepcopy(fake_tasks)})
+    monkeypatch.setattr(assets, 'install', lambda manager, root, spec: (
+        {'id': 'workspace-' + spec['id']}, {'id': 'task-' + spec['id']},
+    ))
+    monkeypatch.setattr(module, 'fingerprint', lambda root: {'files': {}, 'digest': 'runtime'})
+    monkeypatch.setattr(AttributionExperiment, '_validate_model', lambda self: None)
+
+    class Evolution:
+        def __init__(self):
+            self.versions = []
+
+    class Runner:
+        starts = []
+
+        def __init__(self, bank, provider_factory=None, run_limit=None, model_limit=None, read_limit=None,
+                     run_directory=None, evolution_path=None, learning_enabled=True):
+            self.learning_enabled = learning_enabled
+            self.evolution = Evolution()
+            self.tasks = {}
+
+        async def start(self, request, *, evaluation_context=None):
+            task_id = request.taskId.removeprefix('task-')
+            self.starts.append((self.learning_enabled, task_id))
+            run_id = f'{self.learning_enabled}-{task_id}'
+            passed = not (self.learning_enabled and len([row for row in self.starts if row[0]]) == 1)
+            run = {
+                'id': run_id, 'taskId': request.taskId,
+                'status': 'completed' if passed else 'limited',
+                'evaluation': {'status': 'passed' if passed else 'failed'},
+                'metrics': {'usageComplete': True, 'inputTokens': 1, 'outputTokens': 1,
+                            'modelRequests': 1, 'toolCalls': 1, 'toolErrors': 0, 'durationMs': 1},
+                'evolution': {}, 'toolTrace': [],
+            }
+            self.tasks[run_id] = asyncio.create_task(asyncio.sleep(0))
+            return run
+
+        async def shutdown(self):
+            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+
+    monkeypatch.setattr(module, 'TaskRunner', Runner)
+    experiment = AttributionExperiment(tmp_path)
+    started = await experiment.start('cross_domain_formal')
+    experiment_id = started['id']
+    task = experiment.tasks[experiment_id]
+    await task
+    saved = experiment.get(experiment_id)
+    assert saved['status'] == 'gate_stopped'
+    assert saved['campaign']['status'] == 'stopped_at_12'
+    assert saved['campaign']['stage2']['status'] == 'blocked_by_stage1_gate'
+    assert len(saved['pairs']) == 12
+    assert len(Runner.starts) == 24

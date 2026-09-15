@@ -4,18 +4,28 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+import sys
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from backend.attribution_experiment import AttributionExperiment
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=('smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal'))
-    parser.add_argument('--root', default=str(Path(__file__).resolve().parents[1]))
+    parser.add_argument('mode', choices=('smoke', 'probe', 'repair_probe', 'formal', 'cross_domain_smoke', 'cross_domain_probe', 'cross_domain_formal', 'cross_domain_expand_48'))
+    parser.add_argument('--experiment-id')
+    parser.add_argument('--root', default=str(REPOSITORY_ROOT))
     args = parser.parse_args()
     experiment = AttributionExperiment(Path(args.root))
     experiment.restore()
-    started = await experiment.start(args.mode)
+    if args.mode == 'cross_domain_expand_48':
+        if not args.experiment_id:
+            parser.error('cross_domain_expand_48 requires --experiment-id')
+        started = await experiment.continue_campaign(args.experiment_id, target_pairs=48)
+    else:
+        started = await experiment.start(args.mode)
     experiment_id = started['id']
     await experiment.tasks[experiment_id]
     saved = experiment.get(experiment_id)
@@ -27,10 +37,13 @@ async def main() -> None:
         'assetVersion': saved['assetVersion'],
         'fingerprint': saved['fingerprint']['digest'],
         'predecessorId': saved.get('predecessorId'),
+        'campaign': saved.get('campaign'),
         'summary': {
             'arms': summary['arms'],
             'protocolComplete': summary['protocolComplete'],
             'qualityGate': summary['qualityGate'],
+            'expansionGate': summary['expansionGate'],
+            'comparativeConclusionAllowed': summary.get('comparativeConclusionAllowed'),
             'costConclusionAllowed': summary['costConclusionAllowed'],
             'netTokenSaving': summary['netTokenSaving'],
             'netLatencySaving': summary['netLatencySaving'],

@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
+from uuid import uuid4
 import json
 import re
 from copy import deepcopy
@@ -75,6 +76,11 @@ class WorkspaceTaskRequest(BaseModel):
 class WorkspaceRunRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     strategy: Literal['plan_react', 'graph_rsi'] = 'graph_rsi'
+    confirmCost: bool = False
+
+
+class WorkspaceComparisonRunRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
     confirmCost: bool = False
 
 
@@ -603,6 +609,88 @@ def create_app(service=None):
             raise HTTPException(409, '当前已有一个工作区 Agent 在运行；串行工作台请等待或取消')
         run = await workspace_runner.start(TaskRunRequest(taskId=task['id'], strategy=request.strategy))
         return {'id': run['id'], 'taskId': task_id, 'status': run['status']}
+
+    comparison_arms = (
+        ('plan_react', '传统 Agent · 每次规划'),
+        ('graph_rsi', 'Graph RSI · 历史图执行'),
+    )
+
+    def workspace_run_links(run_id):
+        base = f'/api/workspaces/runs/{run_id}'
+        return {
+            'pollUrl': base,
+            'reportUrl': base + '/report',
+            'reportDownloadUrl': base + '/report/download',
+            'selectionDownloadUrl': base + '/selection/download',
+        }
+
+    def comparison_arm(run, label):
+        return {
+            'runId': run['id'],
+            'taskId': run['taskId'],
+            'label': label,
+            'strategy': run['strategy'],
+            'status': run['status'],
+            'phase': run.get('phase'),
+            'timeline': deepcopy(run.get('events') or []),
+            'metrics': deepcopy(run.get('metrics')),
+            'evaluation': deepcopy(run.get('evaluation')),
+            'submission': deepcopy(run.get('submission')),
+            **workspace_run_links(run['id']),
+        }
+
+    def comparison_detail(comparison_id):
+        runs = [run for run in workspace_runner.runs.values() if run.get('comparisonId') == comparison_id]
+        by_strategy = {run['strategy']: run for run in runs}
+        if set(by_strategy) != {strategy for strategy, _label in comparison_arms}:
+            raise HTTPException(404, '工作区对照执行不存在')
+        arms = [comparison_arm(by_strategy[strategy], label) for strategy, label in comparison_arms]
+        statuses = {arm['status'] for arm in arms}
+        if 'running' in statuses:
+            status = 'running'
+        elif 'queued' in statuses:
+            status = 'queued'
+        elif statuses == {'completed'}:
+            status = 'completed'
+        else:
+            status = 'completed_with_failures'
+        return {
+            'id': comparison_id,
+            'taskId': arms[0]['taskId'],
+            'status': status,
+            'executionPolicy': 'strict_serial',
+            'arms': arms,
+        }
+
+    @app.post('/api/workspaces/tasks/{task_id}/comparison-runs', status_code=202)
+    async def workspace_comparison_run_start(task_id: str, request: WorkspaceComparisonRunRequest):
+        task = workspace_manager.task(task_id)
+        if not request.confirmCost:
+            raise HTTPException(400, '双臂对照会发起两次真实 Agent 执行；请确认费用后再启动')
+        if workspace_runner.tasks:
+            raise HTTPException(409, '当前已有工作区 Agent 在运行；双臂对照需从空闲队列开始')
+        if len(workspace_runner.tasks) + len(comparison_arms) > 32:
+            raise HTTPException(409, '任务队列容量不足，无法同时创建双臂对照')
+        comparison_id = str(uuid4())
+        created = []
+        try:
+            for strategy, label in comparison_arms:
+                run = await workspace_runner.start(TaskRunRequest(taskId=task['id'], strategy=strategy))
+                run['comparisonId'] = comparison_id
+                run['comparisonArm'] = {'label': label, 'strategy': strategy}
+                workspace_runner.save(run)
+                created.append(run)
+        except Exception:
+            for run in created:
+                job = workspace_runner.tasks.get(run['id'])
+                if job:
+                    job.cancel()
+            raise
+        return comparison_detail(comparison_id)
+
+    @app.get('/api/workspaces/comparison-runs/{comparison_id}')
+    def workspace_comparison_run_get(comparison_id: str):
+        return comparison_detail(comparison_id)
 
     @app.get('/api/workspaces/runs')
     def workspace_run_list(workspaceId: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):

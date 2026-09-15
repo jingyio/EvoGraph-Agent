@@ -62,6 +62,21 @@ test('learning evidence distinguishes creation, material revision and later use'
  assert.equal(reused.usedMatchingRevision,false);
 });
 
+test('filtered analysis keeps revision sources and later uses inside the selected task scope', async()=>{
+ const { scopedRevisionEvidence }=await import('../src/dataAnalysisMath.ts');
+ const revisions=[
+  {sourcePairId:'FX09',graphChanged:true,subsequentUses:[{pairId:'FX10'},{pairId:'FX12'}]},
+  {sourcePairId:'CX01',matchingChanged:true,subsequentUses:[{pairId:'CX02'}]},
+ ];
+ const scoped=scopedRevisionEvidence(revisions,[
+  {pairId:'FX09',workpackId:'FX09'},
+  {pairId:'FX10',workpackId:'FX10'},
+ ]);
+ assert.equal(scoped.length,1);
+ assert.equal(scoped[0].sourcePairId,'FX09');
+ assert.deepEqual(scoped[0].subsequentUses,[{pairId:'FX10'}]);
+});
+
 test('an explicit empty revision list remains empty and G0 creation is not a revision',async()=>{
  const { normalizedRevisionEvidence }=await import('../src/dataAnalysisMath.ts');
  assert.deepEqual(normalizedRevisionEvidence([], [{spec:{id:'FA01'},experienceAfter:{onlineRsiVersions:[
@@ -136,12 +151,12 @@ test('cumulative model cost keeps a per-arm unknown value as a gap', async()=>{
  assert.equal(rows[2].costSavingRate,null);
 });
 
-test('post-release maintenance is visibly isolated from formal KPI curves', async()=>{
+test('post-release maintenance is visibly isolated from current release KPI curves', async()=>{
  const { readFile }=await import('node:fs/promises');
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  assert.match(source,/发布后维护验证/);
  assert.match(source,/跨 runtime · 独立诊断/);
- assert.match(source,/不进入正式六任务 KPI、累计曲线、成功率或收益/);
+ assert.match(source,/不进入当前发布 KPI、累计曲线、成功率或收益/);
  assert.match(source,/不能作为正式收益率或普遍性能结论/);
  assert.match(source,/首个配置失败诊断与解释边界/);
 });
@@ -194,4 +209,78 @@ test('current attribution evidence normalizes stored arm names and labels qualit
  const analysis=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  assert.match(analysis,/当前候选结果已完成，质量门槛未通过/);
  assert.match(analysis,/该差值不等于正式收益/);
+});
+
+
+test('scope cost claims require equal passed quality and complete usage', async()=>{
+ const { scopeAllowsCostClaims }=await import('../src/dataAnalysisMath.ts');
+ const comparable=[
+  {baseline:{passed:true,usageComplete:true},rsi:{passed:true,usageComplete:true}},
+  {baseline:{passed:true,usageComplete:true},rsi:{passed:true,usageComplete:true}},
+ ];
+ assert.equal(scopeAllowsCostClaims(comparable,true,false),true);
+ assert.equal(scopeAllowsCostClaims(comparable,false,true),true);
+ assert.equal(scopeAllowsCostClaims(comparable,false,false),false);
+ const qualityUnequal=[...comparable,{baseline:{passed:false,usageComplete:true},rsi:{passed:true,usageComplete:true}}];
+ assert.equal(scopeAllowsCostClaims(qualityUnequal,true,true),false);
+ const usageIncomplete=[...comparable,{baseline:{passed:true,usageComplete:false},rsi:{passed:true,usageComplete:true}}];
+ assert.equal(scopeAllowsCostClaims(usageIncomplete,true,true),false);
+});
+
+test('analysis uses stable cohort ids and avoids fixed experiment counts', async()=>{
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ assert.match(source,/cohortId:\s*asString\(row\.cohortId\)/);
+ assert.match(source,/asString\(spec\.cohort\)/);
+ assert.match(source,/\(point\.cohortId \|\| point\.workflowType\) === workflow/);
+ assert.match(source,/setWorkflow\(cohort\.cohortId\)/);
+ assert.match(source,/scenarioNames\[cohortScenario\]/);
+ assert.match(source,/cohort\.pairIds\.length/);
+ assert.doesNotMatch(source,/全量十二任务/);
+ assert.doesNotMatch(source,/双方都通过的 11 项/);
+ assert.doesNotMatch(source,/正式六任务/);
+});
+
+test('filtered graph wording separates version selection from strict graph execution', async()=>{
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ assert.match(source,/版本选择不等于严格图执行/);
+ assert.match(source,/记录选择 G .*严格图执行见真实轨迹/);
+ assert.doesNotMatch(source,/当前筛选有 .*项记录使用历史版本，严格图执行状态/);
+});
+
+
+test('timeline highlights only auditable G or M revisions and marks later validation', async()=>{
+ const { revisionIsAuditable, revisionVisualState }=await import('../src/dataAnalysisMath.ts');
+ const revisions=[
+  {sourcePairId:'F03',sourceRunId:'run-f03',graphChanged:true,graphDiff:[{op:'add',node:'n2'}],subsequentUses:[{pairId:'F04',runId:'run-f04'}]},
+  {sourcePairId:'C03',sourceRunId:'run-c03',matchingChanged:true,matchingDiff:[{before:'a',after:'b'}],subsequentUses:[{pairId:'C04',runId:'run-c04'}]},
+  {sourcePairId:'T03',sourceRunId:'run-t03',graphChanged:true,graphDiff:[],subsequentUses:[{pairId:'T04'}]},
+  {sourcePairId:'G0',graphChanged:true,graphDiff:[{op:'create'}],subsequentUses:[{pairId:'G1'}]},
+  {sourcePairId:'N03',sourceRunId:'run-n03',graphChanged:true,graphDiff:[{op:'add'}],subsequentUses:[{pairId:'N04'}]},
+ ];
+ assert.equal(revisionIsAuditable(revisions[0],'graph'),true);
+ assert.equal(revisionIsAuditable(revisions[2],'graph'),false);
+ assert.equal(revisionIsAuditable(revisions[3],'graph'),false);
+ const graphSource=revisionVisualState({pairId:'F03',workpackId:'F03'},revisions);
+ assert.deepEqual(graphSource,{graphRevision:true,matchingRevision:false,verifiedLaterUse:true,usesGraphRevision:false,usesMatchingRevision:false});
+ const graphUse=revisionVisualState({pairId:'F04',workpackId:'F04'},revisions);
+ assert.equal(graphUse.usesGraphRevision,true);
+ const matchingSource=revisionVisualState({pairId:'C03',workpackId:'C03'},revisions);
+ assert.equal(matchingSource.matchingRevision,true);
+ assert.equal(matchingSource.verifiedLaterUse,true);
+ assert.equal(revisionVisualState({pairId:'T03',workpackId:'T03'},revisions).graphRevision,false);
+ assert.equal(revisionVisualState({pairId:'G0',workpackId:'G0'},revisions).graphRevision,false);
+ assert.equal(revisionVisualState({pairId:'N03',workpackId:'N03'},revisions).verifiedLaterUse,false);
+ assert.equal(revisionVisualState({pairId:'N04',workpackId:'N04'},revisions).usesGraphRevision,false);
+ const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
+ const css=await readFile(new URL('../src/data-analysis.css',import.meta.url),'utf8');
+ assert.match(source,/graph-evolution/);
+ assert.match(source,/matching-evolution/);
+ assert.match(source,/verified-use/);
+ assert.match(source,/已验证使用/);
+ assert.match(css,/li\.graph-evolution/);
+ assert.match(css,/li\.matching-evolution/);
+ assert.match(css,/graph-evolution\.matching-evolution/);
+ assert.match(css,/li\.verified-use/);
+ assert.match(css,/path-badge\.graph-revision/);
+ assert.match(css,/path-badge\.matching-revision/);
 });

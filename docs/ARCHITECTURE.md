@@ -1,3 +1,17 @@
+## 2026-09-15 双轨工作区与可续跑 campaign
+
+`POST /api/workspaces/tasks/{taskId}/comparison-runs` 原子创建同一任务的 `plan_react` 与 `graph_rsi` 两个真实 run；`GET /api/workspaces/comparison-runs/{comparisonId}` 返回两臂保存的状态、timeline、metrics、evaluation、submission和报告链接。工作区模型槽仍严格串行，因此两个轨道可以同时显示 queued/running，而不会改变串行计量。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。
+
+跨场景正式线在创建时通过 `campaign_plan()` 冻结12、12、24三个阶段和全部48项顺序。前24项在同一运行中完成stage1门槛与stage2；`continue_campaign(id, 48)` 校验runtime、冻结清单和输入/题面/评分hash，恢复同一目录的在线经验，只追加stage3。前24项不重跑，任何阶段的普通业务失败继续保留。
+
+## 2026-09-15 跨场景归因运行线
+
+`backend/cross_domain_attribution_assets.py` 从 `trajectory-review-v3-r3` 逐字节复制48个train题面与附件，按三场景/六子簇形成 `cross-domain-rsi-attribution-v1-48`。公开交付契约声明指标语义、字段值口径、业务ID与证据ID边界，以及顶层业务清单由原因组去重合并；这些信息进入系统上下文，不改变用户题面，也不暴露私有评分。
+
+`backend/workspace_compute.py` 的 `granular-compute-v1` 提供 run-local 收据原语：字段映射、映射筛选、键集合限制、业务键清单、按键计数、聚合/对齐/比较、日期时差与异常日期。历史图只保存真实成功工具及 `$output` 依赖，当前数据、字段和值重新绑定。`backend/attribution_experiment.py` 提供 cross-domain smoke/probe/formal；formal 必须由同runtime完整通过的12对probe解锁。
+
+归因运行线分别计算 `qualityGate` 与 `expansionGate`。`qualityGate` 要求两臂同质量全通过，用于同质量成本主张；`expansionGate` 要求12对协议完整、两臂usage完整、在线RSI全通过且真实图执行率至少50%，允许不学习臂的普通业务失败保留为可靠性差异。cross-domain probe遇到普通业务失败继续固定顺序，只有usage丢失、runtime变化或维护故障停止。Release Manifest在新实验完成门槛前仍绑定金融12项candidate。结果边界见 [三场景预检](cross-domain-attribution-probe-results-2026-09-15.md)。
+
 # 当前架构
 
 ## 2026-09-14 十二任务候选的冻结子簇投影

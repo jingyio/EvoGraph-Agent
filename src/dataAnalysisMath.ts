@@ -15,6 +15,30 @@ export type PairedMeasures = {
   };
 };
 
+
+export type ScopeQualityPoint = {
+  baseline: { passed?: boolean; usageComplete?: boolean };
+  rsi: { passed?: boolean; usageComplete?: boolean };
+};
+
+export function scopeAllowsCostClaims(
+  points: ScopeQualityPoint[],
+  releaseAllowed: boolean,
+  cohortAllowed = false,
+): boolean {
+  return (
+    points.length > 0 &&
+    points.every(
+      (point) =>
+        point.baseline.passed === true &&
+        point.rsi.passed === true &&
+        point.baseline.usageComplete === true &&
+        point.rsi.usageComplete === true,
+    ) &&
+    (releaseAllowed || cohortAllowed)
+  );
+}
+
 export type CumulativeMeasures = {
   order: number;
   baselineCumulativeTokens: number | null;
@@ -55,6 +79,91 @@ export type LearningEvidencePoint = {
   usedMatchVersion?: string | number | null;
 };
 
+export function scopedRevisionEvidence(
+  revisions: RevisionEvidence[],
+  points: LearningEvidencePoint[],
+): RevisionEvidence[] {
+  const ids = new Set(
+    points.flatMap((point) => [point.pairId, point.workpackId]).filter(Boolean),
+  );
+  return revisions
+    .filter(
+      (revision) =>
+        ids.has(revision.sourcePairId) || ids.has(revision.sourceTaskId),
+    )
+    .map((revision) => ({
+      ...revision,
+      subsequentUses: (revision.subsequentUses || []).filter(
+        (use) => ids.has(use.pairId) || ids.has(use.taskId),
+      ),
+    }));
+}
+
+export type RevisionVisualState = {
+  graphRevision: boolean;
+  matchingRevision: boolean;
+  verifiedLaterUse: boolean;
+  usesGraphRevision: boolean;
+  usesMatchingRevision: boolean;
+};
+
+function hasMaterialDiff(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return false;
+}
+
+export function revisionIsAuditable(
+  revision: RevisionEvidence,
+  kind: "graph" | "matching",
+): boolean {
+  return (
+    Boolean(revision.sourceRunId) &&
+    revision[`${kind}Changed`] === true &&
+    hasMaterialDiff(revision[`${kind}Diff`])
+  );
+}
+
+export function revisionVisualState(
+  point: LearningEvidencePoint,
+  revisions: RevisionEvidence[],
+): RevisionVisualState {
+  const ids = new Set([point.pairId, point.workpackId].filter(Boolean));
+  const sourced = revisions.filter(
+    (revision) =>
+      ids.has(revision.sourcePairId) || ids.has(revision.sourceTaskId),
+  );
+  const used = revisions.filter((revision) =>
+    (revision.subsequentUses || []).some(
+      (use) =>
+        Boolean(use.runId) &&
+        (ids.has(use.pairId) || ids.has(use.taskId)),
+    ),
+  );
+  const graphRevision = sourced.some((revision) =>
+    revisionIsAuditable(revision, "graph"),
+  );
+  const matchingRevision = sourced.some((revision) =>
+    revisionIsAuditable(revision, "matching"),
+  );
+  return {
+    graphRevision,
+    matchingRevision,
+    verifiedLaterUse: sourced.some(
+      (revision) =>
+        (revisionIsAuditable(revision, "graph") ||
+          revisionIsAuditable(revision, "matching")) &&
+        Boolean(revision.subsequentUses?.some((use) => use.runId)),
+    ),
+    usesGraphRevision: used.some((revision) =>
+      revisionIsAuditable(revision, "graph"),
+    ),
+    usesMatchingRevision: used.some((revision) =>
+      revisionIsAuditable(revision, "matching"),
+    ),
+  };
+}
+
 export type EvolutionSignals = {
   createdGraph: boolean;
   createdMatching: boolean;
@@ -77,7 +186,9 @@ export function evolutionSignals(
   );
   const used = revisions.filter((revision) =>
     (revision.subsequentUses || []).some(
-      (use) => ids.has(use.pairId) || ids.has(use.taskId),
+      (use) =>
+        Boolean(use.runId) &&
+        (ids.has(use.pairId) || ids.has(use.taskId)),
     ),
   );
   return {
