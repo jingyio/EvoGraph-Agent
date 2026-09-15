@@ -327,7 +327,8 @@ test('analysis replays saved evidence without presenting it as a live model run'
  assert.match(source,/cumulativePoints\(replayVisible\)/);
  assert.match(source,/window\.clearTimeout\(timer\)/);
  assert.match(source,/memory-activated/);
- assert.match(source,/记忆已构建 · 首次复用/);
+ assert.match(source,/构建跨任务记忆 · 首次复用/);
+ assert.match(source,/产生可学习轨迹/);
  assert.doesNotMatch(source,/initialCreation/);
  assert.doesNotMatch(source,/initial-creation/);
  assert.match(css,/li\.memory-activated/);
