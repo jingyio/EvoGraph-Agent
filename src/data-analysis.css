@@ -77,3 +77,96 @@
 .analysis-saving-single{grid-template-columns:1fr}.analysis-mechanism-panel{padding:20px;border:1px solid #d9e3dc;border-radius:12px}.analysis-mechanism-panel dl{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:1100px){#analysis-view-results .analysis-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.analysis-current-task{grid-template-columns:1fr}.analysis-current-task dl{grid-template-columns:repeat(3,minmax(0,1fr))}.analysis-current-task button{justify-self:start}}
 @media(max-width:620px){.analysis-view-tabs{top:4px;grid-template-columns:repeat(5,142px);margin-left:-4px;margin-right:-4px}.analysis-view-tabs button{min-width:142px}.analysis-view-tabs button small{display:none}.analysis-view-tabs button>span{grid-row:auto}.analysis-view-tabs button strong{font-size:10px}#analysis-view-results .analysis-kpis{grid-template-columns:1fr}.analysis-current-task{padding:15px}.analysis-current-task dl{grid-template-columns:1fr}.analysis-mechanism-panel dl{grid-template-columns:1fr 1fr}}
+
+/* 2026-09-15 presentation hierarchy refresh */
+.analysis-page{max-width:1440px;padding-top:28px;overflow-x:clip}
+.analysis-heading-compact{display:block;padding:0 0 15px;border-bottom:1px solid #dce5df}
+.analysis-heading-compact h1{margin:0 0 5px;font-size:31px}
+.analysis-heading-compact>div>p:last-child{font-size:11px;line-height:1.55}
+.analysis-release-bar{display:grid;grid-template-columns:minmax(340px,1fr) auto minmax(320px,auto);align-items:end;gap:14px;margin:14px 0 0;padding:12px 14px;border:1px solid #cfddd3;border-radius:12px;background:#fff;box-shadow:0 8px 28px rgba(31,72,53,.05)}
+.analysis-release-bar .dataset-picker{min-width:0}
+.analysis-release-bar .dataset-picker>span{font-size:9px;letter-spacing:.07em}
+.analysis-release-bar .dataset-picker select{padding:8px 10px;font-size:11px;font-weight:650}
+.analysis-release-bar>.analysis-status{align-self:center;white-space:nowrap}
+.analysis-release-result{display:grid;grid-template-columns:auto auto;justify-content:end;align-items:baseline;gap:2px 12px;text-align:right}
+.analysis-release-result strong{font-size:16px;color:#146846}
+.analysis-release-result span{font-size:11px;color:#52675b}
+.analysis-release-result small{grid-column:1/-1;color:#7a8980;font-size:9px}
+.analysis-filters{padding:10px 0 0;gap:10px}
+.analysis-filters label{min-width:210px}
+.analysis-filters select{padding:8px 10px}
+.analysis-replay{grid-template-columns:auto minmax(160px,1fr) auto;gap:12px;margin-top:10px;padding:9px 11px}
+.analysis-replay>div:first-child{display:flex;gap:8px;white-space:nowrap}
+.analysis-replay>div:first-child small{display:none}
+.analysis-replay-controls button{min-height:29px;padding:5px 8px}
+.analysis-replay-controls select{min-height:29px;padding:4px 7px}
+.analysis-view-tabs{top:6px;grid-template-columns:repeat(5,minmax(110px,1fr));margin-top:10px;padding:3px;border-radius:10px;box-shadow:0 7px 18px rgba(29,63,47,.08)}
+.analysis-view-tabs button{display:flex;justify-content:center;min-width:110px;padding:10px 8px;text-align:center}
+.analysis-view-tabs button:first-child{border-radius:7px 0 0 7px}.analysis-view-tabs button:last-child{border-radius:0 7px 7px 0}
+.analysis-view-tabs button strong{font-size:11px}
+#analysis-view-results{padding-top:13px}
+.analysis-primary-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.analysis-primary-kpis article{position:relative;min-width:0;padding:20px;border:1px solid #d7e2da;border-radius:13px;background:#fff;box-shadow:0 10px 30px rgba(24,72,50,.045)}
+.analysis-primary-kpis article>svg{position:absolute;right:18px;top:18px;color:#2d7658}
+.analysis-primary-kpis article>small,.analysis-primary-kpis article>strong,.analysis-primary-kpis article>span{display:block}
+.analysis-primary-kpis article>small{color:#6f8076;font-size:10px;font-weight:700}
+.analysis-primary-kpis article>strong{margin:12px 0 7px;color:#185e43;font-size:24px;line-height:1.2}
+.analysis-primary-kpis article>span{color:#64766b;font-size:10px;line-height:1.55}
+.analysis-primary-kpis article.efficiency{border-top:3px solid #28785a}
+.analysis-primary-kpis article.quality{border-top:3px solid #53616b}
+.analysis-primary-kpis article.evolution{border-top:3px solid #c17624;background:linear-gradient(145deg,#fffaf1,#fff)}
+.analysis-primary-kpis article.evolution>svg{color:#b76716}
+.analysis-primary-kpis dl{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin:11px 0 8px}
+.analysis-primary-kpis dl>div{min-width:0}
+.analysis-primary-kpis dt{font-size:9px;color:#7a8980}.analysis-primary-kpis dd{margin:4px 0 0;color:#185e43;font-size:15px;font-weight:750;overflow-wrap:anywhere}
+.analysis-secondary-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin:10px 0 0;background:#dfe7e1;border-top:1px solid #d6e1d9;border-bottom:1px solid #d6e1d9}
+.analysis-secondary-kpis>div{display:grid;grid-template-columns:20px 1fr;gap:2px 8px;align-items:center;min-width:0;padding:10px 13px;background:#f9fbfa}
+.analysis-secondary-kpis svg{grid-row:1/3;color:#648072}.analysis-secondary-kpis dt{font-size:9px;color:#718177}.analysis-secondary-kpis dd{margin:0;color:#294f3e;font-size:11px;font-weight:700;overflow-wrap:anywhere}
+.analysis-current-task{margin-top:12px;padding:14px 16px}
+.analysis-section{margin-top:24px;padding-top:19px}
+.analysis-timeline li.routine-reuse{background:#f8faf9;padding-top:13px;padding-bottom:13px;opacity:.74}
+.analysis-timeline li.routine-reuse p{margin-top:5px;color:#6e7e75}.analysis-timeline li.routine-reuse em{display:none}
+.analysis-cost-detail,.analysis-task-ledger,.analysis-audit-section{margin-top:15px;border:1px solid #d5e1d8;border-radius:11px;background:#fff}
+.analysis-cost-detail>summary,.analysis-task-ledger>summary,.analysis-audit-section>summary{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 15px;cursor:pointer;color:#315843;font-size:11px;font-weight:750;list-style:none}
+.analysis-cost-detail>summary::-webkit-details-marker,.analysis-task-ledger>summary::-webkit-details-marker,.analysis-audit-section>summary::-webkit-details-marker{display:none}
+.analysis-cost-detail>summary:after,.analysis-task-ledger>summary:after,.analysis-audit-section>summary:after{content:'＋';font-size:17px;font-weight:400}
+.analysis-cost-detail[open]>summary:after,.analysis-task-ledger[open]>summary:after,.analysis-audit-section[open]>summary:after{content:'−'}
+.analysis-cost-detail .analysis-chart{padding:0 16px 15px}
+.analysis-focus{margin-top:18px;padding:20px}
+.analysis-focus>header>div>small{color:#a9c0b3;font-size:9px;letter-spacing:.08em}
+.analysis-task-business{padding:0;border:0}
+.analysis-task-business-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 15px;border:1px solid #4a6759;background:#234b39}
+.analysis-task-business-head small,.analysis-task-business-head strong{display:block}.analysis-task-business-head small{font-size:9px;color:#a9c0b3}.analysis-task-business-head strong{margin-top:4px;font-size:13px;color:#fff}
+.analysis-request-detail{border:1px solid #d4ded7;border-top:0;background:#fff;color:#29483a}
+.analysis-request-detail>summary,.analysis-trace-detail>summary{padding:11px 13px;cursor:pointer;font-size:10px;font-weight:700}
+.analysis-request-detail>p{margin:0!important;padding:0 14px 14px;max-width:none!important;font-size:11px}
+.analysis-report-comparison{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.analysis-report-comparison>article{min-width:0;margin:0!important;padding:16px;border:1px solid #d9e2dc;background:#fff;color:#29483a}
+.analysis-report-comparison>article.rsi{border-top:3px solid #198061;background:#f6fcf9}.analysis-report-comparison>article.baseline{border-top:3px solid #68737c}
+.analysis-report-comparison header{display:flex;align-items:start;justify-content:space-between;gap:10px}.analysis-report-comparison h3{margin:4px 0;font-size:17px}.analysis-report-comparison header small{font-size:9px;color:#728078}.analysis-report-comparison header em{padding:4px 7px;border-radius:999px;background:#e8f6ef;color:#176748;font-size:9px;font-style:normal;white-space:nowrap}
+.analysis-report-comparison>article>p{min-height:62px;margin:12px 0!important;font-size:11px;line-height:1.65;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.analysis-report-comparison dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
+.analysis-report-comparison dl>div{min-width:0;padding-top:7px;border-top:1px solid #e0e7e2}.analysis-report-comparison dt{font-size:8px;color:#79877f}.analysis-report-comparison dd{margin:3px 0 0;font-size:11px;font-weight:700;overflow-wrap:anywhere}
+.analysis-trace-detail{margin-top:12px;border-top:1px solid #e0e6e2}.analysis-trace-detail ol{max-height:250px;overflow:auto;margin:0;padding:0 14px 13px 29px;font-size:10px}.analysis-trace-detail li{padding:4px 0}
+.analysis-audit-learning{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(260px,1fr) auto;align-items:center;gap:16px;margin-top:12px;padding:13px 15px;border:1px solid #4c6d5c;background:#234b39;color:#eef7f2}
+.analysis-audit-learning small,.analysis-audit-learning strong{display:block}.analysis-audit-learning small{font-size:9px;color:#a8bfb3}.analysis-audit-learning strong{margin-top:4px;font-size:13px}.analysis-audit-learning p{margin:0;font-size:10px;color:#c8dbd1}.analysis-audit-learning code{font-size:9px;color:#9eb6aa;overflow-wrap:anywhere}
+.analysis-task-ledger{padding-top:0}.analysis-task-ledger>summary small,.analysis-audit-section>summary small{margin-left:auto;color:#718177;font-size:9px;font-weight:500}.analysis-task-ledger[open]>summary,.analysis-audit-section[open]>summary{border-bottom:1px solid #dce5df}
+.analysis-ledger-links a{display:inline-flex!important;width:auto!important;gap:4px;padding:5px 7px!important;white-space:nowrap}
+.analysis-maintenance{padding:0}.analysis-maintenance>.analysis-maintenance-boundary,.analysis-maintenance>.analysis-maintenance-grid,.analysis-maintenance>.analysis-maintenance-audit{margin-left:14px;margin-right:14px}.analysis-maintenance>.analysis-maintenance-audit{margin-bottom:14px}
+@media(max-width:980px){
+  .analysis-release-bar{grid-template-columns:minmax(0,1fr) auto}.analysis-release-result{grid-column:1/-1;justify-content:start;text-align:left}
+  .analysis-primary-kpis{grid-template-columns:1fr 1fr}.analysis-primary-kpis article.evolution{grid-column:1/-1}
+  .analysis-report-comparison{grid-template-columns:1fr}.analysis-audit-learning{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .analysis-page{padding-top:20px}.analysis-heading-compact h1{font-size:27px}
+  .analysis-release-bar{grid-template-columns:minmax(0,1fr) auto;padding:10px}.analysis-release-result{grid-template-columns:1fr;gap:3px}.analysis-release-result small{grid-column:auto}
+  .analysis-filters{padding-top:8px}.analysis-filters label{min-width:0;width:100%}
+  .analysis-replay{grid-template-columns:1fr;padding:10px}.analysis-replay progress{order:2}.analysis-replay-controls{order:3}.analysis-replay>div:first-child{justify-content:space-between}
+  .analysis-view-tabs{grid-template-columns:repeat(5,112px);margin-left:-3px;margin-right:-3px}.analysis-view-tabs button{min-width:112px;padding:9px 6px}
+  .analysis-primary-kpis,.analysis-secondary-kpis{grid-template-columns:1fr}.analysis-primary-kpis article.evolution{grid-column:auto}.analysis-primary-kpis article{padding:17px}.analysis-primary-kpis article>strong{font-size:21px}
+  .analysis-secondary-kpis>div{border-bottom:1px solid #e0e7e2}.analysis-secondary-kpis>div:last-child{border-bottom:0}
+  .analysis-report-comparison dl{grid-template-columns:1fr 1fr}.analysis-task-business-head{align-items:flex-start;flex-direction:column}.analysis-task-business-head .analysis-run-links{width:100%}
+  .analysis-task-ledger>summary,.analysis-audit-section>summary{align-items:flex-start;flex-wrap:wrap}.analysis-task-ledger>summary small,.analysis-audit-section>summary small{order:3;flex-basis:100%;margin-left:0}
+  .analysis-ledger-links{min-width:230px}.analysis-timeline li.routine-reuse{opacity:.86}
+}
