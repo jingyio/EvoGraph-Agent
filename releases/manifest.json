@@ -213,7 +213,7 @@
         "smokePolicy": "formal frozen six-task chain",
         "failurePolicy": "retain all attempts; formal continues business failures and stops only on runtime mutation, usage loss or maintenance failure"
       },
-      "assetManifest": "benchmarks/finance-rsi-attribution-v4.json"
+      "assetManifest": "benchmarks/history/finance-rsi-attribution-v4.json"
     },
     {
       "releaseId": "finance-attribution-v5-12-expanded",
@@ -344,7 +344,7 @@
       "experimentId": "94620ba7-efd1-4fb9-b323-2bde8b22f78d",
       "runtimeRevision": "sha256:483fe0f70bea78bee638b4b5ea43bb163b395962cbaf2cdf663e841dc048f5f1",
       "assetVersion": "trajectory-review-v3-r2",
-      "assetManifest": "benchmarks/trajectory-review-v3-r2.json",
+      "assetManifest": "benchmarks/history/trajectory-review-v3-r2.json",
       "protocol": {
         "limits": {
           "run": 1,
@@ -386,7 +386,7 @@
       "experimentId": "not-started",
       "runtimeRevision": "pending:recorded-at-experiment-start",
       "assetVersion": "trajectory-review-v3-r1",
-      "assetManifest": "benchmarks/trajectory-review-v3-r1.json",
+      "assetManifest": "benchmarks/history/trajectory-review-v3-r1.json",
       "protocol": {
         "runtimeProtocol": "trajectory-v3",
         "limits": {

@@ -140,7 +140,7 @@ def test_pending_candidate_exposes_zero_evidence_and_validates_asset_counts(tmp_
 
 def test_v3_r2_frozen_asset_has_six_business_cohorts_without_delivery_contract_in_requests():
     build_v3_r2(ROOT)
-    asset = json.loads((ROOT / 'benchmarks/trajectory-review-v3-r2.json').read_text())
+    asset = json.loads((ROOT / 'benchmarks/history/trajectory-review-v3-r2.json').read_text())
     train = [row for row in asset['tasks'] if row['split'] == 'train']
     cohorts = {row['cohort'] for row in train}
     assert len(train) == 48 and len(cohorts) == 6

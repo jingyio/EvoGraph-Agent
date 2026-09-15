@@ -107,7 +107,7 @@ A/B共享新工具，故工具重构自身不归因于RSI；正式实验隔离�
 
 入口 `http://127.0.0.1:5173/#analysis`，默认清单绑定本实验；数字员工 `#home`，历史 `#archive`。点击六任务时间线可查看同release的业务问题、附件、两臂成果、真实调用回放与下载。曲线包含单次/累计token、模型请求、串行时长和成功率。
 
-录制脚本：[三分钟录制](teacher-rsi-attribution-recording.md)。后端工具设计：[设计说明](granular-autotool-design-2026-09-14.md)。
+录制脚本：[三分钟录制](teacher-rsi-attribution-recording.md)。后端工具设计：[设计说明](history/granular-autotool-design-2026-09-14.md)。
 
 最终验证：217项Python测试、14项前端测试、TypeScript/Vite构建与`git diff --check`通过。浏览器确认数字员工可上传解析且费用闸门有效；数据分析只绑定本release，可下钻FA03实质diff、FA04新筛选/排序节点的实际执行、同run报告/结构化清单/轨迹；历史目录默认折叠并显示版本状态、runtime、资产与协议；390px宽度无横向溢出。
 

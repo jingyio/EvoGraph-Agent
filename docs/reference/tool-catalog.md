@@ -16,6 +16,8 @@
 | `finance_sum_values` | 整数求和，不做币种换算。输入值需来自已读取记录。 |
 | `finance_count_values` | 按精确字符串分组计数；缺失字段使用 (missing)。 |
 | `finance_rank_values` | 按整数值排序，并列按记录 ID 字符串升序。 |
+| `finance_rank_time_values` | 按 ISO-8601 时间排序，并列按记录 ID 字符串升序。时间比较不应由模型手工判断。 |
+| `finance_elapsed_seconds` | 计算两个 ISO-8601 时间戳的 end - start 秒数。时间差计算不应由模型手工心算。 |
 | `finance_publish_report` | 保存本地分析结果并检查结构化事实。不是企业系统写入，不发送消息；不返回标准答案。 |
 
 ## support
@@ -31,6 +33,8 @@
 | `support_sum_values` | 整数求和，不做币种换算。输入值需来自已读取记录。 |
 | `support_count_values` | 按精确字符串分组计数；缺失字段使用 (missing)。 |
 | `support_rank_values` | 按整数值排序，并列按记录 ID 字符串升序。 |
+| `support_rank_time_values` | 按 ISO-8601 时间排序，并列按记录 ID 字符串升序。时间比较不应由模型手工判断。 |
+| `support_elapsed_seconds` | 计算两个 ISO-8601 时间戳的 end - start 秒数。时间差计算不应由模型手工心算。 |
 | `support_publish_report` | 保存本地分析结果并检查结构化事实。不是企业系统写入，不发送消息；不返回标准答案。 |
 
 ## tickets
@@ -49,4 +53,6 @@
 | `tickets_sum_values` | 整数求和，不做币种换算。输入值需来自已读取记录。 |
 | `tickets_count_values` | 按精确字符串分组计数；缺失字段使用 (missing)。 |
 | `tickets_rank_values` | 按整数值排序，并列按记录 ID 字符串升序。 |
+| `tickets_rank_time_values` | 按 ISO-8601 时间排序，并列按记录 ID 字符串升序。时间比较不应由模型手工判断。 |
+| `tickets_elapsed_seconds` | 计算两个 ISO-8601 时间戳的 end - start 秒数。时间差计算不应由模型手工心算。 |
 | `tickets_publish_report` | 保存本地分析结果并检查结构化事实。不是企业系统写入，不发送消息；不返回标准答案。 |

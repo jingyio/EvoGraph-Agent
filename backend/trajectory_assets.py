@@ -200,7 +200,7 @@ def build(root):
     out = root / 'artifacts' / VERSION
     if (out / 'manifest.json').exists():
         manifest = json.loads((out / 'manifest.json').read_text())
-        write_private(root / 'benchmarks' / f'{VERSION}.json', manifest)
+        write_private(root / 'benchmarks' / 'history' / f'{VERSION}.json', manifest)
         return manifest
     original = sources.fetch
     sources.fetch = lambda url, path: path.read_bytes()
@@ -242,7 +242,7 @@ def build(root):
                                       'requestHash': hashlib.sha256(request.encode()).hexdigest(),
                                       'inputHash': hashlib.sha256((directory / 'inputs.json').read_bytes()).hexdigest()})
         write_private(out / 'manifest.json', manifest)
-        write_private(root / 'benchmarks' / f'{VERSION}.json', manifest)
+        write_private(root / 'benchmarks' / 'history' / f'{VERSION}.json', manifest)
         return manifest
     finally:
         sources.fetch = original

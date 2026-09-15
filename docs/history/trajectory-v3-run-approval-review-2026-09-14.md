@@ -73,7 +73,7 @@ Agent、Judge 或任何付费模型请求。
 
 完整 48 个题面与冻结 hash 在 `/#evidence` 的六张审阅卡中可逐项展开。读取 API 从
 `artifacts/trajectory-review-v3-r2/<task>/request.txt` 取题面并与
-`benchmarks/trajectory-review-v3-r2.json` 的 `requestHash` 核对；漂移即失败关闭。
+`benchmarks/history/trajectory-review-v3-r2.json` 的 `requestHash` 核对；漂移即失败关闭。
 
 ## 机器评分与用户题面的边界
 

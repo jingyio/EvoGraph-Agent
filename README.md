@@ -181,6 +181,8 @@ npm run taskbank:validate
 | [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) | 关键设计选择与理由 |
 | [`docs/EXPERIMENT_STATUS.md`](docs/EXPERIMENT_STATUS.md) | 已完成实验、负结果、限制和未证明事项 |
 | [`docs/TODO.md`](docs/TODO.md) | 当前优先级与后续验收 |
+| [`docs/README.md`](docs/README.md) | 当前文档、参考资料与历史审计导航 |
+| [`benchmarks/README.md`](benchmarks/README.md) | 当前任务资产与冻结历史清单导航 |
 | [`.codex/state.md`](.codex/state.md) | 最新执行状态与恢复入口 |
 | [`AGENTS.md`](AGENTS.md) | 仓库协作约束 |
 

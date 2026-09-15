@@ -42,7 +42,7 @@ def test_installed_task_exposes_exact_grouped_report_tool_contract(tmp_path):
     from backend.trajectory_assets import DELIVERY_CONTRACTS, install
     from backend.workspace import WorkspaceManager
 
-    manifest = json.loads((ROOT / 'benchmarks/trajectory-review-v2.json').read_text())
+    manifest = json.loads((ROOT / 'benchmarks/history/trajectory-review-v2.json').read_text())
     spec = next(task for task in manifest['tasks'] if task['id'] == 'finance-reconciliation-train-01')
     manager = WorkspaceManager(tmp_path)
     _, task = install(manager, ROOT, spec)

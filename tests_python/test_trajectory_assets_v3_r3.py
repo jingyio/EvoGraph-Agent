@@ -15,7 +15,7 @@ FINANCE_DEFINITION = '本次以订单为复核单位；同一订单可对应多�
 
 def test_v3_r3_preserves_r2_records_and_adds_only_the_concise_finance_data_definition():
     build_r2(ROOT)
-    before = (ROOT / 'benchmarks' / f'{R2_VERSION}.json').read_bytes()
+    before = (ROOT / 'benchmarks' / 'history' / f'{R2_VERSION}.json').read_bytes()
     revised = build(ROOT)
     original = json.loads(before)
     original_by_id = {task['id']: task for task in original['tasks']}
@@ -24,7 +24,7 @@ def test_v3_r3_preserves_r2_records_and_adds_only_the_concise_finance_data_defin
     assert [task['id'] for task in revised['tasks']] == [task['id'] for task in original['tasks']]
     assert all(task['recordIds'] == original_by_id[task['id']]['recordIds'] for task in revised['tasks'])
     assert all(task['inputHash'] == original_by_id[task['id']]['inputHash'] for task in revised['tasks'])
-    assert (ROOT / 'benchmarks' / f'{R2_VERSION}.json').read_bytes() == before
+    assert (ROOT / 'benchmarks' / 'history' / f'{R2_VERSION}.json').read_bytes() == before
 
     for task in revised['tasks']:
         request = (ROOT / 'artifacts' / VERSION / task['id'] / 'request.txt').read_text()

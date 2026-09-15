@@ -9,7 +9,7 @@ from backend.workspace import WorkspaceManager
 
 def test_v3_r2_keeps_source_records_and_builds_six_sequential_business_cohorts():
     revised = build(ROOT)
-    original = json.loads((ROOT / 'benchmarks' / 'trajectory-review-v3.json').read_text())
+    original = json.loads((ROOT / 'benchmarks' / 'history' / 'trajectory-review-v3.json').read_text())
     original_by_id = {task['id']: task for task in original['tasks']}
 
     assert revised['version'] == VERSION

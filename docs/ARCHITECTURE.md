@@ -102,7 +102,7 @@ Release/Analysis Manifest 仍精确绑定金融12任务候选 `d02f0ecd-8bb5-435
 
 `backend/workspace_compute.py` 的 `granular-compute-v1` 提供 run-local 收据原语：字段映射、映射筛选、键集合限制、业务键清单、按键计数、聚合/对齐/比较、日期时差与异常日期。历史图只保存真实成功工具及 `$output` 依赖，当前数据、字段和值重新绑定。`backend/attribution_experiment.py` 提供 cross-domain smoke/probe/formal；formal 必须由同runtime完整通过的12对probe解锁。
 
-归因运行线分别计算 `qualityGate` 与 `expansionGate`。`qualityGate` 要求两臂同质量全通过，用于同质量成本主张；`expansionGate` 要求12对协议完整、两臂usage完整、在线RSI全通过且真实图执行率至少50%，允许不学习臂的普通业务失败保留为可靠性差异。cross-domain probe遇到普通业务失败继续固定顺序，只有usage丢失、runtime变化或维护故障停止。Release Manifest在新实验完成门槛前仍绑定金融12项candidate。结果边界见 [三场景预检](cross-domain-attribution-probe-results-2026-09-15.md)。
+归因运行线分别计算 `qualityGate` 与 `expansionGate`。`qualityGate` 要求两臂同质量全通过，用于同质量成本主张；`expansionGate` 要求12对协议完整、两臂usage完整、在线RSI全通过且真实图执行率至少50%，允许不学习臂的普通业务失败保留为可靠性差异。cross-domain probe遇到普通业务失败继续固定顺序，只有usage丢失、runtime变化或维护故障停止。Release Manifest在新实验完成门槛前仍绑定金融12项candidate。结果边界见 [三场景预检](history/cross-domain-attribution-probe-results-2026-09-15.md)。
 
 # 当前架构
 
@@ -140,7 +140,7 @@ Release/Analysis Manifest 仍精确绑定金融12任务候选 `d02f0ecd-8bb5-435
 离线机会标签不进入Agent或匹配器。`backend/attribution_experiment.py` 用独立空经验、交替臂顺序和
 严格串行1/1/1运行；formal要求同runtime、同资产的双任务probe已通过，并要求至少50%的在线任务
 真正选择且执行保存图，只有版本加载不算命中。正式扩大验证已完成：FX01–FX08订单复核通过，FX09–FX12支付健康任务因期间计数交付缺口失败；在线臂实际图执行11/12但无G/M修订。失败、usage和维护开销全部保存。详见
-[工具与复用设计](granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
+[工具与复用设计](history/granular-autotool-design-2026-09-14.md)。下面关于 V3-r3 和更早 runtime 的条目为历史架构快照。
 
 
 ## 2026-09-14 V3-r3 当前运行线
@@ -275,13 +275,13 @@ backend/app.py → WorkspaceManager（上传/预览/追问） / WorkpackExperime
 
 Graph RSI 命中版本时同时复用保存的 Plan 和读取图，规划请求为零。Plan 已去除旧任务自由文本，仅保留字段需求/工具说明；业务 ID 从本次读取绑定，不复用旧观察结果。旧任务库路径匹配使用场景、family、规范化任务模板、工具契约、数据集摘要与执行器版本；工作区已由上面的轨迹匹配路径替代。
 
-当前图节点沿用 Python dict：`tool/arguments/dependencies/foreach/paginate`，可加 `reuse` 和 `defer`。`foreach.filter` 是由 Plan `selection.kind=match` 绑定到已声明列表字段的精确相等筛选：图先读取当前列表、复用筛选字段，只对入选记录调用详情。无法可靠绑定的 Plan 使用 `selection.kind=model`，该详情子图交给模型；当前字段缺失或类型变化也失败关闭并保留上游观察。`reuse.onMissing=detail` 逐条检查并补查缺失字段。没有独立 IR 框架；准确协议见 [graph-ir.md](graph-ir.md)。
+当前图节点沿用 Python dict：`tool/arguments/dependencies/foreach/paginate`，可加 `reuse` 和 `defer`。`foreach.filter` 是由 Plan `selection.kind=match` 绑定到已声明列表字段的精确相等筛选：图先读取当前列表、复用筛选字段，只对入选记录调用详情。无法可靠绑定的 Plan 使用 `selection.kind=model`，该详情子图交给模型；当前字段缺失或类型变化也失败关闭并保留上游观察。`reuse.onMissing=detail` 逐条检查并补查缺失字段。没有独立 IR 框架；准确协议见 [graph-ir.md](reference/graph-ir.md)。
 
 编译器记录 `retrievalMs`、`selectionMs`、`compileMs` 和运行时 `bindingMs`；绑定只能来自当前列表/上游输出/字面分页参数。它还会裁剪任务语义无关的独立 detail 步骤、合并等价读取节点。父图不原地改变：发现旧图不兼容时标记 `needs-repair`，仅通过的新正常 train 轨迹才能保存修订图。`filteredOutDetailReads` 和 `elidedToolCalls` 是图内原因计数，不等同于对 ReAct 的净收益。
 
 当前 Patch 有保存来源图、带恢复的字段复用、已获模型有效恢复的失败子图交接、后续正常任务重新规划。未知失败不能凭空生成新图，结构相同不能虚增版本。`probation/family-supported/needs-repair` 表示适用证据与修订状态；不是全场景推广或统计显著性证明。
 
-Graph RSI 的规划路由是 Fast（同任务模板/工具契约/执行器的完整图，Plan 请求为零）、Composition（Fast 未命中而有 support>=2 的 Persistent TinyEdge 时，composition 角色只生成粗子目标，本地确定性选择/组合）和 Fallback（覆盖、来源或契约校验不足时生成完整 Plan）。TinyEdge identity 共享 tool、输入输出契约和绑定槽，连续读取链以 `defer`、扇入/扇出与非连续依赖为边界；执行器消费已选 ID 而不再调用模型重选。当前候选检索是本地字元重叠而非论文 embedding，详细差异与实证边界见 [g-agent-local-composition-design-2026-09-10.md](g-agent-local-composition-design-2026-09-10.md)。
+Graph RSI 的规划路由是 Fast（同任务模板/工具契约/执行器的完整图，Plan 请求为零）、Composition（Fast 未命中而有 support>=2 的 Persistent TinyEdge 时，composition 角色只生成粗子目标，本地确定性选择/组合）和 Fallback（覆盖、来源或契约校验不足时生成完整 Plan）。TinyEdge identity 共享 tool、输入输出契约和绑定槽，连续读取链以 `defer`、扇入/扇出与非连续依赖为边界；执行器消费已选 ID 而不再调用模型重选。当前候选检索是本地字元重叠而非论文 embedding，详细差异与实证边界见 [g-agent-local-composition-design-2026-09-10.md](history/g-agent-local-composition-design-2026-09-10.md)。
 
 AutoTool/TIG 惯性执行已经退役：保留历史轨迹读取与共享参数契约，当前 Graph RSI 不在模型交接点预测或抢占工具调用。回放仍会区分历史惯性字段，避免把历史实验误称为当前机制。
 
@@ -301,6 +301,8 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 ## 入口与文件
 
+仓库文档入口见 [`docs/README.md`](README.md)：当前执行与交付文档保留在 `docs/` 顶层，机制说明位于 `docs/reference/`，带日期的阶段性协议、验证和失败诊断位于 `docs/history/`。Benchmark 顶层只保留当前资产与候选，旧冻结版本位于 `benchmarks/history/`；release 深链使用归档后的明确路径，不按文件时间猜测当前版本。
+
 前端 `5173` 默认 `#home`，数据分析为 `#analysis`（旧 `#evidence` 兼容跳转）；旧 `#experiments`、`#compare`、`#insights` 和 `#replay?task=<id>` 统一重定向到历史区域。
 
 `#analysis` 使用一套跨标签共享的保存结果回放状态，并按“业务结果 / 记忆进化 / 成本曲线 / 请求与可靠性”分开展示。首屏只保留测试组状态、两臂质量、token/请求效率和 G/M 修订后使用；保存结果控制在桌面端位于右侧，成本页三张累计曲线并列。“报告与轨迹”暂时退出演示标签，前端也不再为选中任务额外请求报告详情；原始报告、结构化清单和轨迹 artifact 继续保留在后端与历史审计入口。记忆进化页仅显示任务编号和“首次复用 / 结构修订 / 新版本使用”等核心状态，再以一行汇总真实图执行、G/M 修订及后续使用。进化与成本标签首次进入显示 0 项空态，只有播放或显式选择最终结果后才投影保存数据。冻结子簇、逐任务账本、发布后维护诊断、数据限制长列表和模型请求内部分类退出主展示。单场景筛选自动隐藏，任务类型筛选仅在有多个类型时显示；窄屏标签栏局部滚动，页面本身不产生横向溢出。所有内容仍由当前选中的同一分析清单项提供；学习归因数据若任一臂不是 `graph_rsi`，分析 API 直接拒绝该测试组，不改变 Release Manifest 或历史工件。默认主页是一个可交互的企业运营数字员工工作台：切换财务、客服、技术工单能力后，用户拖拽/选择 CSV/XLSX/JSON/TXT，并手写业务请求；资料预览、确定性澄清、费用确认、真实 Agent、同一 run 的 DAG、模型/结构化/工具事件、HTML 报告、导出和同工作区追问都由保存 run ID 关联。每个工作区使用可读目录名（如 `finance-取消订单复核-a1b2c3d4`），完整 UUID 只作为内部 API、证据和运行关联身份。用户输入保持可读布局：`inputs/` 是原始附件，`requests/` 是已提交问题文本，`.rsi/` 仅保存解析表、任务状态和内部草稿；普通用户运行使用独立目录且 `learning_enabled=False`，不会污染实验经验。旧根目录 JSON/`sources/` 与 UUID 目录工作区仍可恢复，但不在恢复时迁移或改写。`#home` 不展示 Workpack、预置题目或历史 pair；`#analysis` 只读取分析清单固定的一个保存实验，历史 `#experiments` 在 archive 中保留完整控制台。`#compare`、`#insights` 和 `#replay` 保留历史 V4 的只读展示。公开资料经本地受限只读工具访问，不能称为生产企业写入部署；后端为 `4317`，模型配置只在根 `.env`。
@@ -309,7 +311,7 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 
 `scripts/run_online_e2e.py` 是独立的 36-task 在线训练对照入口。它创建专用 run/experience 目录，基线禁用学习，RSI 仅从此前正常 train 任务更新经验；每次启动后立即 checkpoint run ID，避免恢复时重复学习。`--rsi-source` 只复用已审计的 RSI-only source，并在新目录补跑匹配 Baseline；结果明确标注为分时匹配。静态页由 `/api/online-e2e/{id}/report` 提供，并按 family 给出六条经验形成/复用与准确 trace/report 入口。
 
-完成的严格串行工件 `online-rsi-serial-final-v4` 额外从原始 run 聚合 P95/最大延迟、最大 token、报告恢复、维护、分页和 phase token。它只生成派生摘要，不会重放 Agent/Judge；Agent 成本与 Judge 的已记录 token 下限分开显示。最终证据边界见 [online-rsi-serial-final-results-2026-09-11.md](online-rsi-serial-final-results-2026-09-11.md)。
+完成的严格串行工件 `online-rsi-serial-final-v4` 额外从原始 run 聚合 P95/最大延迟、最大 token、报告恢复、维护、分页和 phase token。它只生成派生摘要，不会重放 Agent/Judge；Agent 成本与 Judge 的已记录 token 下限分开显示。最终证据边界见 [online-rsi-serial-final-results-2026-09-11.md](history/online-rsi-serial-final-results-2026-09-11.md)。
 
 展示层的严格报告审计不会改变上述原始结构化 evaluation：它再次核查报告 schema、metric/selection/evidence 精确性、证据在当前 trace 中确已观察，并以有限规则检查摘要中的已知 ID、数字和 `cents` 金额表述。gold 仅在后端进程内用于得到布尔结果；不返回预期答案或未通过的具体业务真值。
 
@@ -320,8 +322,8 @@ ERPNext/Zammad 已有部署与只读连接器，但初始化的业务记录属�
 `requestHash` 逐项核对；数量、版本或题面不一致均失败关闭。`CurrentEvidence` 在 archive 的候选审阅入口中
 展示该审阅清单，并把质量、成本与回放明确显示为“尚未运行”，不显示0/0 usage卡或空方法回放。
 该读取路径不创建实验、不加载私有答案、不调用模型。内容审计见
-[正式运行前任务审阅](trajectory-v3-run-approval-review-2026-09-14.md)，两臂实际工具面与报告
-Schema见[任务与工具契约审阅](trajectory-v3-task-and-tool-review-2026-09-14.md)。
+[正式运行前任务审阅](history/trajectory-v3-run-approval-review-2026-09-14.md)，两臂实际工具面与报告
+Schema见[任务与工具契约审阅](history/trajectory-v3-task-and-tool-review-2026-09-14.md)。
 
 
 ### V3-r2 历史失败预检与 V3-r3 候选投影

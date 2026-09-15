@@ -1,3 +1,10 @@
+## 2026-09-15 仓库目录整理
+
+- [x] 将阶段性文档移入 `docs/history/`，机制资料移入 `docs/reference/`，增加文档导航。
+- [x] 将被后续版本替代的冻结清单移入 `benchmarks/history/`，同步 release、测试和生成器引用。
+- [x] 保留当前发布、历史失败、审计链和所有实验 artifacts；不改变指标或发布状态。
+- [x] 完成链接校验、264项 Python、39项前端测试、生产构建、300任务契约校验和 `git diff --check`。
+
 ## 2026-09-15 RSI 匹配回退修复（最新）
 
 - [x] 还原严格串行 C 臂的 selected nodes、依赖闭包、所需槽与提交槽，确认无收益来自 matcher DTO 的未使用槽触发整图回退。
@@ -221,9 +228,9 @@
 - 题面多写业务目标、约束和交付，少指定执行流程；不提供工具名/调用顺序，必要业务口径保留。
 - **等待用户审批**：先在“开发与历史 → 当前候选审阅”审阅六个 cohort、输入字段、48 个 train 题面与 Fast 门槛；批准后只运行固定12对严格串行预检。质量、usage、维护和实际 Fast `>=50%` 全部通过且预算条件满足后，才允许48项full。工具契约审阅已冻结：两臂共享20个工作区工具，报告 Schema 严格校验机器交付但不规定执行 SOP。
 - 同步前端当前绑定、多原因成果、轨迹来源、G/M真实差异和成本/可靠性曲线。
-- **已完成（2026-09-14）前端版本隔离**：单一页面壳与“数字员工/数据分析”主导航；分析清单固定V17测试组，Release Manifest继续固定候选审阅上下文，发布专属API防跨实验下钻；全部旧页面退出主导航并保留archive深链。输入/下载/历史run/追问保留，手机与笔记本浏览器核验见 [记录](frontend-release-isolation-2026-09-14.md)。本轮0付费模型运行，不代表P0.5业务/正式对照完成。
+- **已完成（2026-09-14）前端版本隔离**：单一页面壳与“数字员工/数据分析”主导航；分析清单固定V17测试组，Release Manifest继续固定候选审阅上下文，发布专属API防跨实验下钻；全部旧页面退出主导航并保留archive深链。输入/下载/历史run/追问保留，手机与笔记本浏览器核验见 [记录](history/frontend-release-isolation-2026-09-14.md)。本轮0付费模型运行，不代表P0.5业务/正式对照完成。
 - 首要验收为进化、效率、可展示性：真实G/M修订及后续使用、含全部开销的成对净收益（约30%token目标）、可操作上传求解/报告/回放/曲线；效果和可靠性为质量门槛。
-- 首阶段结果见 [V2结果](trajectory-v2-results-2026-09-14.md)：财务三对通过，实际当前阈值复用；G1/M1已产生但后续使用0。客服Baseline误交rowId导致预检停止，技术模型运行/full未执行。
+- 首阶段结果见 [V2结果](history/trajectory-v2-results-2026-09-14.md)：财务三对通过，实际当前阈值复用；G1/M1已产生但后续使用0。客服Baseline误交rowId导致预检停止，技术模型运行/full未执行。
 - 当前Release Manifest指向 V3-r3 待运行候选，计划48、已运行0；V2/V3/V3-r1 均只在历史区。
 - 下一阶段先明确并改善业务ID与rowId输出契约，保持失败/费用原样；不能从gold自动改清单。
 - 仍须实现嵌套上游output来源协议及本地产物图调度、真实M-only修订/后续行为、G1后续使用和完整质量门槛。现有报告字段仍由本次模型填写。
@@ -232,7 +239,7 @@
 ## P0.4 用户文本匹配、计算/本地产物图与工作区反馈修订
 
 状态：**用户确认目标，待实现，2026-09-14；后续P0.5补充并纠正执行规格**。上一版记录见
-[工作区完整图交接](workspace-graph-evolution-handoff-2026-09-14.md)，当前执行以P0.5为准。
+[工作区完整图交接](history/workspace-graph-evolution-handoff-2026-09-14.md)，当前执行以P0.5为准。
 普通上传产品可保持不学习，但应只读使用已审核经验；实验需启用真正的工作区图修订。
 
 - 不依赖预置 family/template 选图，检查当前语义条件和 schema，参数由当前输入绑定。
@@ -255,7 +262,7 @@
 两臂均 48/48 私有结构化事实/证据通过，usage 完整。Baseline/RSI token
 2,244,017→1,243,546（-44.5839%），模型请求 258→149，工具 422→325；RSI 形成 12 个
 G0 并在后续实际 Fast 35 次。详见
-[V17 全量结果](workspace-workpack-v17-full-results-2026-09-13.md)。
+[V17 全量结果](history/workspace-workpack-v17-full-results-2026-09-13.md)。
 
 - 旧 V12 的质量门槛失败和旧 V15 full `6c56245b` 的 usage-incomplete 取消均保留为诊断，
   不与 V17 拼接。旧 V15 precheck 仍是 staged 证据，不替代 V17 full。
@@ -277,14 +284,14 @@ G0 并在后续实际 Fast 35 次。详见
 
 ## P0.0 端到端在线对照
 
-状态：**完成，2026-09-11**。`online-rsi-serial-final-v4` 使用独立空经验、固定36条 train manifest 和 `run=model=read=1`。两臂均36/36；Agent token 539,468→347,368（-35.6%），达到约30%目标；模型请求203→114；工具274→277。全部六个 family 正向，`cancelled_payments` 为 -44.0%。结果、Judge 覆盖缺口和展示入口见 [online-rsi-serial-final-results-2026-09-11.md](online-rsi-serial-final-results-2026-09-11.md)。
+状态：**完成，2026-09-11**。`online-rsi-serial-final-v4` 使用独立空经验、固定36条 train manifest 和 `run=model=read=1`。两臂均36/36；Agent token 539,468→347,368（-35.6%），达到约30%目标；模型请求203→114；工具274→277。全部六个 family 正向，`cancelled_payments` 为 -44.0%。结果、Judge 覆盖缺口和展示入口见 [online-rsi-serial-final-results-2026-09-11.md](history/online-rsi-serial-final-results-2026-09-11.md)。
 
 - AutoTool/TIG 惯性执行已退役，不再进行触发调优或新增实验；旧记录保留。
 - 旧负收益、分时匹配和 RSI-only 修复工件全部保留，不改写历史；最终 V4 是唯一可作为本轮严格全量结论的工件。
 
 ## P0.1 G-Agent Persistent TinyEdge 的真实训练覆盖
 
-状态：2026-09-10 已实现 Fast / Composition / Fallback 与持久片段规范；真实 train 初试未形成可组合 support，见 [g-agent-local-composition-validation-2026-09-10.md](g-agent-local-composition-validation-2026-09-10.md)。
+状态：2026-09-10 已实现 Fast / Composition / Fallback 与持久片段规范；真实 train 初试未形成可组合 support，见 [g-agent-local-composition-validation-2026-09-10.md](history/g-agent-local-composition-validation-2026-09-10.md)。
 
 - Fast 命中已跳过完整 Plan；Composition 的粗子目标、确定性候选选择、直接组合执行、参数槽校验和来源 UI 均由回归覆盖。
 - 下一步先解决正常 train 图编译中的上游列表歧义并积累两个以上通过的不同来源；只在真实片段 materialize 后观察 Composition，不为命中制造图或额外 rollout。
@@ -292,7 +299,7 @@ G0 并在后续实际 Fast 35 次。详见
 
 ## P0.2 按需读取的训练诊断与局部图优化
 
-状态：2026-09-10 已完成首个受限 Motif；冻结推广评估仍待执行。证据见 [motif-filter-then-enrich-validation-2026-09-10.md](motif-filter-then-enrich-validation-2026-09-10.md)。
+状态：2026-09-10 已完成首个受限 Motif；冻结推广评估仍待执行。证据见 [motif-filter-then-enrich-validation-2026-09-10.md](history/motif-filter-then-enrich-validation-2026-09-10.md)。
 
 - 问题：图可能对全量记录调用详情，Strong/Plan ReAct 能先按列表字段筛选。导师目标是减少真实 token/latency，而不是强行增加图版本。
 - 已实现 `selection.kind=match` → `foreach.filter`：`finance-cancelled_payments` 的正常训练 Plan 用当前列表 `status == canceled` 筛选，支付详情只读取入选 ID；当前字段/类型变化失败关闭，无法可靠确定使用 `selection.kind=model` 交回模型。

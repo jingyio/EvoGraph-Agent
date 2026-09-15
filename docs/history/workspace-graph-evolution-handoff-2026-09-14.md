@@ -3,7 +3,7 @@
 日期：2026-09-14。讨论核对基线：`301f14b`。这是用户确认的下一阶段目标和执行规格，
 不是已实现能力或新的实验结果。本讨论 session 只更新交接文档；执行 session 是代码写入者。
 
-后续用户纠正已整理为 [最新重构交接](trajectory-rsi-refactor-handoff-2026-09-14.md)：
+后续用户纠正已整理为 [最新重构交接](../trajectory-rsi-refactor-handoff-2026-09-14.md)：
 可复用图须从实际轨迹诱导，图编译同时生成并反馈修订匹配描述，不引入人工SOP，
 新任务资产重视多原因/缺失/证据交付。本文保留为上一版讨论记录；与新规格不一致处
 以最新交接为准，不能据本文把未执行Plan直接发布为历史图。
@@ -143,7 +143,7 @@ Judge 不临时接入学习器。validation/test 不生成 Patch，test 不回�
 ```text
 继续在 /Users/apple/Documents/PPT/RSI吹牛PPT/rsi-agent-lab 执行。
 先读 AGENTS.md、.codex/state.md、ARCHITECTURE、DESIGN_DECISIONS、EXPERIMENT_STATUS、TODO，
-再完整读 docs/workspace-graph-evolution-handoff-2026-09-14.md。
+再完整读 docs/history/workspace-graph-evolution-handoff-2026-09-14.md。
 用户已确认优先实现：用户文本到已审核历史图的匹配、读取/计算/本地产物图复用、工作区
 训练反馈修订。普通演示工作区可以不学习，但下一版 48-task train 必须实际验证修图闭环。
 按文档先做机制和 focused 回归，再三场景小规模预检；满足质量、维护、usage 和预算条件

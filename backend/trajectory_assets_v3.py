@@ -162,7 +162,7 @@ def material(spec, records):
 def build(root):
     root=Path(root);out=root/'artifacts'/VERSION
     if (out/'manifest.json').exists():
-        manifest=json.loads((out/'manifest.json').read_text());write_private(root/'benchmarks'/f'{VERSION}.json',manifest);return manifest
+        manifest=json.loads((out/'manifest.json').read_text());write_private(root/'benchmarks'/'history'/f'{VERSION}.json',manifest);return manifest
     original=sources.fetch;sources.fetch=lambda url,path:path.read_bytes()
     manifest={'version':VERSION,'taskDesignVersion':'heterogeneous-operations-v3','taskDesign':'48 project-authored heterogeneous business requests over disjoint public records; audit labels are offline only','splitPolicy':'train only learning; validation/test frozen and unrun','protocol':{'trainPairs':48,'validationPairs':6,'testPairs':6,'precheckPairs':12,'organization':'three scenarios × sixteen heterogeneous train requests; twelve fixed precheck pairs'},'tasks':[],'sources':{}}
     try:
@@ -181,8 +181,8 @@ def build(root):
         for row in audit:
             for capability in row['auditFeatures']:
                 matrix.setdefault(row['scenario'],{}).setdefault(capability,[]).append(row['taskId'])
-        write_private(out/'manifest.json',manifest);write_private(root/'benchmarks'/f'{VERSION}.json',manifest)
-        write_private(root/'benchmarks'/f'{VERSION}-opportunity-audit.json',{'version':VERSION,'generatedFromManifest':True,'offlineOnly':True,'rows':audit,'capabilityRecurrenceMatrix':matrix,'limitations':['机会来自冻结任务的公开能力标签，不是运行命中、质量、效率或进化结论。','标签绝不传给Agent、匹配器、编译器或模型。']})
+        write_private(out/'manifest.json',manifest);write_private(root/'benchmarks'/'history'/f'{VERSION}.json',manifest)
+        write_private(root/'benchmarks'/'history'/f'{VERSION}-opportunity-audit.json',{'version':VERSION,'generatedFromManifest':True,'offlineOnly':True,'rows':audit,'capabilityRecurrenceMatrix':matrix,'limitations':['机会来自冻结任务的公开能力标签，不是运行命中、质量、效率或进化结论。','标签绝不传给Agent、匹配器、编译器或模型。']})
         return manifest
     finally:sources.fetch=original
 

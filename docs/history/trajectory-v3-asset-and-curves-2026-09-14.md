@@ -13,7 +13,7 @@
 独立原因、证据与禁止外部写入，不包含工具名、调用顺序或私有答案。实验组标签只用于
 控制器统计，不进入Workspace task的family/template或匹配输入。
 
-受版本控制的 `benchmarks/trajectory-review-v2.json` 保存公开任务身份、记录ID、问题/输入
+受版本控制的 `benchmarks/history/trajectory-review-v2.json` 保存公开任务身份、记录ID、问题/输入
 哈希和难度特征；完整输入与私有评分留在 ignored artifacts。三个场景内部使用的源记录
 分别为240、200、200条，任务间业务ID不重叠。
 

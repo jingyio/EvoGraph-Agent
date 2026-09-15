@@ -20,7 +20,7 @@ def test_v3_freezes_48_heterogeneous_train_and_independent_holdouts():
 
 
 def test_v3_install_exposes_only_current_task_contract(tmp_path):
-    manifest=json.loads((ROOT/'benchmarks/trajectory-review-v3.json').read_text())
+    manifest=json.loads((ROOT/'benchmarks/history/trajectory-review-v3.json').read_text())
     spec=next(task for task in manifest['tasks'] if task['id']=='F01')
     manager=WorkspaceManager(tmp_path)
     _,task=install(manager,ROOT,spec)
@@ -33,7 +33,7 @@ def test_v3_install_exposes_only_current_task_contract(tmp_path):
 
 
 def test_opportunity_audit_is_frozen_offline_only_and_not_runtime_input():
-    payload=json.loads((ROOT/'benchmarks/trajectory-review-v3-opportunity-audit.json').read_text())
+    payload=json.loads((ROOT/'benchmarks/history/trajectory-review-v3-opportunity-audit.json').read_text())
     assert payload['version']==VERSION and payload['offlineOnly'] is True
     assert len(payload['rows'])==48
     assert all(row['offlineAuditOnly'] for row in payload['rows'])

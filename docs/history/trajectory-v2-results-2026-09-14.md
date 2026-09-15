@@ -75,7 +75,7 @@ G1后续使用为0，M1后续行为为0；**进化验收未达标**。独立M-on
 - [轨迹预检页面](http://127.0.0.1:5173/#trajectory)：两版本、完整尝试成本、失败状态、
   财务/客服真实报告、当前绑定、G/M来源差异、单次与累计曲线及同run下载。
 - `test/轨迹复核-v1`：三份可上传JSON、手写问题与来源；完整公共manifest为
-  `benchmarks/trajectory-review-v1.json`，24train+3validation+3test。
+  `benchmarks/history/trajectory-review-v1.json`，24train+3validation+3test。
 - 三岗位已通过浏览器的**首次附件上传→资料预览→准备请求→等待费用确认**，0额外模型。
   这不是三岗位新增真实Agent闭环；技术工单付费运行仍未执行。
 - 浏览器核验触发并修复首传FileList在异步创建工作区期间被清空的问题。中文附件名

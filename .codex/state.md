@@ -1,3 +1,9 @@
+## 2026-09-15 仓库目录清理（最新）
+
+- GitHub 顶层文档已按当前入口、`docs/reference/` 和 `docs/history/` 分层；53份阶段性记录和13份机制参考仅移动路径，内容与历史证据未删除或改写。
+- 12份被后续版本替代的冻结 benchmark 移入 `benchmarks/history/`；当前发布、跨域候选、V3-r3候选和300任务清单保留顶层。Release Manifest、测试和生成器路径已同步。
+- `docs/README.md` 与 `benchmarks/README.md` 提供入口。Release/Analysis Manifest、实验结论和本地 artifacts 均未改变，本轮不运行模型。
+
 ## 2026-09-15 RSI 图回放回退修复与单臂真实验证（最新）
 
 - 严格串行 comparison `a2aabd3d-6f96-414a-ac74-e7ecf8948cc7` 中，在线 RSI 匹配器选择通用图节点时排除了两个阈值比较节点，却仍提交这两个未选节点的槽绑定。运行时旧规则要求“所需槽集合与提交槽集合完全相等”，因此以 `当前槽必须完整且唯一` 拒绝整次匹配并回退冷规划。该 C 臂为14次模型请求、189,056输入/3,025输出token、78.650秒，不能作为RSI收益结论。
@@ -112,7 +118,7 @@
 - 旧 probe `3fe6c157-0a32-4268-b9bf-3c38e88b6381` 完成前7对：不学习6/7、在线RSI 7/7，usage完整，实际图执行5/7。绝对token 1,091,875→647,952、请求82→44、工具错误32→8；C10不学习臂达到24请求上限。全部失败与开销保留。
 - 用户确认在线RSI准确率高于不学习臂可作为可靠性结果继续展示。协议现分离 `qualityGate` 与 `expansionGate`：前者仍要求两臂同质量全通过；后者允许不学习臂的普通业务失败留在分母，只要求完整12对、两臂usage完整、在线RSI 12/12且真实图执行率≥50%。
 - 新runtime先运行完整12对probe；普通业务失败不提前停止，只有usage缺失、runtime变化或维护故障才停止。满足 `expansionGate` 后才启动48对formal。质量不等时只展示准确率与绝对成本差，不主张同质量节省率。
-- 当前Release/Analysis Manifest继续指向金融12项candidate `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`；跨场景新结果完成门槛前不替换当前发布。详情见 `docs/cross-domain-attribution-probe-results-2026-09-15.md`。
+- 当前Release/Analysis Manifest继续指向金融12项candidate `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`；跨场景新结果完成门槛前不替换当前发布。详情见 `docs/history/cross-domain-attribution-probe-results-2026-09-15.md`。
 
 # 项目状态快照
 
@@ -212,7 +218,7 @@
 
 
 - 下方关于 V2/V3-r1 的审阅、9 对预检和旧 current release 的文字是当时的历史快照；当前
-  执行基线以本文件顶部 V3-r3 条目、Release Manifest 与 `docs/trajectory-v3-run-approval-review-2026-09-14.md` 为准。
+  执行基线以本文件顶部 V3-r3 条目、Release Manifest 与 `docs/history/trajectory-v3-run-approval-review-2026-09-14.md` 为准。
 
 
 - 2026-09-14 执行阶段已推进P0.5，**未完成整体验收**。工作区现在从通过评分的真实
@@ -233,7 +239,7 @@
   `test/轨迹复核-v1` 提供三场景新公开来源JSON/问题；独立资产24train+3validation+3test，
   非建议的48train规模。三岗位浏览器首传/解析/准备请求已核验，未额外运行模型。
   修复首次上传FileList在await后被清空、中文文件名被替换、恢复后实验顺序问题。
-  详细证据及剩余项：`docs/trajectory-v2-results-2026-09-14.md`。
+  详细证据及剩余项：`docs/history/trajectory-v2-results-2026-09-14.md`。
 
 - 2026-09-14 用户附聊天记录并进一步纠正重构目标：不增加人工SOP；可复用图从真实
   执行轨迹诱导，编译时同时提炼适用描述/参数槽，匹配逻辑由后续train反馈修订，
@@ -246,7 +252,7 @@
 - 2026-09-14 讨论审核后确认下一阶段目标：上传工作区可继续不学习，但需用户文本到
   已审核历史图匹配；工作区图应覆盖确定性 compute 和已有本地草稿/导出/报告；下一版
   48-task train 要验证真实反馈修订和后续实例使用。完整执行规格见
-  `docs/workspace-graph-evolution-handoff-2026-09-14.md`，设计 D39-D41、TODO P0.4。
+  `docs/history/workspace-graph-evolution-handoff-2026-09-14.md`，设计 D39-D41、TODO P0.4。
   本讨论 session 仅更新交接文档，未修改 runtime、未运行模型、未更改 V17 工件。
 
 - 2026-09-14 用户需要可手工拖入的测试输入，之前将其误解为运行后工作区布局。
@@ -266,7 +272,7 @@
   证据通过且 usage 完整。Baseline/RSI token 2,244,017→1,243,546（**-44.5839%**），模型
   请求258→149，工具422→325；RSI形成12个Workflow，后续Fast35次、Fallback13次、
   Composition0。报告恢复、工具拒绝/错误和本地开销均保留，详情见
-  `docs/workspace-workpack-v17-full-results-2026-09-13.md`。旧V15 full `6c56245b` 仍是
+  `docs/history/workspace-workpack-v17-full-results-2026-09-13.md`。旧V15 full `6c56245b` 仍是
   pair2 transport retry usage未知的取消诊断，绝不覆盖或拼接。
 - 2026-09-14 工作台题库/同题回放曾作为临时展示交付实现，现已被后续产品决定替代：`#home`
   仅接受用户拖拽/选择上传的资料与手写业务请求，不展示 Workpack、预置题目或历史 A/B pair。
@@ -289,21 +295,21 @@
   已改为唯一键计算加完整行级证据；`model_client.py` 已对短暂传输失败增加一次有界重试，
   分别记录逻辑模型请求、实际 provider attempts、retry 与 usage 不完整。V13 是独立
   staged runtime，先运行 smoke；协议见
-  `docs/workspace-workpack-v13-repair-protocol-2026-09-13.md`，不得与 V12 混接。
+  `docs/history/workspace-workpack-v13-repair-protocol-2026-09-13.md`，不得与 V12 混接。
 - 2026-09-13 Workpack V12：V11 Fast 路径的重复确定性 compute 长尾已用两臂共享
   guard 修复，并通过 smoke `2413c09a`（3/3）与 precheck `587d7c50`（12/12）。
   full `f8acd9e2` 为 Baseline 42/48、RSI 46/48；表面 token 1,813,753→1,078,947
   （-40.513%）因质量门槛失败且末尾两臂共同网络失败，只能作诊断。RSI 有12个 G0、
   36次 Fast、0 Composition、0维护错误；详情见
-  `docs/workspace-workpack-v12-results-2026-09-13.md`，不得与 V4 主结论拼接。
+  `docs/history/workspace-workpack-v12-results-2026-09-13.md`，不得与 V4 主结论拼接。
 - 协作：原 session 作为讨论 session，用户将另建执行 session。当前未替用户新建任务，没有安排自动化。
 - 读取顺序：`AGENTS.md` → `docs/ARCHITECTURE.md` → `docs/DESIGN_DECISIONS.md` → `docs/EXPERIMENT_STATUS.md` → `docs/TODO.md`。
-- 最终主证据是严格串行 `online-rsi-serial-final-v4`：固定 36 个不同 train 任务、独立空 RSI 经验、`run_limit=model_limit=read_limit=1`、同 session 交替运行。Baseline/RSI 均 36/36；Agent token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277。RSI 形成 6 个 G0，后续实际 Fast 复用 24 次；无 Composition、无 G1/G2。全部 Agent usage 完整、工具/维护错误均为0；Judge 26/36完成、10个服务超时、同模型且15个顺序分歧。详见 `docs/online-rsi-serial-final-results-2026-09-11.md`。运行 artifacts 不入 Git。
+- 最终主证据是严格串行 `online-rsi-serial-final-v4`：固定 36 个不同 train 任务、独立空 RSI 经验、`run_limit=model_limit=read_limit=1`、同 session 交替运行。Baseline/RSI 均 36/36；Agent token 539,468→347,368（**-35.6%**），模型请求 203→114，工具 274→277。RSI 形成 6 个 G0，后续实际 Fast 复用 24 次；无 Composition、无 G1/G2。全部 Agent usage 完整、工具/维护错误均为0；Judge 26/36完成、10个服务超时、同模型且15个顺序分歧。详见 `docs/history/online-rsi-serial-final-results-2026-09-11.md`。运行 artifacts 不入 Git。
 - 旧 `online-e2e-train-v1` 保留为负收益历史；`online-rsi-graph-matched-v4` 保留为分时匹配且 token -24.1% 的历史对照，不能与最终 V4 拼接。`cancelled_payments` 的编译器语义/等价读取修复在 V4 的严格对照中转正为 -44.0%。规模补验为 `efficiency-scale-serial-v4`，读取峰值固定为1，不主张并发收益。
 
 ## 已完成
 
-任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 加入 Persistent TinyEdge 规范化 identity、train-only 连续读取片段挖掘、Fast/Composition/Fallback 路由、composition 模型角色和片段来源/绑定/执行 UI；不做 Transient TinyEdge Group。详细边界和实证见 [g-agent-local-composition-design-2026-09-10.md](../docs/g-agent-local-composition-design-2026-09-10.md) 与 [g-agent-local-composition-validation-2026-09-10.md](../docs/g-agent-local-composition-validation-2026-09-10.md)。
+任务库300任务，Python runtime，强基线/Plan基线/AutoTool/Graph RSI，在线图版本，冻结成对评测，真实执行可视化与回放，共用业务报告，匿名双顺序 LLM Judge（0–10维度分、0–1 reward）。本轮在现有 dict runtime 加入 Persistent TinyEdge 规范化 identity、train-only 连续读取片段挖掘、Fast/Composition/Fallback 路由、composition 模型角色和片段来源/绑定/执行 UI；不做 Transient TinyEdge Group。详细边界和实证见 [g-agent-local-composition-design-2026-09-10.md](../docs/history/g-agent-local-composition-design-2026-09-10.md) 与 [g-agent-local-composition-validation-2026-09-10.md](../docs/history/g-agent-local-composition-validation-2026-09-10.md)。
 
 AutoTool/TIG 惯性执行已退役；保留 `backend/autotool.py` 的 BM25、参数契约和历史轨迹兼容，但不再调优触发或把历史拒绝写成收益。
 
@@ -356,7 +362,7 @@ V8 是新的独立 staged runtime。Smoke `57c295a5-d7d9-4a22-b77c-d1893fef696f`
 预检 `31313718-fb89-491f-81d5-9ee7cb925433` 为 24/24，RSI token 比 Baseline 高10.0%，
 但已验证财务实际调用对账工具、5 个 G0 形成和4次 Fast 复用。预检中的3次 schema/tool
 拒绝与4次一次性公开范围恢复均可审计，没有维护错误或无界循环；正式 V8 train 将在不改
-runtime 的前提下执行。详见 `docs/workspace-workpack-v8-reconciliation-protocol-2026-09-12.md`。
+runtime 的前提下执行。详见 `docs/history/workspace-workpack-v8-reconciliation-protocol-2026-09-12.md`。
 旧 V5/V6/V7 artifacts 保留。
 
 当前可展示结论是在线经验积累与 Fast 复用：六个 family 均在最终严格串行 V4 中降低 token，全量达到 -35.6%。这不证明多代结构进化、Composition 收益、独立 Judge 优势或通用低延迟。不要重跑该实验直到结果好看；若继续研究，必须建立新版本、固定新协议，validation/test 反馈不得回写 Workflow/TinyEdge。

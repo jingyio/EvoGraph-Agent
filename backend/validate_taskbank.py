@@ -13,11 +13,16 @@ from .graph_store import write_private
 async def validate():
     bank = TaskBank()
     bank.load()
-    assert len(bank.tasks) == 300
+    corpus = {
+        task_id: task
+        for task_id, task in bank.tasks.items()
+        if task.get('split') in {'train', 'validation', 'test'}
+    }
+    assert len(corpus) == 300
     splits = defaultdict(lambda: defaultdict(set))
     customers = defaultdict(set)
     tool_calls, summaries = 0, {}
-    for task in bank.tasks.values():
+    for task in corpus.values():
         scenario = task['scenario']
         context = ToolContext({'taskId': task['id']})
         tools = {t.name: t for t in bank.tools(task['id'])}
@@ -50,7 +55,7 @@ async def validate():
         if scenario == 'finance':
             customers[task['split']].update(r['customer_unique_id'] for r in records)
     for scenario in FAMILIES:
-        tasks = [t for t in bank.tasks.values() if t['scenario'] == scenario]
+        tasks = [t for t in corpus.values() if t['scenario'] == scenario]
         assert len(tasks) == 100 and set(Counter(t['family'] for t in tasks).values()) == {10}
         assert Counter(t['split'] for t in tasks) == dict(train=60, validation=20, test=20)
         for a, b in [('train', 'validation'), ('train', 'test'), ('validation', 'test')]:
@@ -59,19 +64,16 @@ async def validate():
                 assert not customers[a] & customers[b]
         assert sum(len(t['recordIds']) for t in tasks) == len(set(i for t in tasks for i in t['recordIds']))
         summaries[scenario] = dict(tasks=100, families=10, tools=len(bank.tools(tasks[0]['id'])), splits=dict(Counter(t['split'] for t in tasks)))
-        for family in FAMILIES[scenario]:
-            task = next(t for t in tasks if t['family'] == family[0])
-            write_private(ROOT / 'specs/taskbank' / (scenario + '-' + family[0] + '.tools.json'), [t.card() for t in bank.tools(task['id'])])
     report = dict(status='passed', tasks=300, scenarios=summaries, toolCalls=tool_calls, modelRequests=0,
                   note='分页、全部字段接口、评分器拒绝错误答案与分组隔离验证；不是 300 次 LLM 任务成功率。')
     write_private(ROOT / 'artifacts/taskbank/validation.json', report)
     catalog = ['# 工具简明目录', '', '仅列用途和主要返回内容；精确参数见 specs/taskbank 或任务 API。', '']
     for scenario in FAMILIES:
-        task = next(t for t in bank.tasks.values() if t['scenario'] == scenario)
+        task = next(t for t in corpus.values() if t['scenario'] == scenario)
         catalog.extend(['## ' + scenario, '', '| 工具 | 用途与返回内容 |', '|---|---|'])
         catalog.extend('| `' + t.name + '` | ' + t.description + ' |' for t in bank.tools(task['id']))
         catalog.append('')
-    write_private(ROOT / 'docs/tool-catalog.md', '\n'.join(catalog))
+    write_private(ROOT / 'docs/reference/tool-catalog.md', '\n'.join(catalog))
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

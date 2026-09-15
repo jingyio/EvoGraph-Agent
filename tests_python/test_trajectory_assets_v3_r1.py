@@ -8,7 +8,7 @@ from backend.workspace import WorkspaceManager
 
 def test_v3_r1_preserves_record_selection_and_exposes_business_id_contract():
     revised = build(ROOT)
-    original = json.loads((ROOT / 'benchmarks' / 'trajectory-review-v3.json').read_text())
+    original = json.loads((ROOT / 'benchmarks' / 'history' / 'trajectory-review-v3.json').read_text())
     original_by_id = {task['id']: task for task in original['tasks']}
 
     assert revised['version'] == VERSION

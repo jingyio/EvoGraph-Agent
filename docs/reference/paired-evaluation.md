@@ -1,6 +1,6 @@
 # 冻结成对评测与业务成果
 
-入口 `http://127.0.0.1:5173/#evaluation`。目标与证据边界见 [mentor-goals.md](mentor-goals.md)。
+入口 `http://127.0.0.1:5173/#evaluation`。目标与证据边界见 [mentor-goals.md](../mentor-goals.md)。
 
 ## 实验协议
 
