@@ -829,3 +829,8 @@
   background: #fff8f5;
 }
 .candidate-stopped h2 { color: #8e3d2e; }
+.candidate-leading{border-color:#a8d0b6;background:linear-gradient(135deg,#f1faf4,#fbfefc)}
+.candidate-leading h2{color:#1f6948}
+.candidate-leading dl>div{border-color:#cfe4d6}
+.candidate-leading dt{color:#587565}
+.candidate-leading dd{color:#284c3a}

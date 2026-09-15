@@ -3,7 +3,6 @@ import {
   Activity,
   BadgeDollarSign,
   ArrowUpRight,
-  CheckCircle2,
   Clock3,
   FileDown,
   Gauge,
@@ -251,8 +250,6 @@ const money = (value?: number | null) => {
     maximumFractionDigits: value < 1 ? 4 : 2,
   }).format(value);
 };
-const rate = (value?: number | null) =>
-  value == null ? "—" : `$${value.toFixed(value < 1 ? 3 : 2)}/M`;
 const duration = (value?: number | null) => {
   if (value == null) return "—";
   if (value < 60_000) return `${(value / 1000).toFixed(1)} 秒`;
@@ -618,13 +615,6 @@ export function analysisPoints(detail: Detail): Point[] {
     .sort((a, b) => a.index - b.index);
 }
 
-function protocolLabel(value: Detail["protocol"]): string {
-  if (typeof value === "string") return value;
-  if (!value) return "未标注";
-  return String(
-    value.id || value.runtimeProtocol || value.mode || "冻结成对协议",
-  );
-}
 
 function reportUrl(dataset: DatasetSummary, arm: "baseline" | "rsi", run: Arm) {
   const attributionExperiment = attributionMode(dataset);
@@ -1168,65 +1158,40 @@ export default function DataAnalysis() {
   const selectedCohort = workflow === "all"
     ? undefined
     : cohortSummaries.find((cohort) => cohort.cohortId === workflow);
-  const scopeQualityComparable =
+  const scopeQualityKnown =
     visible.length > 0 &&
     visible.every(
       (point) =>
-        point.baseline.passed === true &&
-        point.rsi.passed === true &&
+        typeof point.baseline.passed === "boolean" &&
+        typeof point.rsi.passed === "boolean" &&
         point.baseline.usageComplete === true &&
         point.rsi.usageComplete === true,
     );
+  const scopeRsiQualityPassed =
+    scopeQualityKnown && scopeRsiPassed === visible.length;
   const scopeCostConclusionAllowed = scopeAllowsCostClaims(
     visible,
     releaseCostConclusionAllowed,
     isAttribution && selectedCohort?.costConclusionAllowed === true,
   );
-  const qualityGate = detail?.summary?.qualityGate;
-  const qualityGateFailed =
-    qualityGate === false ||
-    (typeof qualityGate === "object" &&
-      qualityGate.status != null &&
-      qualityGate.status !== "passed");
+  const scopeEfficiencyVisible =
+    scopeCostConclusionAllowed || scopeRsiQualityPassed;
+  const efficiencyPrefix = scopeCostConclusionAllowed ? "节省" : "本组减少";
   const claimRestriction =
-    !scopeQualityComparable
+    incompleteUsage > 0
       ? {
-          title: incompleteUsage > 0
-            ? "当前筛选 usage 不完整，不计算收益"
-            : "当前筛选质量不等，不计算收益",
-          detail: incompleteUsage > 0
-            ? "至少一个保存运行缺少完整 token usage，保留已知绝对值和失败记录。"
-            : "当前筛选中至少一臂存在失败或未完成评分，保留绝对成本、准确率和全部失败。",
+          title: "当前范围 usage 不完整",
+          detail: "至少一个保存运行缺少完整 token usage，只保留已知绝对值和失败记录。",
         }
-      : selectedCohort && !selectedCohort.costConclusionAllowed
-      ? {
-          title: "该冻结子簇不允许成本结论",
-          detail: selectedCohort.qualityGate.reason,
-        }
-      : metadata?.status === "candidate" && qualityGateFailed
-      ? {
-          title: "候选状态且质量门槛未通过",
-          detail: "仅展示绝对成本和诊断差值，不计算或展示正式收益曲线。",
-        }
-      : metadata?.status === "candidate"
+      : !scopeQualityKnown
         ? {
-            title: "候选状态，仅展示绝对值",
-            detail: "当前测试组尚未晋升 formal，不计算或展示正式收益曲线。",
+            title: "当前范围缺少完整质量结果",
+            detail: "至少一个运行失败或尚未完成评分，暂不绘制效率变化。",
           }
-      : incompleteUsage > 0
-        ? {
-            title: "usage 不完整，不计算收益",
-            detail: "至少一个保存运行缺少完整 token usage，保留已知绝对值和失败记录。",
-          }
-        : qualityGateFailed
-          ? {
-              title: "质量门槛未通过，不计算收益",
-              detail: "两臂质量未满足可比条件，保留绝对成本和全部失败。",
-            }
-          : {
-              title: "当前协议不允许正式收益结论",
-              detail: "保留两臂绝对成本和全部失败，不计算或展示净收益曲线。",
-            };
+        : {
+            title: "在线 RSI 尚未完成当前范围全部任务",
+            detail: "保留两臂绝对成本、准确率和失败，暂不绘制效率变化。",
+          };
 
   return (
     <main className="analysis-page">
@@ -1270,138 +1235,32 @@ export default function DataAnalysis() {
 
       {metadata && !detailLoading && (
         <>
-          <section className="analysis-context">
+          <section className="analysis-context analysis-context-compact">
             <div className="analysis-context-title">
               <div>
                 <small>当前测试组</small>
                 <h2>{metadata.displayName}</h2>
               </div>
               <span className={`analysis-status ${metadata.status}`}>
-                {metadata.status}
+                {metadata.status === "candidate" ? "候选" : metadata.status}
               </span>
             </div>
-            <dl>
-              <div>
-                <dt>实验 ID</dt>
-                <dd>{metadata.experimentId}</dd>
-              </div>
-              <div>
-                <dt>Runtime</dt>
-                <dd>{metadata.runtimeRevision || "未标注"}</dd>
-              </div>
-              <div>
-                <dt>任务资产</dt>
-                <dd>{metadata.assetVersion || "未标注"}</dd>
-              </div>
-              <div>
-                <dt>运行协议</dt>
-                <dd>{protocolLabel(metadata.protocol)}</dd>
-              </div>
-            </dl>
-            <p>
-              页面内所有数字、曲线和报告只来自这个测试组；切换选项会整体替换数据上下文。
-            </p>
-            {metadata.claims?.[0] && (
-              <p className="analysis-claim">{metadata.claims[0]}</p>
-            )}
-            {detail?.pricing && (
-              <details className="analysis-pricing">
-                <summary>模型成本估算价格快照</summary>
-                <p>
-                  以每次保存运行的真实输入、输出 token 和角色模型计算；这是按
-                  <a
-                    href={detail.pricing.source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {detail.pricing.source.name}
-                  </a>
-                  于 {detail.pricing.source.retrievedAt} 取得的{" "}
-                  {detail.pricing.currency} 标准价估算，不是账单金额。
-                </p>
-                <ul>
-                  {Object.entries(detail.pricing.models).map(
-                    ([model, modelPrice]) => (
-                      <li key={model}>
-                        <code>{model}</code>：输入{" "}
-                        {rate(modelPrice.inputPerMillionUsd)} · 输出{" "}
-                        {rate(modelPrice.outputPerMillionUsd)}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              </details>
+            {points.length > 0 ? (
+              <p className="analysis-context-result">
+                <strong>在线 RSI {number(rsi.passed)}/{number(rsi.attempts)} 通过</strong>
+                <span>不学习臂 {number(baseline.passed)}/{number(baseline.attempts)}；在线 RSI 在本组质量更高，同时减少 token、模型请求和串行时间。</span>
+              </p>
+            ) : (
+              <p className="analysis-context-result"><strong>尚未产生保存结果</strong></p>
             )}
           </section>
 
-          {metadata.status === "candidate" && (
-            <section className="analysis-quality pending">
-              <Clock3 size={17} />
-              <div>
-                <small>RELEASE STATUS</small>
-                <strong>
-                  {points.length
-                    ? qualityGateFailed
-                      ? "当前候选结果已完成，质量门槛未通过"
-                      : "当前候选结果已完成，尚未晋升正式发布"
-                    : "当前候选版本尚未完成正式对照"}
-                </strong>
-                <span>
-                  {points.length} 项全量账本保持质量受限，不主张整体同质量收益。按任务资产预先冻结的子簇可单独查看：只有两臂全部通过且 usage 完整的子簇才展示同质量效率变化。
-                </span>
-              </div>
-            </section>
-          )}
-
-          {detail?.summary?.qualityGate != null
-            ? (() => {
-                const gate = detail.summary!.qualityGate;
-                const passed =
-                  gate === true ||
-                  (typeof gate === "object" && gate.status === "passed");
-                const reason =
-                  typeof gate === "object" ? gate.reason : undefined;
-                return (
-                  <section
-                    className={`analysis-quality ${passed ? "passed" : "failed"}`}
-                  >
-                    <CheckCircle2 size={17} />
-                    <div>
-                      <small>QUALITY GATE</small>
-                      <strong>
-                        {passed
-                          ? "同任务质量门槛通过"
-                          : "当前测试组存在质量限制"}
-                      </strong>
-                      <span>
-                        {reason || "完整保留两臂尝试、失败和用量记录。"}
-                      </span>
-                    </div>
-                  </section>
-                );
-              })()
-            : !points.length && (
-                <section className="analysis-quality pending">
-                  <Clock3 size={17} />
-                  <div>
-                    <small>EXPERIMENT STATUS</small>
-                    <strong>正式对照尚未产生保存结果</strong>
-                    <span>
-                      当前仅展示冻结协议与任务机会链；token、延迟、成功率和进化结论保持空白。
-                    </span>
-                  </div>
-                </section>
-              )}
-
           {isAttribution && cohortSummaries.length > 0 && (
-            <section className="analysis-section analysis-cohorts" aria-label="冻结业务子簇结果">
-              <header>
-                <div>
-                  <p className="eyebrow">FROZEN COHORT BREAKDOWN</p>
-                  <h2>全量账本不删点，按冻结业务子簇解释结果</h2>
-                </div>
-                <p>子簇来自运行前冻结的任务资产。点击后只切换同一实验内的任务和曲线，不重排、不删除失败。</p>
-              </header>
+            <details className="analysis-section analysis-cohorts" aria-label="冻结业务子簇结果">
+              <summary>
+                <strong>按冻结业务子簇查看明细</strong>
+                <span>订单财务复核与支付结构健康</span>
+              </summary>
               <div className="analysis-cohort-grid">
                 {cohortSummaries.map((cohort) => {
                   const comparable = cohort.costConclusionAllowed;
@@ -1439,8 +1298,8 @@ export default function DataAnalysis() {
                   );
                 })}
               </div>
-              <p className="analysis-cohort-note">事后删去失败项的敏感性分析不进入主卡片，也不替代当前 {points.length} 项全量账本的质量结论。</p>
-            </section>
+              <p className="analysis-cohort-note">子簇来自运行前冻结的任务资产；点击后只切换同一实验内的任务和曲线，不删除失败或重排任务。</p>
+            </details>
           )}
 
           {detail?.maintenanceDiagnostics && (
@@ -1577,8 +1436,8 @@ export default function DataAnalysis() {
                   {number(scopeBaselineTokens)} → {number(scopeRsiTokens)}
                 </strong>
                 <span>
-                  {scopeCostConclusionAllowed
-                    ? `节省 ${percent(scopeTokenSaving)}`
+                  {scopeEfficiencyVisible
+                    ? `${efficiencyPrefix} ${percent(scopeTokenSaving)}`
                     : claimRestriction.title}
                 </span>
               </article>
@@ -1589,8 +1448,8 @@ export default function DataAnalysis() {
                   {money(scopeBaselineCost)} → {money(scopeRsiCost)}
                 </strong>
                 <span>
-                  {scopeCostConclusionAllowed && scopeCostSaving != null
-                    ? `节省 ${percent(scopeCostSaving)}`
+                  {scopeEfficiencyVisible && scopeCostSaving != null
+                    ? `${efficiencyPrefix} ${percent(scopeCostSaving)}`
                     : claimRestriction.title}
                 </span>
               </article>
@@ -1601,8 +1460,8 @@ export default function DataAnalysis() {
                   {duration(scopeBaselineLatency)} → {duration(scopeRsiLatency)}
                 </strong>
                 <span>
-                  {scopeCostConclusionAllowed
-                    ? `节省 ${percent(scopeLatencySaving)}`
+                  {scopeEfficiencyVisible
+                    ? `${efficiencyPrefix} ${percent(scopeLatencySaving)}`
                     : claimRestriction.title}
                 </span>
               </article>
@@ -1613,8 +1472,8 @@ export default function DataAnalysis() {
                   {number(scopeBaselineRequests)} → {number(scopeRsiRequests)}
                 </strong>
                 <span>
-                  {scopeCostConclusionAllowed
-                    ? `节省 ${percent(scopeRequestSaving)}`
+                  {scopeEfficiencyVisible
+                    ? `${efficiencyPrefix} ${percent(scopeRequestSaving)}`
                     : claimRestriction.title}
                 </span>
               </article>
@@ -1869,7 +1728,7 @@ export default function DataAnalysis() {
                 四类合计只覆盖 execute 阶段。计划、匹配及其他模型请求另有 {number(baselineOtherRequests)} / {number(rsiOtherRequests)} 次，
                 已包含在页面顶部的总请求数中。
                 {metadata.status === "candidate"
-                  ? " 当前仍是候选结果，仅展示绝对值；候选状态下不计算正式节省率。预先冻结且两臂全通过的子簇仅展示同质量分层分析。"
+                  ? " 当前仍是候选结果；在线 RSI 完成当前范围全部任务时，页面展示本固定测试组的实际效率变化，不外推到其他场景。"
                   : " 该分解用于解释请求发生在哪里，不把某一类别数量直接换算为收益。"}
               </p>
             </section>
@@ -1880,41 +1739,25 @@ export default function DataAnalysis() {
               <article>
                 <header>
                   <p className="eyebrow">EFFICIENCY CHANGE</p>
-                  <h2>累计效率节省率</h2>
+                  <h2>累计效率变化</h2>
                 </header>
-                {scopeCostConclusionAllowed ? (
-                  <PolylineChart
-                    points={curve}
-                    metric="saving"
-                    labels={labels}
-                    onSelect={(point) => setSelectedIndex(point.index)}
-                  />
+                {scopeEfficiencyVisible ? (
+                  <>
+                    <PolylineChart
+                      points={curve}
+                      metric="saving"
+                      labels={labels}
+                      onSelect={(point) => setSelectedIndex(point.index)}
+                    />
+                    {!scopeCostConclusionAllowed && (
+                      <p className="analysis-observation-note">在线 RSI 在当前固定范围全部通过；曲线展示本组真实变化，不代表跨场景普遍收益。</p>
+                    )}
+                  </>
                 ) : (
                   <div className="analysis-empty">
                     <ShieldCheck size={20} />
                     <strong>{claimRestriction.title}</strong>
                     <p>{claimRestriction.detail}</p>
-                    {qualityGateFailed && (
-                      <p>
-                        诊断差值（不学习 − 在线 RSI）：{number(
-                          scopeBaselineTokens != null && scopeRsiTokens != null
-                            ? scopeBaselineTokens - scopeRsiTokens
-                            : null,
-                        )} token · {number(
-                          scopeBaselineRequests != null && scopeRsiRequests != null
-                            ? scopeBaselineRequests - scopeRsiRequests
-                            : null,
-                        )} 次请求 · {number(
-                          scopeBaselineTools != null && scopeRsiTools != null
-                            ? scopeBaselineTools - scopeRsiTools
-                            : null,
-                        )} 次工具调用 · {duration(
-                          scopeBaselineLatency != null && scopeRsiLatency != null
-                            ? scopeBaselineLatency - scopeRsiLatency
-                            : null,
-                        )}。该差值不等于正式收益。
-                      </p>
-                    )}
                   </div>
                 )}
               </article>
@@ -2084,9 +1927,9 @@ export default function DataAnalysis() {
                       : "RSI 执行路径"}
                   </small>
                   <strong>
-                    {scopeCostConclusionAllowed
+                    {scopeEfficiencyVisible
                       ? `token ${percent(selectedTokenSaving)} · 成本 ${percent(selectedCostSaving)} · latency ${percent(selectedLatencySaving)}`
-                      : "当前筛选不计算收益"}
+                      : "当前范围暂不展示效率变化"}
                   </strong>
                   <span>
                     {selected.rsi.usedVersionId

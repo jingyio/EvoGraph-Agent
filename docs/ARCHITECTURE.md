@@ -1,3 +1,9 @@
+## 2026-09-15 当前证据的简化投影
+
+Release/Analysis Manifest 仍精确绑定金融12任务候选 `d02f0ecd-8bb5-4359-94be-e7f7233df6a5`，后端身份校验、失败保留和深链不变。展示层将“发布成熟度”与“本组质量”分开：candidate 表示证据范围和审核层级尚未达到formal；本组质量直接按保存评分展示为在线 RSI 12/12、不学习11/12。
+
+`DataAnalysis` 首屏只投影测试组名称、状态和两臂质量结论，不再重复实验ID、runtime、资产、协议、价格快照与质量状态卡；冻结子簇明细默认折叠。若同一筛选范围内在线 RSI 全部通过且两臂usage完整，可显示该固定任务组的累计token、请求和串行时长变化；只有后端正式允许的同质量范围才使用正式“节省”口径，其他范围标为“本组减少”并注明不可跨场景外推。`CurrentEvidence` 使用相同规则，同时保留Release Manifest、具体run、报告、G/M diff和失败审计。
+
 ## 2026-09-15 双轨工作区与可续跑 campaign
 
 `POST /api/workspaces/tasks/{taskId}/comparison-runs` 原子创建同一任务的 `plan_react` 与 `graph_rsi` 两个真实 run；前者使用主模型服务凭据且关闭跨任务学习，后者使用 `LLM_API_KEY_SECONDARY` 且开启工作区在线学习。两臂共享任务、附件、27B模型、提示、工具、恢复和预算，调度上限为 `run=2/model=2/read=1`，因此模型请求可以真实并行，读取型工具仍串行。`GET /api/workspaces/comparison-runs/{comparisonId}` 返回 `executionPolicy=parallel_dual_key`、模型、limits、provider profile、学习开关，以及两臂保存的timeline、metrics、evaluation、submission和报告链接；不返回凭据。`WorkspaceWorkbench` 只轮询该DTO，不计算虚构进度。

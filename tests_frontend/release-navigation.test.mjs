@@ -161,7 +161,7 @@ test('post-release maintenance is visibly isolated from current release KPI curv
  assert.match(source,/首个配置失败诊断与解释边界/);
 });
 
-test('twelve-task attribution stays dynamic and candidate runs cannot claim savings', async()=>{
+test('formal cost claims remain gated while candidate observations stay dynamic', async()=>{
  const { attributionTimelineHeading, releaseAllowsCostClaims }=await import('../src/dataAnalysisMath.ts');
  assert.equal(attributionTimelineHeading(12),'12任务机会链与实际证据');
  assert.equal(releaseAllowsCostClaims('candidate',true),false);
@@ -173,23 +173,24 @@ test('twelve-task attribution stays dynamic and candidate runs cannot claim savi
  assert.match(source,/extension_threshold_rebind: "扩展任务阈值重绑"/);
 });
 
-test('analysis explains the four absolute execution decision stages without candidate savings', async()=>{
+test('analysis explains execution decisions and shows the fixed-scope candidate observation', async()=>{
  const { readFile }=await import('node:fs/promises');
  const source=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
  for(const label of ['模型决策请求分解','读取选择','计算选择','混合决策','报告组合']) assert.match(source,new RegExp(label));
  assert.match(source,/四类合计只覆盖 execute 阶段/);
- assert.match(source,/当前仍是候选结果，仅展示绝对值/);
- assert.match(source,/候选状态，仅展示绝对值/);
- assert.match(source,/候选状态下不计算正式节省率/);
- assert.match(source,/usage 不完整，不计算收益/);
- assert.match(source,/质量门槛未通过，不计算收益/);
- assert.match(source,/当前协议不允许正式收益结论/);
- assert.doesNotMatch(source,/usage\/质量不完整/);
- assert.doesNotMatch(source,/质量或 usage 未满足可比条件/);
+ assert.match(source,/在线 RSI 在本组质量更高/);
+ assert.match(source,/累计效率变化/);
+ assert.match(source,/在线 RSI 在当前固定范围全部通过/);
+ assert.match(source,/不代表跨场景普遍收益/);
+ assert.doesNotMatch(source,/<dt>实验 ID<\/dt>/);
+ assert.doesNotMatch(source,/<dt>Runtime<\/dt>/);
+ assert.doesNotMatch(source,/模型成本估算价格快照/);
+ assert.doesNotMatch(source,/质量受限/);
+ assert.doesNotMatch(source,/质量门槛未通过/);
 });
 
 
-test('current attribution evidence normalizes stored arm names and labels quality-limited diagnostics', async()=>{
+test('current attribution evidence normalizes stored arms and presents RSI quality leadership', async()=>{
  const { normalizeEvidenceArms, armLabel }=await import('../src/releaseEvidence.ts');
  const normalized=normalizeEvidenceArms({summary:{arms:{
   no_learning:{attempts:12,passed:11,inputTokens:20,outputTokens:2,modelRequests:3,toolCalls:4,toolErrors:1,durationMs:10,usageComplete:true},
@@ -200,15 +201,18 @@ test('current attribution evidence normalizes stored arm names and labels qualit
  assert.equal(armLabel.baseline,'图执行 · 不学习');
  assert.equal(armLabel.rsi,'图执行 · 在线 RSI');
  const evidence=await readFile(new URL('../src/CurrentEvidence.tsx',import.meta.url),'utf8');
- assert.match(evidence,/当前候选证据 · 质量受限/);
+ assert.match(evidence,/当前候选证据 · 在线 RSI 质量领先/);
  assert.match(evidence,/真实 API 对照已完成/);
- assert.match(evidence,/只展示绝对成本和诊断差值/);
- assert.match(evidence,/诊断差值（不学习 − 在线 RSI）/);
+ assert.match(evidence,/当前候选状态表示仍需扩大场景和补充独立审核/);
+ assert.match(evidence,/本组累计净 token 减少/);
+ assert.match(evidence,/不代表跨场景普遍收益/);
  assert.match(evidence,/查看修订来源任务 · \{r\.sourcePairId\}/);
  assert.match(evidence,/查看修订后实际使用 · \{u\.pairId\}/);
+ assert.doesNotMatch(evidence,/当前候选证据 · 质量受限/);
  const analysis=await readFile(new URL('../src/DataAnalysis.tsx',import.meta.url),'utf8');
- assert.match(analysis,/当前候选结果已完成，质量门槛未通过/);
- assert.match(analysis,/该差值不等于正式收益/);
+ assert.match(analysis,/在线 RSI 在本组质量更高/);
+ assert.match(analysis,/累计效率变化/);
+ assert.doesNotMatch(analysis,/当前候选结果已完成，质量门槛未通过/);
 });
 
 

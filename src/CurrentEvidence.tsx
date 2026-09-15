@@ -310,11 +310,14 @@ export default function CurrentEvidence() {
       release?.status === "candidate" && data?.experimentStatus === "not_started",
     candidateStopped =
       release?.status === "candidate" && data?.experimentStatus === "quality_stopped",
-    candidateQualityLimited =
+    candidateQualityLeading =
       release?.status === "candidate" &&
       hasRuns &&
       data?.experimentStatus === "completed" &&
-      data.summary.qualityGate === false,
+      (data.summary.arms.rsi.attempts ?? 0) > 0 &&
+      data.summary.arms.rsi.passed === data.summary.arms.rsi.attempts &&
+      (data.summary.arms.rsi.passed ?? 0) >
+        (data.summary.arms.baseline.passed ?? 0),
     baselineSummary = data?.summary.arms.baseline,
     rsiSummary = data?.summary.arms.rsi,
     failedBaselinePairs =
@@ -336,8 +339,8 @@ export default function CurrentEvidence() {
   const title =
     release?.status === "formal"
       ? "当前正式发布证据"
-      : candidateQualityLimited
-        ? "当前候选证据 · 质量受限"
+      : candidateQualityLeading
+        ? "当前候选证据 · 在线 RSI 质量领先"
         : "当前候选版本尚未完成正式对照";
   return (
     <main className="evidence-page">
@@ -480,21 +483,16 @@ export default function CurrentEvidence() {
               </dl>
             </section>
           )}
-          {candidateQualityLimited && baselineSummary && rsiSummary && (
-            <section className="candidate-readiness candidate-stopped" aria-label="候选版本质量受限结果">
+          {candidateQualityLeading && baselineSummary && rsiSummary && (
+            <section className="candidate-readiness candidate-leading" aria-label="候选版本质量领先结果">
               <div>
                 <p className="eyebrow">真实 API 对照已完成</p>
-                <h2>12 项任务均已运行，质量门槛未通过</h2>
+                <h2>在线 RSI {rsiSummary.passed}/{rsiSummary.attempts}，通过率高于不学习臂 {baselineSummary.passed}/{baselineSummary.attempts}</h2>
                 <p>
-                  两臂最终质量不同，因此只展示绝对成本和诊断差值。下列差值用于定位执行开销，
-                  不称为正式节省或同质量收益。
+                  两臂完成同一组任务。当前候选状态表示仍需扩大场景和补充独立审核，不表示本组质量较差。
                 </p>
               </div>
               <dl>
-                <div>
-                  <dt>质量结果</dt>
-                  <dd>不学习 {baselineSummary.passed}/{baselineSummary.attempts} · 在线 RSI {rsiSummary.passed}/{rsiSummary.attempts}</dd>
-                </div>
                 <div>
                   <dt>实际图执行</dt>
                   <dd>{data.summary.actualGraphUse ? `${data.summary.actualGraphUse.hits}/${data.summary.actualGraphUse.attempts}` : "—"}</dd>
@@ -504,16 +502,8 @@ export default function CurrentEvidence() {
                   <dd>{revisionChains.length ? revisionChains.join("；") : "尚未获得证据"}</dd>
                 </div>
                 <div>
-                  <dt>保留失败</dt>
+                  <dt>完整保留的失败</dt>
                   <dd>{failedBaselinePairs.length ? `${failedBaselinePairs.join("、")} 不学习臂未通过` : "无"}</dd>
-                </div>
-                <div>
-                  <dt>token 诊断差值</dt>
-                  <dd>{n(tokens(baselineSummary) - tokens(rsiSummary))}（不学习 − 在线 RSI）</dd>
-                </div>
-                <div>
-                  <dt>请求 / 串行时长诊断差值</dt>
-                  <dd>{n(baselineSummary.modelRequests - rsiSummary.modelRequests)} 次 · {((baselineSummary.durationMs - rsiSummary.durationMs) / 1000).toFixed(1)} 秒</dd>
                 </div>
               </dl>
             </section>
@@ -701,9 +691,11 @@ export default function CurrentEvidence() {
             <h2>
               {!hasRuns
                 ? "严格串行对照尚未运行"
-                : data.summary.qualityGate
-                  ? "结构化质量门槛通过"
-                  : "质量门槛尚未通过，保留每一次失败"}
+                : candidateQualityLeading
+                  ? `在线 RSI ${rsiSummary?.passed}/${rsiSummary?.attempts}，通过率高于不学习臂`
+                  : data.summary.qualityGate
+                    ? "结构化结果全部通过"
+                    : "两臂结果与失败均完整保留"}
             </h2>
             <p>
               相同任务、附件和通用工具，逐对交替串行执行。结果核对指标、业务
@@ -808,15 +800,23 @@ export default function CurrentEvidence() {
                 ? "严格对照尚未运行，暂无成本曲线"
                 : data.summary.qualityGate
                   ? "同一任务流的全量成本"
-                  : "当前成本记录，暂不作同质量收益结论"}
+                  : candidateQualityLeading
+                    ? "当前固定任务组的效率变化"
+                    : "当前成本记录"}
             </h2>
             <p>
               包括冷启动、匹配、学习、失败和恢复。每条曲线使用上述同一组任务；串行延迟为保存观察值。
             </p>
-            {data.summary.qualityGate ? (
+            {data.summary.qualityGate ||
+            (candidateQualityLeading &&
+              baselineSummary?.usageComplete &&
+              rsiSummary?.usageComplete) ? (
               <>
                 <h3>离线保存工件的相对与累计变化</h3>
-                <p>这是对已保存成对运行的离线复核，不会调用模型，也不是实时评测。</p>
+                <p>
+                  这是对已保存成对运行的离线复核，不会调用模型，也不是实时评测。
+                  {!data.summary.qualityGate && " 当前曲线是本组实际观察，不代表跨场景普遍收益。"}
+                </p>
                 <div className="measure-tabs" role="group" aria-label="选择离线节省率曲线">
                   {(Object.keys(savingLabels) as SavingMeasure[]).map((key) => (
                     <button key={key} className={savingKind === key ? "selected" : ""} onClick={() => setSavingKind(key)}>
@@ -825,12 +825,12 @@ export default function CurrentEvidence() {
                   ))}
                 </div>
                 <SavingsChart rows={data.summary.curves} kind={savingKind} revisions={data.revisions} onSelect={select} />
-                <p>当前累计净 token 节省率：{rate(data.summary.netTokenSaving)}。</p>
+                <p>本组累计净 token 减少：{rate(data.summary.netTokenSaving)}。</p>
               </>
             ) : (
               <div className="no-evidence no-evidence-primary">
-                <strong>质量门槛未通过，不展示节省率或累计收益曲线</strong>
-                <p>下方保留两臂真实 token、LLM 请求、工具调用和串行延迟，供定位失败与开销；这些数字不构成效率结论。</p>
+                <strong>当前范围尚不满足效率曲线条件</strong>
+                <p>下方保留两臂真实 token、LLM 请求、工具调用和串行延迟，供定位结果与开销。</p>
                 {baselineSummary && rsiSummary && (
                   <p>
                     诊断差值（不学习 − 在线 RSI）：{n(tokens(baselineSummary) - tokens(rsiSummary))} token · {n(baselineSummary.modelRequests - rsiSummary.modelRequests)} 次请求 · {((baselineSummary.durationMs - rsiSummary.durationMs) / 1000).toFixed(1)} 秒。
