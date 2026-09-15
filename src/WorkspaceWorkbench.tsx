@@ -133,7 +133,7 @@ type ComparisonArm = {
   reportUrl?: string;
   reportDownloadUrl?: string;
   selectionDownloadUrl?: string;
-  providerProfile?: 'primary' | 'secondary';
+  providerProfile?: 'primary' | 'secondary' | 'primary_serial';
   learningEnabled?: boolean;
   learningWriteEnabled?: boolean;
   experience?: { mode?: string; releaseId?: string | null; versionCount?: number; readOnly?: boolean };
@@ -144,7 +144,7 @@ type WorkspaceComparison = {
   id: string;
   taskId: string;
   status: string;
-  executionPolicy: 'strict_serial' | 'parallel_dual_key' | 'parallel_three_arm_two_key';
+  executionPolicy: 'strict_serial' | 'strict_serial_three_arm' | 'parallel_dual_key' | 'parallel_three_arm_two_key';
   design?: 'plan_react_graph_learning_three_arm' | 'same_graph_runtime_learning_ablation' | 'legacy_plan_react_vs_graph_rsi';
   knowledgeBase?: { releaseId?: string; datasetId?: string; versionCount?: number; readOnly?: boolean } | null;
   model?: string;
@@ -165,6 +165,11 @@ const rememberComparison = (workspaceId: string, comparison: WorkspaceComparison
   if (!workspaceId || comparison.id.startsWith('history:')) return;
   const current = storedComparisonRefs();
   current[workspaceId] = { comparisonId: comparison.id, taskId: comparison.taskId };
+  window.localStorage.setItem(COMPARISON_STORAGE_KEY, JSON.stringify(current));
+};
+const forgetComparison = (workspaceId: string) => {
+  const current = storedComparisonRefs();
+  delete current[workspaceId];
   window.localStorage.setItem(COMPARISON_STORAGE_KEY, JSON.stringify(current));
 };
 const rememberWorkspace = (workspaceId: string) => {
@@ -206,7 +211,8 @@ const comparisonStatus = (arms: ComparisonArm[]) => {
   const statuses = new Set(arms.map(arm => arm.status));
   if (statuses.has('running')) return 'running';
   if (statuses.has('queued')) return 'queued';
-  if (statuses.size === 1 && statuses.has('completed')) return 'completed';
+  if (statuses.size === 1 && statuses.has('completed')
+      && arms.every(arm => ['passed', 'user_review_required'].includes(arm.evaluation?.status || ''))) return 'completed';
   return 'completed_with_failures';
 };
 
@@ -466,7 +472,7 @@ function WorkspaceStageBoard({ lanes }: { lanes: { lane: LaneKind; run: Run | nu
       const waitingMs = activeRun(run) && Number.isFinite(eventStarted) ? Math.max(0, clock - eventStarted) : null;
       return <article key={lane} className={lane}>
         <small>{laneName(lane)}</small>
-        <strong>{latest ? notificationEventTitle(latest, lane) : run?.status === 'queued' ? '等待首次请求' : waiting}</strong>
+        <strong>{latest ? notificationEventTitle(latest, lane) : waiting}</strong>
         <span>{waitingMs != null
           ? `${eventStageLabel(latest!, lane)} · 已持续 ${formatMs(waitingMs)}`
           : run
@@ -614,6 +620,10 @@ export default function WorkspaceWorkbench() {
   const traditionalRun = armRun(traditionalArm);
   const rsiRun = armRun(rsiArm);
   const active = Boolean(busy === 'run' || comparison && ['queued', 'running'].includes(comparison.status));
+  const historyComparison = Boolean(comparison?.id.startsWith('history:'));
+  const planWaiting = planArm?.status === 'queued' ? '等待开始' : planArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
+  const traditionalWaiting = traditionalArm?.status === 'queued' ? '等待上一方法完成' : traditionalArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
+  const rsiWaiting = rsiArm?.status === 'queued' ? '等待上一方法完成' : rsiArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
 
   useEffect(() => {
     const area = requestArea.current;
@@ -651,11 +661,22 @@ export default function WorkspaceWorkbench() {
     if (!saved) { setComparison(null); return; }
     try {
       const restored = await api<WorkspaceComparison>(`/api/workspaces/comparison-runs/${saved.comparisonId}`);
-      setComparison(restored);
       const task = (workspaceSnapshot || workspace)?.tasks.find(item => item.id === saved.taskId);
-      if (task) { setReadyTask(task); setRequest(task.task); }
-    } catch (reason) {
-      setError(`无法恢复已保存的对比执行：${(reason as Error).message}`);
+      if (!task || task.sourceStatus === 'removed') {
+        forgetComparison(workspaceId);
+        setComparison(null);
+        setReadyTask(null);
+        setRequest('');
+        return;
+      }
+      setComparison(restored);
+      setReadyTask(task);
+      setRequest(task.task);
+    } catch {
+      forgetComparison(workspaceId);
+      setComparison(null);
+      setReadyTask(null);
+      setRequest('');
     }
   }
 
@@ -821,12 +842,13 @@ export default function WorkspaceWorkbench() {
     sources: [], tables: [], tasks: [], reports: [], exports: [],
   };
   const columns = preview?.table.fields || [];
+  const visibleError = error.includes('任务引用的资料已被移除') ? '' : error;
 
   return <main className="workspace-shell">
     <header className="workspace-topbar"><div className="workspace-brand"><Bot size={19} /><span>上传资料，比较传统规划、图执行与在线 RSI</span></div><div className="workspace-topbar-status"><span><i />本次资料独立保存</span><span title={visibleWorkspace.folderPath}><FolderOpen size={12} />{visibleWorkspace.folderName}</span></div></header>
     <section className="workspace-header"><div><p>财务复核 · 输入问题与附件</p><h1>{FINANCE_CAPABILITY.label}</h1><span>{FINANCE_CAPABILITY.caption}</span></div><div className="workspace-capability" aria-label="当前业务能力"><small>FINANCE</small><strong>财务复核</strong><span>当前演示固定能力</span></div></section>
 
-    {error && <div className="workspace-error"><AlertCircle size={16} /><span>{error}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
+    {visibleError && <div className="workspace-error"><AlertCircle size={16} /><span>{visibleError}</span><button onClick={() => setError('')} title="关闭错误"><X size={15} /></button></div>}
     <section className="workspace-layout">
       <aside className="workspace-sources"><header><div><small>资料</small><strong>{visibleWorkspace.sources.length} 个文件</strong></div><button onClick={() => input.current?.click()} title="添加资料" disabled={active || busy === 'upload'}><Plus size={16} /></button></header>
         <div className={`workspace-drop ${dragging ? 'dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true); }} onDragOver={event => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={dropped} onClick={() => input.current?.click()}>
@@ -840,7 +862,7 @@ export default function WorkspaceWorkbench() {
       <section className="workspace-center">
         <div className="workspace-request"><header><div><small>工作要求</small><strong>{readyTask ? '对比任务已准备' : '输入业务需求'}</strong></div><span>{active ? '执行中' : readyTask ? '可启动' : '未运行'}</span></header>
           <textarea ref={requestArea} value={request} onChange={event => { setRequest(event.target.value); setReadyTask(null); setClarifications([]); }} disabled={active} placeholder="例如：核对订单、支付和退款，列出需要人工复核的金额差异及依据。" />
-          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>确认 3 次真实运行及模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}运行三臂对照</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消运行</button>}</footer>
+          <footer>{!readyTask && <button className="workspace-primary" onClick={() => void prepareTask()} disabled={!request.trim() || active || busy === 'prepare'}>{busy === 'prepare' ? <LoaderCircle size={15} /> : <Sparkles size={15} />}解析请求</button>}{readyTask && <><label className="workspace-cost"><input type="checkbox" checked={costConfirmed} onChange={event => setCostConfirmed(event.target.checked)} disabled={active} /><span>确认 3 次真实运行及模型费用</span></label><button className="workspace-primary" onClick={() => void startWork()} disabled={!costConfirmed || active || busy === 'run'}>{busy === 'run' ? <LoaderCircle size={15} /> : <Play size={15} />}按顺序运行三臂</button></>}{active && <button className="workspace-stop" onClick={() => void stopWork()}><CircleStop size={15} />取消运行</button>}</footer>
         </div>
 
         {clarifications.length > 0 && <section className="workspace-clarify"><header><MessageSquareText size={17} /><div><small>需要确认</small><strong>补齐影响结论的资料范围</strong></div></header>{clarifications.map(item => <label key={item.id}><span>{item.question}</span><input value={answers[item.id] || ''} onChange={event => setAnswers(current => ({ ...current, [item.id]: event.target.value }))} placeholder="填写说明或上传相应资料" /></label>)}<button className="workspace-secondary" onClick={() => void prepareTask()} disabled={busy === 'prepare'}><RefreshCw size={14} />提交确认</button></section>}
@@ -858,13 +880,13 @@ export default function WorkspaceWorkbench() {
         <article className="traditional"><div><span>B</span><strong>图执行 · 不学习</strong></div><p>每次重新规划，不读取经验。</p></article>
         <article className="rsi"><div><span>C</span><strong>图执行 · 在线 RSI</strong></div><p>复用冻结经验，按当前资料重算。</p></article>
       </div>
-      <div className="workspace-attribution-guide"><span><b>A → B</b> 图运行时与编译方式的差异</span><span><b>B → C</b> 跨任务学习的净贡献</span></div>
+      <div className="workspace-attribution-guide"><span><b>运行顺序</b>A → B → C 严格串行</span><span><b>A → B</b> 图运行时与编译方式的差异</span><span><b>B → C</b> 跨任务学习的净贡献</span></div>
       <details className="workspace-experiment-notes">
         <summary>实验说明</summary>
         <div>
           <p>三臂读取同一题目和附件，使用 qwen/qwen3.5-27b、同一工具和预算。A 用于检验传统 Agent 基线；B 与 C 使用相同图运行时，B 不读写跨任务经验，C 只读金融 12 任务冻结知识库。</p>
           <dl>
-            <div><dt>并行</dt><dd>三个 run 同时创建；主 Key 承载 A/B，Secondary Key 承载 C</dd></div>
+            <div><dt>执行顺序</dt><dd>A 完成后运行 B，B 完成后运行 C</dd></div>
             <div><dt>知识库</dt><dd>{comparison?.knowledgeBase ? `${comparison.knowledgeBase.versionCount || 0} 个版本 · ${comparison.knowledgeBase.releaseId || 'ID 未返回'} · 只读` : '启动后由后端返回版本和 Release ID'}</dd></div>
             <div><dt>阶段计时</dt><dd>只按后端真实事件更新，持续时间从当前事件时间戳计算</dd></div>
           </dl>
@@ -873,14 +895,14 @@ export default function WorkspaceWorkbench() {
       <div className="workspace-comparison-task" aria-label="本次完整问题"><small>本次完整问题</small><p>{readyTask?.task || request || '当前历史任务未返回完整题面。'}</p></div>
       {comparison && <>
         <WorkspaceStageBoard lanes={[
-          { lane: 'plan', run: planRun, waiting: '等待首次请求' },
-          { lane: 'traditional', run: traditionalRun, waiting: '等待首次请求' },
-          { lane: 'rsi', run: rsiRun, waiting: '等待首次请求' },
+          { lane: 'plan', run: planRun, waiting: planWaiting },
+          { lane: 'traditional', run: traditionalRun, waiting: traditionalWaiting },
+          { lane: 'rsi', run: rsiRun, waiting: rsiWaiting },
         ]} />
         <div className="workspace-agent-grid">
-          <WorkspaceRunLane arm="plan" run={planRun} waiting={planArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回 Plan + ReAct run'} />
-          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={traditionalArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回不学习 run'} />
-          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={rsiArm?.status === 'queued' ? '已创建，等待首次请求' : '后端未返回 RSI run'} />
+          <WorkspaceRunLane arm="plan" run={planRun} waiting={planWaiting} />
+          <WorkspaceRunLane arm="traditional" run={traditionalRun} waiting={traditionalWaiting} />
+          <WorkspaceRunLane arm="rsi" run={rsiRun} waiting={rsiWaiting} />
         </div>
       </>}
     </section>}

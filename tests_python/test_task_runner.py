@@ -72,6 +72,102 @@ async def test_phase_routing_queue_isolation_and_bounded_concurrency(tmp_path):
     assert len(restored.runs) == 5
 
 
+async def test_strict_serial_runner_preserves_arm_start_order(tmp_path):
+    starts = []
+
+    class SerialBank(Bank):
+        def task(self, key):
+            task = super().task(key)
+            task['task'] = f'读取并发布 {key}'
+            return task
+
+    class OrderedModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                starts.append(json.loads(messages[-1]['content'])['task'])
+                await asyncio.sleep(.01)
+            return await super().complete(messages, tools)
+
+    runner = TaskRunner(SerialBank(tmp_path), lambda role: OrderedModel(role, []),
+                        run_limit=1, model_limit=1, read_limit=1, learning_enabled=False)
+    jobs = [await runner.start(TaskRunRequest(taskId=task_id)) for task_id in ['arm-a', 'arm-b', 'arm-c']]
+    await asyncio.gather(*list(runner.tasks.values()))
+
+    assert starts == ['读取并发布 arm-a', '读取并发布 arm-b', '读取并发布 arm-c']
+    assert runner.peaks == {'runs': 1, 'models': 1, 'reads': 1}
+    assert all(job['status'] == 'completed' for job in jobs)
+
+
+
+async def test_strict_serial_demo_finishes_after_first_saved_report_and_binds_unique_evidence(tmp_path):
+    exact_ref = 'workspace:demo:table:orders:16'
+    executor_calls = []
+
+    class DemoBank(Bank):
+        def tools(self, key):
+            def reconcile(args, ctx):
+                ctx.evidence.add(exact_ref)
+                return {'totals': {'count': 1}, 'comparisons': [], 'evidenceByKey': {'o-1': [exact_ref]}}
+
+            def publish(args, ctx):
+                assert args['evidenceIds'] == [exact_ref]
+                ctx.run['submission'] = deepcopy(args)
+                ctx.run['evaluation'] = {'status': 'failed', 'issues': ['metrics'], 'scope': 'workspace-evidence'}
+                return {'saved': True, 'reportId': 'saved-report', 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('workspace_reconcile_keyed_sums', '完整确定性对账', 'compute', object_schema({
+                    'anchorTableId': {'type': 'string'}, 'keyField': {'type': 'string'},
+                    'aggregates': {'type': 'array'},
+                }, required=['anchorTableId', 'keyField', 'aggregates']), reconcile),
+                Tool('workspace_publish_report', '发布报告', 'artifact', object_schema({
+                    'metrics': {'type': 'object'}, 'selectedIds': {'type': 'array'},
+                    'evidenceIds': {'type': 'array'}, 'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class DemoModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': []})
+            executor_calls.append([tool.name for tool in tools])
+            prior = [call['function']['name'] for message in messages for call in message.get('tool_calls') or []]
+            if 'workspace_reconcile_keyed_sums' not in prior:
+                return result('workspace_reconcile_keyed_sums', {
+                    'anchorTableId': 'orders', 'keyField': 'order_id', 'aggregates': [{}],
+                })
+            assert {tool.name for tool in tools} == {'workspace_publish_report'}
+            assert any('摘要控制在500字以内' in message.get('content', '') for message in messages)
+            if 'workspace_publish_report' in prior:
+                raise AssertionError('首次报告保存后不应再次调用模型')
+            return result('workspace_publish_report', {
+                'metrics': {'count': 1}, 'selectedIds': ['o-1'],
+                'evidenceIds': ['broken-prefix:orders:16'], 'summary': '已保存首次报告。',
+            })
+
+    runner = TaskRunner(DemoBank(tmp_path), lambda role: DemoModel(role, []), learning_enabled=False)
+    run = await runner.start(
+        TaskRunRequest(taskId='demo', strategy='plan_react'),
+        comparison_context={
+            'id': 'comparison-demo', 'arm': 'plan_react', 'providerProfile': 'primary_serial',
+            'executionPolicy': 'strict_serial_three_arm',
+        },
+    )
+    await runner.tasks[run['id']]
+
+    assert run['status'] == 'completed'
+    assert run['phase'] == '报告已保存 · 校验未通过'
+    assert run['evaluation']['status'] == 'failed'
+    assert run['metrics']['reportAttempts'] == 1
+    assert run['metrics']['failedReportAttempts'] == 1
+    assert run['metrics']['reportEvidenceCanonicalizations'] == 1
+    assert len(executor_calls) == 2
+    assert any(event['type'] == 'demo_report_boundary' for event in run['events'])
+    assert any(event['type'] == 'report_evidence_binding' for event in run['events'])
+    assert any(event['type'] == 'report_validation_terminal' for event in run['events'])
+    assert 'reportRecovery' not in run
+
+
 async def test_bad_plan_falls_back_and_counts_planner_request(tmp_path):
     class Invalid(Model):
         async def complete(self, messages, tools):
@@ -561,6 +657,60 @@ async def test_duplicate_deterministic_compute_is_rejected_for_both_arms(tmp_pat
         assert len(compute_calls) == 1
         assert run['metrics']['duplicateComputeGuardRejects'] == 1
         assert any(event['type'] == 'compute_guard' for event in run['events'])
+
+
+
+async def test_repeated_compute_loop_forces_report_boundary_for_both_arms(tmp_path):
+    """Two identical guarded repeats must stop exploration and reserve a report turn."""
+    compute_calls = []
+
+    class ComputeBank(Bank):
+        def tools(self, key):
+            def aggregate(args, ctx):
+                compute_calls.append(deepcopy(args))
+                return {'count': 10}
+
+            def publish(args, ctx):
+                ctx.run['evaluation'] = {'status': 'passed', 'issues': []}
+                return {'saved': True, 'evaluation': ctx.run['evaluation']}
+
+            return [
+                Tool('workspace_aggregate_rows', '确定性计数', 'compute', object_schema({
+                    'tableId': {'type': 'string'}, 'operation': {'type': 'string'},
+                }), aggregate),
+                Tool('workspace_publish_report', '提交报告', 'artifact', object_schema({
+                    'metrics': {'type': 'object'}, 'selectedIds': {'type': 'array'},
+                    'evidenceIds': {'type': 'array'}, 'summary': {'type': 'string'},
+                }), publish),
+            ]
+
+    class StubbornRepeatModel(Model):
+        async def complete(self, messages, tools):
+            if self.role == 'planner':
+                return result('submit_plan', {'steps': []})
+            guarded = sum('相同确定性计算结果' in message.get('content', '') for message in messages)
+            if guarded < 2:
+                return result('workspace_aggregate_rows', {'tableId': 'current', 'operation': 'count'})
+            assert {tool.name for tool in tools} == {'workspace_publish_report'}
+            return result('workspace_publish_report', {
+                'metrics': {'count': 10}, 'selectedIds': [], 'evidenceIds': [],
+                'summary': '停止重复计算并提交当前事实。',
+            })
+
+    for strategy in ['plan_react', 'graph_rsi']:
+        compute_calls.clear()
+        runner = TaskRunner(ComputeBank(tmp_path / strategy), lambda role: StubbornRepeatModel(role, []),
+                            learning_enabled=False)
+        run = await runner.start(TaskRunRequest(taskId='compute-repeat', strategy=strategy))
+        await runner.tasks[run['id']]
+
+        assert run['status'] == 'completed'
+        assert run['evaluation']['status'] == 'passed'
+        assert len(compute_calls) == 1
+        assert run['metrics']['duplicateComputeGuardRejects'] == 2
+        assert run['metrics']['duplicateComputeFinalizationGuards'] == 1
+        assert any(event['type'] == 'compute_loop_guard' for event in run['events'])
+        assert any(event['type'] == 'compute_loop_report_boundary' for event in run['events'])
 
 
 def test_actual_tool_call_difference_uses_exact_signatures(tmp_path):

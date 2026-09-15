@@ -5,12 +5,13 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../src/WorkspaceWorkbench.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/workspace.css', import.meta.url), 'utf8');
 
-test('one confirmed action creates the native three-arm comparison', () => {
+test('one confirmed action starts the native serial three-arm comparison', () => {
   assert.match(source, /\/api\/workspaces\/tasks\/\$\{readyTask\.id\}\/comparison-runs/);
   assert.match(source, /body: JSON\.stringify\(\{ confirmCost: true \}\)/);
-  assert.match(source, /运行三臂对照/);
+  assert.match(source, /按顺序运行三臂/);
   assert.match(source, /确认 3 次真实运行及模型费用/);
   assert.doesNotMatch(source, /workspace-dual-protocol/);
+  assert.doesNotMatch(source, /三个 run 同时创建|主 Key 承载|Secondary Key 承载/);
   assert.doesNotMatch(source, /rsiStartTask/);
   assert.doesNotMatch(source, /startRsiRun/);
   assert.doesNotMatch(source, /awaitingRsi/);
@@ -33,7 +34,8 @@ test('three lanes use one comparison poll and expose real events metrics and rep
   assert.match(source, /复用冻结经验，按当前资料重算/);
   assert.match(source, /<b>A → B<\/b> 图运行时与编译方式的差异/);
   assert.match(source, /<b>B → C<\/b> 跨任务学习的净贡献/);
-  assert.match(source, /executionPolicy: 'strict_serial' \| 'parallel_dual_key' \| 'parallel_three_arm_two_key'/);
+  assert.match(source, /<b>运行顺序<\/b>A → B → C 严格串行/);
+  assert.match(source, /executionPolicy: 'strict_serial' \| 'strict_serial_three_arm' \| 'parallel_dual_key' \| 'parallel_three_arm_two_key'/);
   assert.match(source, /design\?: 'plan_react_graph_learning_three_arm'/);
   assert.match(source, /knowledgeBase\?: \{ releaseId\?: string; datasetId\?: string; versionCount\?: number; readOnly\?: boolean \}/);
   assert.match(source, /comparisonArm\(comparison, 'plan_react'\)/);
@@ -80,6 +82,10 @@ test('last workspace restores silently without a visible continuation section', 
   assert.doesNotMatch(source, /继续之前的工作/);
   assert.doesNotMatch(source, /继续追问/);
   assert.doesNotMatch(source, /准备双轨追问|无法恢复已保存的双轨执行/);
+  assert.match(source, /function restoreComparison[\s\S]*forgetComparison\(workspaceId\)/);
+  assert.match(source, /task\.sourceStatus === 'removed'/);
+  assert.match(source, /const visibleError = error\.includes\('任务引用的资料已被移除'\) \? '' : error/);
+  assert.doesNotMatch(source, /无法恢复已保存的对比执行/);
 });
 
 test('long task text grows to its real scroll height and mobile lanes stack', () => {
@@ -130,11 +136,25 @@ test('protocol details stay in a collapsed experiment note instead of the presen
   const notesStart = source.indexOf('<details className="workspace-experiment-notes">');
   const notesEnd = source.indexOf('</details>', notesStart);
   const notes = source.slice(notesStart, notesEnd);
-  assert.match(notes, /主 Key 承载 A\/B，Secondary Key 承载 C/);
+  assert.match(notes, /A 完成后运行 B，B 完成后运行 C/);
   assert.match(notes, /knowledgeBase\.versionCount/);
   assert.match(notes, /knowledgeBase\.releaseId/);
   assert.match(notes, /阶段计时/);
+  assert.doesNotMatch(notes, /并行|主 Key|Secondary Key|同时创建/);
   assert.match(css, /\.workspace-experiment-notes>summary/);
+});
+
+test('queued serial lanes wait for the preceding method while old policies remain readable', () => {
+  assert.match(source, /const planWaiting = planArm\?\.status === 'queued' \? '等待开始'/);
+  assert.match(source, /const traditionalWaiting = traditionalArm\?\.status === 'queued' \? '等待上一方法完成'/);
+  assert.match(source, /const rsiWaiting = rsiArm\?\.status === 'queued' \? '等待上一方法完成'/);
+  assert.match(source, /waiting=\{planWaiting\}/);
+  assert.match(source, /waiting=\{traditionalWaiting\}/);
+  assert.match(source, /waiting=\{rsiWaiting\}/);
+  assert.doesNotMatch(source, /等待首次请求|已创建，等待首次请求/);
+  assert.match(source, /parallel_dual_key/);
+  assert.match(source, /parallel_three_arm_two_key/);
+  assert.match(source, /arms\.every\(arm => \['passed', 'user_review_required'\]\.includes\(arm\.evaluation\?\.status \|\| ''\)\)/);
 });
 
 test('live execution uses transient Apple-style stage notifications with real values', () => {

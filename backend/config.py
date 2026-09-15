@@ -37,7 +37,7 @@ TASK_READ_CONCURRENCY = integer('TASK_READ_CONCURRENCY', 8, 1, 32)
 
 def public_config():
     return {'modelConfigured': bool(API_KEY and MODEL), 'model': MODEL or None,
-            'workspaceComparisonConfigured': bool(API_KEY and SECONDARY_API_KEY),
+            'workspaceComparisonConfigured': bool(API_KEY),
             'workspaceComparisonModel': WORKSPACE_COMPARISON_MODEL,
             'maxSteps': MAX_STEPS, 'backend': 'python', 'enableThinking': False,
             'connectors': {

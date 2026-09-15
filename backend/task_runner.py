@@ -284,10 +284,11 @@ class TaskRunner:
             raise ValueError('工作区在线学习只允许显式启用学习的 graph_rsi run')
         if comparison_context is not None:
             if (not isinstance(comparison_context, dict)
-                    or set(comparison_context) != {'id', 'arm', 'providerProfile'}
+                    or not {'id', 'arm', 'providerProfile'}.issubset(comparison_context)
+                    or not set(comparison_context).issubset({'id', 'arm', 'providerProfile', 'executionPolicy'})
                     or not all(isinstance(comparison_context[key], str) and comparison_context[key]
                                for key in comparison_context)):
-                raise ValueError('comparison_context 必须包含有效 id、arm 和 providerProfile')
+                raise ValueError('comparison_context 必须包含有效 id、arm、providerProfile，可选 executionPolicy')
         planner, executor = self.providers(provider_factory)
         composition = self.composition_provider(provider_factory)
         evolution = evolution_override or self.evolution
@@ -303,7 +304,7 @@ class TaskRunner:
                                 motifSelectedRecords=0, motifFilteredOutRecords=0, filteredOutDetailReads=0, emptyDetailBranches=0, deterministicBindings=0, bindingMs=0,
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0, reportSelectionCanonicalizations=0,
                                 reportEvidenceCoverageGaps=0, reportEvidenceFormatFailures=0, paginationGuardRejects=0,
-                                duplicateReadGuardRejects=0, duplicateComputeGuardRejects=0, observedScopeCompletions=0, contextEvidenceReferenceCompactions=0,
+                                duplicateReadGuardRejects=0, duplicateComputeGuardRejects=0, duplicateComputeFinalizationGuards=0, observedScopeCompletions=0, contextEvidenceReferenceCompactions=0,
                                 contextDuplicateObservationCompactions=0, contextCompactedCharacters=0, deterministicScopeRecoveryReads=0, deterministicReportResubmits=0,
                                 deterministicFactRecoveryComputes=0, deterministicFactRecoveryFailures=0,
                                 deterministicFactRecoveryReplays=0,
@@ -381,6 +382,9 @@ class TaskRunner:
         report_recovery, pagination = dict(active=False, attempts=0, signatures=[], kind=None, termination=None), {}
         deterministic_fact_recovery = dict(attempted=False, tools=[], failures=[])
         deadline_finalization = dict(active=False)
+        duplicate_compute_finalization = dict(active=False, counts={}, announced=False)
+        demo_report_finalization = dict(announced=False)
+        strict_serial_comparison = (run.get('comparison') or {}).get('executionPolicy') == 'strict_serial_three_arm'
         report_only_tool_violations = 0
         current_intent = task['task']
         trajectory_residual_complete = False
@@ -434,6 +438,20 @@ class TaskRunner:
             if isinstance(field, str) and field:
                 return f'本任务的 selectedIds 和 groups[].selectedIds 必须使用业务字段 {field} 的值；工作区 rowId 只可用于 evidenceIds。'
             return 'selectedIds 使用任务要求列出、筛选或排序的业务记录 ID；工作区 rowId 只可用于 evidenceIds。'
+
+        def resolve_observed_evidence(reference):
+            if not isinstance(reference, str) or not reference:
+                return reference
+            exact = [item for item in context.evidence if item == reference or item.endswith(':' + reference)]
+            if len(exact) == 1:
+                return exact[0]
+            parts = reference.rsplit(':', 2)
+            if len(parts) >= 2:
+                tail = ':'.join(parts[-2:])
+                suffix = [item for item in context.evidence if item.endswith(':' + tail)]
+                if len(suffix) == 1:
+                    return suffix[0]
+            return reference
 
         public_contract = deepcopy(delivery_contract) if isinstance(delivery_contract, dict) else None
         followup_context = task.get('followupContext')
@@ -752,20 +770,31 @@ class TaskRunner:
                             executor=owner,
                         ))
                         raise ValueError('任务含比例/百分比条件；发布前必须成功调用 workspace_reconcile_keyed_sums，并提供 comparisons[].rightTerms。请基于当前观察绑定表、键、数值字段和权重，不要手工比较或重提未改变报告')
-                if name in report_tool_names and args.get('groups'):
+                if name in report_tool_names:
                     args = deepcopy(args)
                     resolved_refs = []
-                    for group in args['groups']:
+                    top_level_refs = []
+                    for reference in args.get('evidenceIds') or []:
+                        normalized = resolve_observed_evidence(reference)
+                        if normalized != reference:
+                            resolved_refs.append(dict(scope='report', supplied=reference, resolved=normalized))
+                        top_level_refs.append(normalized)
+                    if 'evidenceIds' in args:
+                        args['evidenceIds'] = top_level_refs
+                    for group in args.get('groups') or []:
                         refs = []
                         for reference in group.get('evidenceIds') or []:
-                            matches = [e for e in context.evidence if e == reference or e.endswith(':' + reference)]
-                            normalized = matches[0] if len(matches) == 1 else reference
+                            normalized = resolve_observed_evidence(reference)
                             if normalized != reference:
-                                resolved_refs.append(dict(supplied=reference, resolved=normalized))
+                                resolved_refs.append(dict(scope='group', group=group.get('name'), supplied=reference, resolved=normalized))
                             refs.append(normalized)
                         group['evidenceIds'] = refs
                     if resolved_refs:
-                        event('group_evidence_binding', '分组证据按本次唯一观察引用绑定', resolved_refs)
+                        metrics['reportEvidenceCanonicalizations'] += 1
+                        event('report_evidence_binding', '报告证据按本次唯一观察引用绑定', resolved_refs)
+                        group_refs = [item for item in resolved_refs if item.get('scope') == 'group']
+                        if group_refs:
+                            event('group_evidence_binding', '分组证据按本次唯一观察引用绑定', group_refs)
                 args, selection_canonicalization = self.canonical_report_selection(task, name, args)
                 if selection_canonicalization:
                     metrics['reportSelectionCanonicalizations'] += 1
@@ -806,10 +835,25 @@ class TaskRunner:
                     # operations.  An identical call cannot add an observation, so
                     # returning the earlier result again only wastes the model budget.
                     metrics['duplicateComputeGuardRejects'] += 1
+                    signature = trace['signature']
+                    counts = duplicate_compute_finalization['counts']
+                    counts[signature] = counts.get(signature, 0) + 1
                     reason = '当前运行已成功获得相同确定性计算结果；请复用当前观察并发布报告，或仅在参数改变时调用新的计算'
                     event('compute_guard', '重复确定性计算已拒绝', dict(
                         tool=name, arguments=deepcopy(args), reason=reason,
+                        repeatedRejects=counts[signature],
                     ))
+                    if counts[signature] >= 2 and not duplicate_compute_finalization['active']:
+                        duplicate_compute_finalization.update(
+                            active=True, signature=signature, tool=name,
+                            arguments=deepcopy(args), repeatedRejects=counts[signature],
+                        )
+                        metrics['duplicateComputeFinalizationGuards'] += 1
+                        event('compute_loop_guard', '重复计算循环已转入终态报告', dict(
+                            tool=name, arguments=deepcopy(args),
+                            repeatedRejects=counts[signature],
+                            allowedTools=sorted(report_tool_names),
+                        ))
                     raise ValueError(reason)
                 if tool.effect == 'read':
                     paginated = set(tool.parameters.get('required', [])) == {'page', 'pageSize'}
@@ -1337,18 +1381,63 @@ class TaskRunner:
                 # exactly MODEL_TIMEOUT remaining can be cancelled first by
                 # the outer run timeout and lose its final usage record.
                 guard_margin_s = min(10.0, max(0.02, config.MODEL_TIMEOUT * 0.25))
+                successful_compute = any(
+                    trace.get('ok') is True and trace.get('effect') == 'compute'
+                    for trace in run.get('toolTrace', [])
+                )
+                complete_scope = scope_is_complete()
+                terminal_reconciliation = any(
+                    trace.get('ok') is True and trace.get('tool') == 'workspace_reconcile_keyed_sums'
+                    for trace in run.get('toolTrace', [])
+                )
+                # A non-terminal model turn may consume MODEL_TIMEOUT itself.
+                # Once deterministic current-workspace facts exist, reserve both
+                # that possible turn and a full final report turn.  For read-only
+                # tasks without a deterministic compute, retain the narrower
+                # completed-scope guard.
+                deadline_reserve_s = (
+                    config.MODEL_TIMEOUT * 2 + guard_margin_s
+                    if successful_compute and metrics['reportAttempts'] == 0
+                    else config.MODEL_TIMEOUT + guard_margin_s
+                )
                 deadline_finalization['active'] = (
                     not report_only
                     and not fact_repair
-                    and scope_is_complete()
-                    and remaining_ms <= (config.MODEL_TIMEOUT + guard_margin_s) * 1000
+                    and (complete_scope or successful_compute)
+                    and remaining_ms <= deadline_reserve_s * 1000
                 )
                 budget_finalization = (
                     not report_recovery['active']
-                    and scope_is_complete()
+                    and (complete_scope or successful_compute)
                     and metrics['modelRequests'] >= config.MAX_STEPS - 1
                 )
-                if trajectory_residual_complete and not report_recovery['active']:
+                if (strict_serial_comparison and terminal_reconciliation
+                        and metrics['reportAttempts'] == 0 and not report_recovery['active']):
+                    available = report_tools
+                    if not demo_report_finalization['announced']:
+                        demo_report_finalization['announced'] = True
+                        messages.append(dict(
+                            role='user',
+                            content='当前附件的完整确定性对账已经成功返回。请立即发布最终报告，不再读取、查找证据或追加计算。摘要控制在500字以内；evidenceIds 只引用支撑最终结论所需的当前已观察行，避免重复提交全部资料行。',
+                        ))
+                    event('demo_report_boundary', '完整对账完成，串行演示进入报告边界', dict(
+                        allowedTools=sorted(report_tool_names),
+                        reportPolicy='first_saved_report_terminates_arm',
+                    ))
+                elif duplicate_compute_finalization['active'] and not report_recovery['active']:
+                    available = report_tools
+                    if not duplicate_compute_finalization['announced']:
+                        duplicate_compute_finalization['announced'] = True
+                        messages.append(dict(
+                            role='user',
+                            content='同一个确定性计算已经成功返回，随后又以完全相同参数重复调用并被两次拒绝。停止重复计算；请使用当前观察立即调用 publish_report 提交完整结果。',
+                        ))
+                    event('compute_loop_report_boundary', '重复计算循环进入报告边界', dict(
+                        tool=duplicate_compute_finalization.get('tool'),
+                        repeatedRejects=duplicate_compute_finalization.get('repeatedRejects'),
+                        allowedTools=sorted(report_tool_names),
+                    ))
+                elif trajectory_residual_complete and not report_recovery['active']:
                     # A successful match explicitly declared that the selected,
                     # current-bound trajectory covered every non-artifact duty.
                     # Keep the next model turn at the report boundary so the
@@ -1365,25 +1454,30 @@ class TaskRunner:
                     available = report_tools
                     metrics['budgetFinalizationGuards'] += 1
                     event('budget_guard', '为终态报告保留最后一次模型请求', dict(
+                        finalizationBasis='complete_scope' if complete_scope else 'successful_current_compute',
                         modelRequests=metrics['modelRequests'],
                         maximumModelRequests=config.MAX_STEPS,
                         allowedTools=[tool.name for tool in report_tools],
                     ))
                     messages.append(dict(
                         role='user',
-                        content='当前公开资料范围已完整观察，且只剩最后一次模型请求。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，严格按公开指标定义和原因组提交完整结果。',
+                        content=('当前公开资料范围已完整观察' if complete_scope else '当前附件的确定性计算事实已经成功返回')
+                                + '，且只剩最后一次模型请求。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，严格按公开指标定义和原因组提交完整结果。',
                     ))
                 elif deadline_finalization['active']:
                     available = report_tools
                     metrics['deadlineFinalizationGuards'] += 1
-                    event('deadline_guard', '公开范围完成后保留终态报告时间', dict(
+                    event('deadline_guard', '为终态报告保留执行时间', dict(
+                        finalizationBasis='complete_scope' if complete_scope else 'successful_current_compute',
                         remainingMs=remaining_ms,
-                        reservedModelMs=round(config.MODEL_TIMEOUT * 1000, 3),
+                        reservedModelMs=round(deadline_reserve_s * 1000, 3),
                         allowedTools=[tool.name for tool in report_tools],
                     ))
                     if not deadline_finalization.get('announced'):
                         deadline_finalization['announced'] = True
-                        messages.append(dict(role='user', content='当前公开资料范围已完整观察，且接近执行时限。不要再读取、保存草稿或导出；请立即调用 publish_report，使用当前观察提交完整 metrics、selectedIds 与 evidenceIds。'))
+                        messages.append(dict(role='user', content=(
+                            ('当前公开资料范围已完整观察' if complete_scope else '当前附件的确定性计算事实已经成功返回')
+                            + '，且接近执行时限。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，使用当前观察提交完整 metrics、selectedIds 与 evidenceIds。')))
                 elif report_only:
                     available = report_tools
                 elif fact_repair:
@@ -1484,6 +1578,13 @@ class TaskRunner:
                     if run['evaluation']['status'] not in ['passed', 'user_review_required']:
                         metrics['failedReportAttempts'] += 1
                         issues = sorted(run['evaluation'].get('issues') or [])
+                        if strict_serial_comparison:
+                            event('report_validation_terminal', '报告已保存，校验未通过并结束当前演示臂', dict(
+                                issues=issues,
+                                policy='first_saved_report_terminates_arm',
+                            ))
+                            run.update(status='completed', phase='报告已保存 · 校验未通过')
+                            return
                         has_evidence_coverage = 'evidence_coverage' in issues
                         missing_evidence = self.missing_task_evidence(task, context.evidence) if has_evidence_coverage else []
                         if missing_evidence:

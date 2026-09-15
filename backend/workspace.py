@@ -419,7 +419,7 @@ class WorkspaceManager:
         task = self.tasks[task_id]
         return {key: deepcopy(task.get(key)) for key in ['id', 'workspaceId', 'scenario', 'family', 'split', 'title', 'task', 'createdAt',
                                                            'asOf', 'workpackId', 'difficulty', 'clarifications', 'schemaContract',
-                                                           'deliveryContract', 'sourceProvenance', 'followupRunId'] if key in task}
+                                                           'deliveryContract', 'sourceProvenance', 'followupRunId', 'sourceStatus'] if key in task}
 
     def add_source(self, workspace_id: str, filename: str, content: bytes, *, provenance: dict[str, Any] | None = None) -> dict[str, Any]:
         workspace = self.workspace(workspace_id)

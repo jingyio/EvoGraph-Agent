@@ -101,6 +101,8 @@ async def test_workspace_parses_supported_files_scopes_evidence_and_never_learns
     source = current['sources'][0]
     manager.remove_source(workspace['id'], source['id'])
     assert source['id'] not in {item['id'] for item in manager.public_workspace(workspace['id'])['sources']}
+    stale_task = next(item for item in manager.public_workspace(workspace['id'])['tasks'] if item['id'] == task['id'])
+    assert stale_task['sourceStatus'] == 'removed'
     await runner.shutdown()
 
 
@@ -1157,7 +1159,7 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             pass
 
     monkeypatch.setattr('backend.app.TaskBank', Bank)
-    monkeypatch.setattr('backend.app.config.API_KEY', 'primary-secret')
+    monkeypatch.setattr('backend.app.config.API_KEY', '')
     monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', '')
     app = create_app(RunService(tmp_path / 'legacy'))
     async with app.router.lifespan_context(app):
@@ -1175,10 +1177,10 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             denied = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': False})
             assert denied.status_code == 400
 
-            missing_secondary = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
-            assert missing_secondary.status_code == 503
+            missing_primary = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
+            assert missing_primary.status_code == 503
             assert not app.state.workspace_runner.runs and not app.state.workspace_runner.tasks
-            monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', 'secondary-secret')
+            monkeypatch.setattr('backend.app.config.API_KEY', 'primary-secret')
             app.state.finance_release_descriptor = {
                 'datasetId': 'finance-attribution-v5-12-api-candidate',
                 'experimentId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
@@ -1192,7 +1194,7 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             payload = started.json()
             assert payload['taskId'] == task['id']
             assert payload['status'] == 'queued'
-            assert payload['executionPolicy'] == 'parallel_three_arm_two_key'
+            assert payload['executionPolicy'] == 'strict_serial_three_arm'
             assert payload['design'] == 'plan_react_graph_learning_three_arm'
             assert payload['knowledgeBase'] == {
                 'releaseId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
@@ -1206,13 +1208,14 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
                 ('online_rsi', '图执行 · 在线 RSI', 'graph_rsi'),
             ]
             assert payload['model'] == 'qwen/qwen3.5-27b'
-            assert payload['limits'] == {'runs': 3, 'models': 3, 'reads': 3}
+            assert payload['limits'] == {'runs': 1, 'models': 1, 'reads': 1}
+            assert app.state.workspace_runner.status()['limits'] == {'runs': 1, 'models': 1, 'reads': 1}
             assert len({arm['runId'] for arm in payload['arms']}) == 3
             assert {arm['taskId'] for arm in payload['arms']} == {task['id']}
             assert [(arm['providerProfile'], arm['learningEnabled'], arm['learningWriteEnabled'], arm['model']) for arm in payload['arms']] == [
-                ('primary', False, False, 'qwen/qwen3.5-27b'),
-                ('primary', False, False, 'qwen/qwen3.5-27b'),
-                ('secondary', True, False, 'qwen/qwen3.5-27b'),
+                ('primary_serial', False, False, 'qwen/qwen3.5-27b'),
+                ('primary_serial', False, False, 'qwen/qwen3.5-27b'),
+                ('primary_serial', True, False, 'qwen/qwen3.5-27b'),
             ]
             assert payload['arms'][0]['experience'] == {
                 'mode': 'not_applicable', 'releaseId': None, 'versionCount': 0, 'readOnly': True,
@@ -1227,6 +1230,8 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
                 'readOnly': True,
             }
             assert all(app.state.workspace_runner.runs[arm['runId']]['comparison']['id'] == payload['id']
+                       for arm in payload['arms'])
+            assert all(app.state.workspace_runner.runs[arm['runId']]['comparison']['executionPolicy'] == 'strict_serial_three_arm'
                        for arm in payload['arms'])
 
             first = payload['arms'][0]
@@ -1250,6 +1255,15 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             assert first['runId'] in current_first['reportDownloadUrl']
             assert first['runId'] in current_first['selectionDownloadUrl']
             assert 'progressPercent' not in json.dumps(current)
+
+            for index, arm in enumerate(payload['arms']):
+                stored = app.state.workspace_runner.runs[arm['runId']]
+                stored['status'] = 'completed'
+                stored['evaluation'] = ({'status': 'failed', 'issues': ['invalid_evidence']}
+                                        if index == 1 else {'status': 'user_review_required', 'issues': []})
+            terminal = await client.get('/api/workspaces/comparison-runs/' + payload['id'])
+            assert terminal.status_code == 200
+            assert terminal.json()['status'] == 'completed_with_failures'
 
             conflict = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': True})
             assert conflict.status_code == 409

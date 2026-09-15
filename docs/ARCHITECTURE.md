@@ -1,3 +1,11 @@
+## 2026-09-15 严格串行三臂调度与有界报告完成（最新）
+
+新建工作区三臂 comparison 使用单一主模型凭据，并由共享 `TaskRunner(run_limit=1, model_limit=1, read_limit=1)` 按 A 传统 Plan+ReAct、B 图执行不学习、C 图执行在线 RSI 的创建顺序串行调度。每个新 run 保存 `comparison.executionPolicy=strict_serial_three_arm`；聚合 DTO 只在三个保存 run 都带该策略时返回串行策略和 `1/1/1` 限额。旧记录缺少该字段时继续返回历史并行策略，防止把旧时长误标为串行计量。
+
+执行器在当前附件已有成功确定性计算、但尚未提交报告时，为终态报告保留一个完整模型调用窗口；模型请求只剩一次时直接限制为报告工具。若同一个成功确定性计算随后以完全相同参数连续两次被守卫拒绝，运行记录 `duplicateComputeFinalizationGuards` 和来源签名，然后进入仅允许 `publish_report` 的边界。严格串行演示额外在完整 `workspace_reconcile_keyed_sums` 成功后立即进入精简报告边界，要求摘要不超过500字且只引用结论所需的已观察证据。首次报告保存后立即释放串行槽：校验通过正常完成，校验失败保存报告并以失败评价完成，不发起二次模型恢复。该演示策略由保存的 execution policy 触发，不改变正式离线实验的恢复协议。
+
+工作区公开任务 DTO 增加 `sourceStatus`。历史 run 列表用公开任务读取路径识别附件已删除的任务；前端静默恢复时清除对应本地引用，不将“任务引用的资料已被移除”作为全局红色错误显示。历史 run、报告、轨迹和错误账本保持不变。
+
 ## 2026-09-15 三臂发布解析与精简演示层（最新）
 
 实测在线 RSI 不再在 `backend/app.py` 固定实验 ID。后端从 `releases/analysis-manifest.json.defaultDatasetId` 读取唯一默认数据集，要求其来源为 `attribution`、归因类型为 `cross-task-learning`，随后完整校验实验工件摘要、runtime、资产、协议和任务范围；只有全部任务均为财务场景且对应 `online_rsi/experience.json` 存在时，才把该经验库只读注入 C 臂。返回 DTO 同时携带 `datasetId` 与 `experimentId`，确保实测页和数据分析页使用同一发布上下文。

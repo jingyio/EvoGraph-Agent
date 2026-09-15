@@ -109,7 +109,7 @@ def create_app(service=None):
     task_runner = TaskRunner(taskbank)
     workspace_manager = WorkspaceManager(taskbank.root)
     workspace_bank = WorkspaceBank(workspace_manager)
-    workspace_runner = TaskRunner(workspace_bank, run_limit=3, model_limit=3, read_limit=3,
+    workspace_runner = TaskRunner(workspace_bank, run_limit=1, model_limit=1, read_limit=1,
                                   run_directory=taskbank.root / 'artifacts' / 'workspace-runs',
                                   evolution_path=taskbank.root / 'artifacts' / 'workspace-runtime' / 'experience.json',
                                   learning_enabled=False)
@@ -652,9 +652,9 @@ def create_app(service=None):
         return descriptor, experience
 
     comparison_arms = (
-        ('plan_react', '传统 Plan + ReAct', 'plan_react', False, 'primary'),
-        ('no_learning', '图执行 · 不学习', 'graph_rsi', False, 'primary'),
-        ('online_rsi', '图执行 · 在线 RSI', 'graph_rsi', True, 'secondary'),
+        ('plan_react', '传统 Plan + ReAct', 'plan_react', False, 'primary_serial'),
+        ('no_learning', '图执行 · 不学习', 'graph_rsi', False, 'primary_serial'),
+        ('online_rsi', '图执行 · 在线 RSI', 'graph_rsi', True, 'primary_serial'),
     )
     legacy_comparison_arms = (
         ('plan_react', '传统 Agent · 每次规划'),
@@ -742,20 +742,26 @@ def create_app(service=None):
             status = 'running'
         elif 'queued' in statuses:
             status = 'queued'
-        elif statuses == {'completed'}:
+        elif statuses == {'completed'} and all(
+                (arm.get('evaluation') or {}).get('status') in {'passed', 'user_review_required'} for arm in arms):
             status = 'completed'
         else:
             status = 'completed_with_failures'
         three_arm = design == 'plan_react_graph_learning_three_arm'
+        saved_policies = {(run.get('comparison') or {}).get('executionPolicy') for run in runs}
+        serial_three_arm = three_arm and saved_policies == {'strict_serial_three_arm'}
         return {
             'id': comparison_id,
             'taskId': arms[0]['taskId'],
             'status': status,
-            'executionPolicy': 'parallel_three_arm_two_key' if three_arm else 'parallel_dual_key',
+            'executionPolicy': ('strict_serial_three_arm' if serial_three_arm else
+                                'parallel_three_arm_two_key' if three_arm else 'parallel_dual_key'),
             'design': design,
             'knowledgeBase': knowledge_base,
             'model': config.WORKSPACE_COMPARISON_MODEL,
-            'limits': {'runs': 3, 'models': 3, 'reads': 3} if three_arm else {'runs': 2, 'models': 2, 'reads': 1},
+            'limits': ({'runs': 1, 'models': 1, 'reads': 1} if serial_three_arm else
+                       {'runs': 3, 'models': 3, 'reads': 3} if three_arm else
+                       {'runs': 2, 'models': 2, 'reads': 1}),
             'arms': arms,
         }
 
@@ -766,8 +772,8 @@ def create_app(service=None):
             raise HTTPException(400, '三臂对照会发起三次真实 Agent 执行；请确认费用后再启动')
         if workspace_runner.tasks:
             raise HTTPException(409, '当前已有工作区 Agent 在运行；三臂对照需从空闲队列开始')
-        if not config.API_KEY or not config.SECONDARY_API_KEY:
-            raise HTTPException(503, '三臂并行需要同时配置 LLM_API_KEY 和 LLM_API_KEY_SECONDARY')
+        if not config.API_KEY:
+            raise HTTPException(503, '三臂串行实测需要配置 LLM_API_KEY')
         descriptor, finance_release_experience = finance_release_context()
         finance_release_id = descriptor['experimentId']
         if not finance_release_experience.versions:
@@ -779,7 +785,7 @@ def create_app(service=None):
         factories = {
             'plan_react': workspace_comparison_provider(config.API_KEY),
             'no_learning': workspace_comparison_provider(config.API_KEY),
-            'online_rsi': workspace_comparison_provider(config.SECONDARY_API_KEY),
+            'online_rsi': workspace_comparison_provider(config.API_KEY),
         }
         evolutions = {
             'plan_react': workspace_empty_experience,
@@ -805,6 +811,7 @@ def create_app(service=None):
                         'id': comparison_id,
                         'arm': arm,
                         'providerProfile': profile,
+                        'executionPolicy': 'strict_serial_three_arm',
                     },
                 )
                 created.append(run)
@@ -822,7 +829,8 @@ def create_app(service=None):
 
     @app.get('/api/workspaces/runs')
     def workspace_run_list(workspaceId: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):
-        rows = [run for run in workspace_runner.runs.values() if not workspaceId or workspace_manager.task(run['taskId']).get('workspaceId') == workspaceId]
+        rows = [run for run in workspace_runner.runs.values()
+                if not workspaceId or workspace_manager.public_task(run['taskId']).get('workspaceId') == workspaceId]
         rows.sort(key=lambda run: run.get('createdAt', ''), reverse=True)
         return {'scheduler': workspace_runner.status(), 'runs': [{key: run.get(key) for key in ['id', 'taskId', 'status', 'strategy', 'phase', 'createdAt', 'metrics', 'evaluation', 'evolution', 'learningEnabled', 'learningWriteEnabled', 'comparison', 'experience']} for run in rows[:limit]]}
 
