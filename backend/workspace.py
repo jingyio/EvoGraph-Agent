@@ -642,8 +642,10 @@ class WorkspaceManager:
         self._persist(workspace)
         return item
 
-    def tools(self, task_id: str) -> list[Tool]:
-        task = self.task(task_id)
+    def tools(self, task_id: str, runtime_task: dict[str, Any] | None = None) -> list[Tool]:
+        task = deepcopy(runtime_task) if runtime_task is not None else self.task(task_id)
+        if task.get('id') != task_id or task.get('workspaceId') not in self.workspaces:
+            raise ValueError('运行时任务必须对应当前工作区请求')
         workspace = self.workspace(task['workspaceId'])
         workspace_id = workspace['id']
         stable_contract = {'workspaceApi': 2, 'schema': self._schema_contract(workspace)}
@@ -1167,8 +1169,25 @@ class WorkspaceManager:
         )
         group_name_schema = ({'type': 'string', 'enum': required_group_names}
                              if required_group_names else {'type': 'string', 'minLength': 1})
-        group_schema = object_schema({'name': group_name_schema, 'reason': {'type': 'string', 'minLength': 1}, 'condition': {'type': 'string', 'minLength': 1}, 'count': {'type': 'integer', 'minimum': 0}, 'selectedIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string', 'description': selected_id_description}}, 'evidenceIds': {'type': 'array', 'uniqueItems': True, 'items': {'type': 'string', 'description': '当前实际观察到的工作区行 rowId 或完整 evidenceId。'}}})
-        report_required = ['metrics', 'selectedIds', 'evidenceIds', 'summary']
+        runtime_evidence_binding = task.get('runtimeEvidenceBinding') == 'current_scope_and_group_receipts_v1'
+        group_properties = {
+            'name': group_name_schema,
+            'reason': {'type': 'string', 'minLength': 1, 'maxLength': 300},
+            'condition': {'type': 'string', 'minLength': 1, 'maxLength': 300},
+            'count': {'type': 'integer', 'minimum': 0},
+            'selectedIds': {'type': 'array', 'uniqueItems': True,
+                            'items': {'type': 'string', 'description': selected_id_description}},
+            'evidenceIds': {'type': 'array', 'uniqueItems': True,
+                            'items': {'type': 'string', 'description': '当前实际观察到的工作区行短 rowId；运行时会校验并补齐完整引用。'}},
+        }
+        group_schema = object_schema(
+            group_properties,
+            required=['name', 'reason', 'condition', 'count', 'selectedIds']
+                     if runtime_evidence_binding else list(group_properties),
+        )
+        report_required = ['metrics', 'selectedIds', 'summary']
+        if not runtime_evidence_binding:
+            report_required.append('evidenceIds')
         if required_group_names:
             report_required.append('groups')
         report_schema = {'type': 'object', 'properties': {'metrics': metric_schema,
@@ -1238,7 +1257,13 @@ class WorkspaceManager:
             Tool('workspace_list_saved_reports', '列出当前工作区此前保存的报告摘要，用于同一工作区追问。', 'read', object_schema(), saved_reports, outputs=['reports']),
             Tool('workspace_save_draft', '保存内部草稿；不会发送消息、修改账务或关闭工单。', 'artifact', object_schema({'title': {'type': 'string', 'minLength': 1, 'maxLength': 180}, 'body': {'type': 'string', 'minLength': 1, 'maxLength': 8000}}), idempotent('draft', save_draft)),
             Tool('workspace_export_csv', '把当前表的全部或指定行导出为本地 CSV 文件。', 'artifact', object_schema({'tableId': table_id_schema(), 'rowIds': {'type': 'array', 'maxItems': 5000, 'uniqueItems': True, 'items': {'type': 'string'}}, 'name': {'type': 'string', 'minLength': 1, 'maxLength': 160}}, required=['tableId', 'name']), idempotent('export', export)),
-            Tool('workspace_publish_report', '保存有证据的分析报告。多个独立原因用 groups 分别给出 name/reason/condition/count/selectedIds/evidenceIds；允许重叠，空组也明确0。'+selected_id_description+' evidenceIds 必须使用当前观察的工作区行 rowId 或完整 evidenceId。不会执行外部业务动作。', 'artifact', report_schema, idempotent('publish', publish)),
+            Tool('workspace_publish_report', ('保存有证据的分析报告。多个独立原因用 groups 分别给出 name/reason/condition/count/selectedIds；允许重叠，空组也明确0。'
+                                              + selected_id_description
+                                              + (' 顶层与分组 evidenceIds 由运行时仅从本次已观察资料及计算收据绑定，无需模型复制。'
+                                                 if runtime_evidence_binding else
+                                                 ' evidenceIds 必须使用当前观察的工作区行 rowId 或完整 evidenceId。')
+                                              + '不会执行外部业务动作。'),
+                 'artifact', report_schema, idempotent('publish', publish)),
         ]
         if task.get('computeInterface') == 'granular-compute-v1':
             from .workspace_compute import tools_for
@@ -1297,3 +1322,6 @@ class WorkspaceBank:
 
     def tools(self, task_id: str) -> list[Tool]:
         return self.manager.tools(task_id)
+
+    def tools_for_task(self, task: dict[str, Any]) -> list[Tool]:
+        return self.manager.tools(task['id'], runtime_task=task)

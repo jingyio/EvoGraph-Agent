@@ -271,11 +271,19 @@ class TaskRunner:
 
     async def start(self, request, *, evaluation_context=None, provider_factory=None, learning_enabled=None,
                     workspace_online_learning=False, comparison_context=None, evolution_override=None,
-                    learning_write_enabled=None, experience_context=None):
+                    learning_write_enabled=None, experience_context=None, task_overrides=None):
         if len(self.tasks) >= 32:
             raise ValueError('任务队列已满（32），请等待或取消')
         task = deepcopy(self.bank.task(request.taskId))
-        tools = self.bank.tools(task['id'])
+        if task_overrides is not None:
+            allowed_overrides = {'computeInterface', 'publicScopeEvidenceIds', 'runtimeEvidenceBinding'}
+            if (not isinstance(task_overrides, dict) or not set(task_overrides).issubset(allowed_overrides)
+                    or not hasattr(self.bank, 'tools_for_task')):
+                raise ValueError('当前任务不支持请求级运行时配置')
+            task.update(deepcopy(task_overrides))
+            tools = self.bank.tools_for_task(task)
+        else:
+            tools = self.bank.tools(task['id'])
         resolved_learning = self.learning_enabled if learning_enabled is None else bool(learning_enabled)
         resolved_learning_write = resolved_learning if learning_write_enabled is None else bool(learning_write_enabled)
         if resolved_learning_write and not resolved_learning:
@@ -305,6 +313,7 @@ class TaskRunner:
                                 reportAttempts=0, failedReportAttempts=0, reportRecoveryBlockedReads=0, reportEvidenceCanonicalizations=0, reportSelectionCanonicalizations=0,
                                 reportEvidenceCoverageGaps=0, reportEvidenceFormatFailures=0, paginationGuardRejects=0,
                                 duplicateReadGuardRejects=0, duplicateComputeGuardRejects=0, duplicateComputeFinalizationGuards=0, observedScopeCompletions=0, contextEvidenceReferenceCompactions=0,
+                                reportGroupEvidenceBindings=0,
                                 contextDuplicateObservationCompactions=0, contextCompactedCharacters=0, deterministicScopeRecoveryReads=0, deterministicReportResubmits=0,
                                 deterministicFactRecoveryComputes=0, deterministicFactRecoveryFailures=0,
                                 deterministicFactRecoveryReplays=0,
@@ -318,6 +327,12 @@ class TaskRunner:
             run['comparison'] = deepcopy(comparison_context)
         if experience_context is not None:
             run['experience'] = deepcopy(experience_context)
+        if task_overrides is not None:
+            run['runtimeProfile'] = {
+                'computeInterface': task.get('computeInterface'),
+                'evidenceBinding': task.get('runtimeEvidenceBinding'),
+                'publicEvidenceCount': len(task.get('publicScopeEvidenceIds') or []),
+            }
         if evaluation_context is not None:
             run['evaluationContext'] = deepcopy(evaluation_context)
         self.runs[run['id']] = run
@@ -383,8 +398,6 @@ class TaskRunner:
         deterministic_fact_recovery = dict(attempted=False, tools=[], failures=[])
         deadline_finalization = dict(active=False)
         duplicate_compute_finalization = dict(active=False, counts={}, announced=False)
-        demo_report_finalization = dict(announced=False)
-        strict_serial_comparison = (run.get('comparison') or {}).get('executionPolicy') == 'strict_serial_three_arm'
         report_only_tool_violations = 0
         current_intent = task['task']
         trajectory_residual_complete = False
@@ -453,6 +466,57 @@ class TaskRunner:
                     return suffix[0]
             return reference
 
+        def bind_group_evidence(groups):
+            """Bind group evidence only from successful current-run receipts.
+
+            The model remains responsible for business IDs and reason groups.
+            This removes a serialization chore: it cannot introduce a business
+            ID, metric, amount or report statement, and never reads gold data.
+            """
+            if task.get('runtimeEvidenceBinding') != 'current_scope_and_group_receipts_v1':
+                return groups, None
+            evidence_maps = []
+            for receipt in context.computations.values():
+                mapping = receipt.get('evidenceByKey') if isinstance(receipt, dict) else None
+                if isinstance(mapping, dict):
+                    evidence_maps.append(mapping)
+            for prior_trace in run.get('toolTrace', [])[:-1]:
+                result = prior_trace.get('result') if prior_trace.get('ok') is True else None
+                mapping = result.get('evidenceByKey') if isinstance(result, dict) else None
+                if isinstance(mapping, dict):
+                    evidence_maps.append(mapping)
+            normalized = deepcopy(groups or [])
+            detail = []
+            for group in normalized:
+                selected = [str(item) for item in group.get('selectedIds') or []]
+                supplied = list(group.get('evidenceIds') or [])
+                if not selected:
+                    group['evidenceIds'] = []
+                    if supplied:
+                        detail.append({'group': group.get('name'), 'selectedIds': [],
+                                       'suppliedCount': len(supplied), 'boundCount': 0})
+                    continue
+                bound, unresolved = set(), []
+                for business_id in selected:
+                    found = set()
+                    for mapping in evidence_maps:
+                        refs = mapping.get(business_id)
+                        if isinstance(refs, list):
+                            found.update(ref for ref in refs if ref in context.evidence)
+                    if found:
+                        bound.update(found)
+                    else:
+                        unresolved.append(business_id)
+                for reference in supplied:
+                    resolved = resolve_observed_evidence(reference)
+                    if resolved in context.evidence:
+                        bound.add(resolved)
+                group['evidenceIds'] = sorted(bound)
+                detail.append({'group': group.get('name'), 'selectedIds': selected,
+                               'suppliedCount': len(supplied), 'boundCount': len(bound),
+                               'unresolvedSelectedIds': unresolved})
+            return normalized, detail
+
         public_contract = deepcopy(delivery_contract) if isinstance(delivery_contract, dict) else None
         followup_context = task.get('followupContext')
         if isinstance(followup_context, dict):
@@ -507,12 +571,19 @@ class TaskRunner:
             required = task.get('publicScopeEvidenceIds', expected.get('requiredEvidenceIds'))
             return bool(isinstance(required, list) and required and not self.missing_task_evidence(task, context.evidence))
 
+        def evidence_reference_count(value):
+            if isinstance(value, dict):
+                return sum(evidence_reference_count(item) for item in value.values())
+            if isinstance(value, list):
+                return sum(evidence_reference_count(item) for item in value)
+            return 1 if isinstance(value, str) else 0
+
         def remove_evidence_references(value):
             if isinstance(value, dict):
                 compacted, removed = {}, 0
                 for key, item in value.items():
-                    if key == '_evidenceRef':
-                        removed += 1
+                    if key in {'_evidenceRef', 'evidenceByKey'}:
+                        removed += evidence_reference_count(item) or 1
                         continue
                     child, count = remove_evidence_references(item)
                     compacted[key] = child
@@ -614,9 +685,18 @@ class TaskRunner:
                 rule='完整证据仅从本次已观察行确定性写入报告；不因抄写 evidenceIds 重读资料。',
             )
             event('evidence_scope', '本次公开资料范围已完整观察', detail)
+            evidence_instruction = (
+                '发布报告时不要提交顶层或分组 evidenceIds；运行时只会从本次已观察资料和当前计算收据确定性绑定。'
+                if task.get('runtimeEvidenceBinding') == 'current_scope_and_group_receipts_v1'
+                else '发布报告时，完整 evidenceIds 会仅由这些当前观察确定性写入；分组 evidenceIds 优先使用短 rowId，运行时仅在它唯一对应已观察证据时补齐前缀。'
+            )
             messages.append(dict(
                 role='user',
-                content='当前公开交付口径要求的资料范围已通过本次实际工具观察完整覆盖。发布报告时，完整 evidenceIds 会仅由这些当前观察确定性写入；不要为了抄写证据引用再次读取资料。分组 groups.evidenceIds 可引用本次行的 rowId，运行时仅在它唯一对应已观察证据时补齐前缀；不能为未观察行生成证据。'+selected_id_instruction()+' 仍须依据当前观察完成 metrics 与 selectedIds，不能编造事实。',
+                content='当前公开交付口径要求的资料范围已通过本次实际工具观察完整覆盖。'
+                        + evidence_instruction
+                        + '不要为了抄写证据引用再次读取资料；不能为未观察行生成证据。'
+                        + selected_id_instruction()
+                        + '仍须依据当前观察完成 metrics 与 selectedIds，不能编造事实。',
             ))
 
         async def complete(provider, phase, history, available, *, require_tool=False):
@@ -795,6 +875,16 @@ class TaskRunner:
                         group_refs = [item for item in resolved_refs if item.get('scope') == 'group']
                         if group_refs:
                             event('group_evidence_binding', '分组证据按本次唯一观察引用绑定', group_refs)
+                    groups, group_binding = bind_group_evidence(args.get('groups'))
+                    if group_binding is not None:
+                        args['groups'] = groups
+                        bound_count = sum(item.get('boundCount', 0) for item in group_binding)
+                        metrics['reportGroupEvidenceBindings'] += bound_count
+                        event('group_evidence_receipt_binding', '原因组证据已由当前运行收据绑定', {
+                            'groups': group_binding,
+                            'boundEvidenceCount': bound_count,
+                            'source': 'current_run_observations_and_receipts',
+                        })
                 args, selection_canonicalization = self.canonical_report_selection(task, name, args)
                 if selection_canonicalization:
                     metrics['reportSelectionCanonicalizations'] += 1
@@ -1087,8 +1177,20 @@ class TaskRunner:
 
         async def replay_trajectory():
             nonlocal current_intent, trajectory_residual_complete
-            rows, lookup_ms = trajectory.candidates(evolution.versions, task, tools, readonly=not run['learningWriteEnabled'])
-            run['evolution'] = dict(lookupMs=lookup_ms, planningPath='fallback', protocol=trajectory.PROTOCOL)
+            frozen_release = (run.get('experience') or {}).get('mode') == 'frozen_finance_release'
+            rows, lookup_ms = trajectory.candidates(
+                evolution.versions, task, tools,
+                readonly=not run['learningWriteEnabled'],
+                allow_unreviewed=frozen_release,
+                allow_compatible_contract=frozen_release,
+            )
+            compatibilities = sorted({row.get('_contractCompatibility') for row in rows if row.get('_contractCompatibility')})
+            run['evolution'] = dict(
+                lookupMs=lookup_ms,
+                planningPath='fallback',
+                protocol=trajectory.PROTOCOL,
+                contractCompatibility=(compatibilities[0] if len(compatibilities) == 1 else compatibilities or None),
+            )
             if not rows:
                 return False
             try:
@@ -1105,6 +1207,10 @@ class TaskRunner:
                 event('trajectory_match', '当前请求与实际轨迹兼容性', run['trajectoryMatch'])
                 if not selected:
                     return False
+                if selected.get('matchNormalization'):
+                    run['trajectoryMatchNormalization'] = deepcopy(selected['matchNormalization'])
+                    event('trajectory_match_normalized', '已忽略未被所选节点使用的多余槽绑定',
+                          run['trajectoryMatchNormalization'])
                 info = run['evolution']
                 source_ids = selected.get('sourceVersionIds') or [selected['id']]
                 info['trajectoryTraceStart'] = len(run.get('toolTrace', []))
@@ -1381,50 +1487,20 @@ class TaskRunner:
                 # exactly MODEL_TIMEOUT remaining can be cancelled first by
                 # the outer run timeout and lose its final usage record.
                 guard_margin_s = min(10.0, max(0.02, config.MODEL_TIMEOUT * 0.25))
-                successful_compute = any(
-                    trace.get('ok') is True and trace.get('effect') == 'compute'
-                    for trace in run.get('toolTrace', [])
-                )
                 complete_scope = scope_is_complete()
-                terminal_reconciliation = any(
-                    trace.get('ok') is True and trace.get('tool') == 'workspace_reconcile_keyed_sums'
-                    for trace in run.get('toolTrace', [])
-                )
-                # A non-terminal model turn may consume MODEL_TIMEOUT itself.
-                # Once deterministic current-workspace facts exist, reserve both
-                # that possible turn and a full final report turn.  For read-only
-                # tasks without a deterministic compute, retain the narrower
-                # completed-scope guard.
-                deadline_reserve_s = (
-                    config.MODEL_TIMEOUT * 2 + guard_margin_s
-                    if successful_compute and metrics['reportAttempts'] == 0
-                    else config.MODEL_TIMEOUT + guard_margin_s
-                )
+                deadline_reserve_s = config.MODEL_TIMEOUT + guard_margin_s
                 deadline_finalization['active'] = (
                     not report_only
                     and not fact_repair
-                    and (complete_scope or successful_compute)
+                    and complete_scope
                     and remaining_ms <= deadline_reserve_s * 1000
                 )
                 budget_finalization = (
                     not report_recovery['active']
-                    and (complete_scope or successful_compute)
+                    and complete_scope
                     and metrics['modelRequests'] >= config.MAX_STEPS - 1
                 )
-                if (strict_serial_comparison and terminal_reconciliation
-                        and metrics['reportAttempts'] == 0 and not report_recovery['active']):
-                    available = report_tools
-                    if not demo_report_finalization['announced']:
-                        demo_report_finalization['announced'] = True
-                        messages.append(dict(
-                            role='user',
-                            content='当前附件的完整确定性对账已经成功返回。请立即发布最终报告，不再读取、查找证据或追加计算。摘要控制在500字以内；evidenceIds 只引用支撑最终结论所需的当前已观察行，避免重复提交全部资料行。',
-                        ))
-                    event('demo_report_boundary', '完整对账完成，串行演示进入报告边界', dict(
-                        allowedTools=sorted(report_tool_names),
-                        reportPolicy='first_saved_report_terminates_arm',
-                    ))
-                elif duplicate_compute_finalization['active'] and not report_recovery['active']:
+                if duplicate_compute_finalization['active'] and not report_recovery['active']:
                     available = report_tools
                     if not duplicate_compute_finalization['announced']:
                         duplicate_compute_finalization['announced'] = True
@@ -1454,30 +1530,32 @@ class TaskRunner:
                     available = report_tools
                     metrics['budgetFinalizationGuards'] += 1
                     event('budget_guard', '为终态报告保留最后一次模型请求', dict(
-                        finalizationBasis='complete_scope' if complete_scope else 'successful_current_compute',
+                        finalizationBasis='complete_scope',
                         modelRequests=metrics['modelRequests'],
                         maximumModelRequests=config.MAX_STEPS,
                         allowedTools=[tool.name for tool in report_tools],
                     ))
                     messages.append(dict(
                         role='user',
-                        content=('当前公开资料范围已完整观察' if complete_scope else '当前附件的确定性计算事实已经成功返回')
-                                + '，且只剩最后一次模型请求。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，严格按公开指标定义和原因组提交完整结果。',
+                        content='当前公开资料范围已完整观察，且只剩最后一次模型请求。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，严格按公开指标定义和原因组提交完整结果。',
                     ))
                 elif deadline_finalization['active']:
                     available = report_tools
                     metrics['deadlineFinalizationGuards'] += 1
                     event('deadline_guard', '为终态报告保留执行时间', dict(
-                        finalizationBasis='complete_scope' if complete_scope else 'successful_current_compute',
+                        finalizationBasis='complete_scope',
                         remainingMs=remaining_ms,
                         reservedModelMs=round(deadline_reserve_s * 1000, 3),
                         allowedTools=[tool.name for tool in report_tools],
                     ))
                     if not deadline_finalization.get('announced'):
                         deadline_finalization['announced'] = True
+                        evidence_fields = ('；顶层与分组证据由运行时从当前观察和收据绑定，无需提交 evidenceIds'
+                                           if task.get('runtimeEvidenceBinding') == 'current_scope_and_group_receipts_v1'
+                                           else '，使用当前观察提交完整 metrics、selectedIds 与 evidenceIds')
                         messages.append(dict(role='user', content=(
-                            ('当前公开资料范围已完整观察' if complete_scope else '当前附件的确定性计算事实已经成功返回')
-                            + '，且接近执行时限。不要再读取、计算、保存草稿或导出；请立即调用 publish_report，使用当前观察提交完整 metrics、selectedIds 与 evidenceIds。')))
+                            '当前公开资料范围已完整观察，且接近执行时限。不要再读取、计算、保存草稿或导出；请立即调用 publish_report'
+                            + evidence_fields + '。')))
                 elif report_only:
                     available = report_tools
                 elif fact_repair:
@@ -1578,13 +1656,6 @@ class TaskRunner:
                     if run['evaluation']['status'] not in ['passed', 'user_review_required']:
                         metrics['failedReportAttempts'] += 1
                         issues = sorted(run['evaluation'].get('issues') or [])
-                        if strict_serial_comparison:
-                            event('report_validation_terminal', '报告已保存，校验未通过并结束当前演示臂', dict(
-                                issues=issues,
-                                policy='first_saved_report_terminates_arm',
-                            ))
-                            run.update(status='completed', phase='报告已保存 · 校验未通过')
-                            return
                         has_evidence_coverage = 'evidence_coverage' in issues
                         missing_evidence = self.missing_task_evidence(task, context.evidence) if has_evidence_coverage else []
                         if missing_evidence:

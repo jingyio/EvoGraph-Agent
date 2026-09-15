@@ -670,6 +670,22 @@ def create_app(service=None):
                                             config.MODEL_TIMEOUT))
         return create
 
+    def workspace_comparison_runtime_profile(task):
+        workspace = workspace_manager.workspace(task['workspaceId'])
+        scope = []
+        for table_id in task.get('tableIds') or []:
+            table = workspace['tables'].get(table_id)
+            if table is None:
+                raise HTTPException(409, '任务引用的资料已被移除，请重新创建任务')
+            scope.extend(f'workspace:{workspace["id"]}:{row["rowId"]}' for row in table['rows'])
+        if not scope:
+            raise HTTPException(400, '当前任务没有可执行的结构化资料范围')
+        return {
+            'computeInterface': 'granular-compute-v1',
+            'publicScopeEvidenceIds': sorted(scope),
+            'runtimeEvidenceBinding': 'current_scope_and_group_receipts_v1',
+        }
+
     def workspace_run_links(run_id):
         base = f'/api/workspaces/runs/{run_id}'
         return {
@@ -773,7 +789,7 @@ def create_app(service=None):
         if workspace_runner.tasks:
             raise HTTPException(409, '当前已有工作区 Agent 在运行；三臂对照需从空闲队列开始')
         if not config.API_KEY:
-            raise HTTPException(503, '三臂串行实测需要配置 LLM_API_KEY')
+            raise HTTPException(503, '三臂严格串行实测需要配置 LLM_API_KEY')
         descriptor, finance_release_experience = finance_release_context()
         finance_release_id = descriptor['experimentId']
         if not finance_release_experience.versions:
@@ -781,6 +797,7 @@ def create_app(service=None):
         if len(workspace_runner.tasks) + len(comparison_arms) > 32:
             raise HTTPException(409, '任务队列容量不足，无法同时创建三臂对照')
         comparison_id = str(uuid4())
+        runtime_profile = workspace_comparison_runtime_profile(task)
         created = []
         factories = {
             'plan_react': workspace_comparison_provider(config.API_KEY),
@@ -807,6 +824,7 @@ def create_app(service=None):
                     learning_write_enabled=False,
                     evolution_override=evolutions[arm],
                     experience_context=experience,
+                    task_overrides=runtime_profile,
                     comparison_context={
                         'id': comparison_id,
                         'arm': arm,

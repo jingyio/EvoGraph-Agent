@@ -508,14 +508,50 @@ def induce(run, task, tools):
             'sourceTraceDigest': digest(run['toolTrace']), 'artifactBoundaries': boundaries}
 
 
-def candidates(versions, task, tools, readonly=False):
+def _node_contract_compatible(version, tools):
+    """Revalidate saved executable nodes against the current tool surface.
+
+    A frozen release may outlive additive tool-catalog changes. Reuse is allowed
+    only when every saved node still names a current tool with the same effect,
+    every dependency remains present, and every referenced receipt output is
+    still declared by its producing tool. Actual bound arguments are validated
+    by the current tool schema during replay.
+    """
+    known = {tool.name: tool for tool in tools}
+    nodes = {node.get('id'): node for node in version.get('nodes') or []}
+    if not nodes or None in nodes:
+        return False
+    for node_id, node in nodes.items():
+        tool = known.get(node.get('tool'))
+        if tool is None or tool.effect != node.get('effect'):
+            return False
+        if any(dependency not in nodes for dependency in node.get('dependencies') or []):
+            return False
+        for _path, value in walk(node.get('arguments') or {}):
+            if not isinstance(value, dict) or set(value) != {'$output'}:
+                continue
+            reference = value['$output']
+            if (not isinstance(reference, dict) or reference.get('nodeId') not in nodes
+                    or not isinstance(reference.get('path'), list) or not reference['path']):
+                return False
+            producer = known.get(nodes[reference['nodeId']].get('tool'))
+            if producer is None or reference['path'][0] not in (producer.outputs or []):
+                return False
+    return True
+
+
+def candidates(versions, task, tools, readonly=False, *, allow_unreviewed=False,
+               allow_compatible_contract=False):
     started = time.perf_counter()
     rows = []
     current_contract = api_hash(tools)
     for version in versions:
-        if version.get('protocol') != PROTOCOL or version.get('contractHash') != current_contract:
+        if version.get('protocol') != PROTOCOL:
             continue
-        if readonly and not version.get('reviewed'):
+        exact_contract = version.get('contractHash') == current_contract
+        if not exact_contract and not (allow_compatible_contract and _node_contract_compatible(version, tools)):
+            continue
+        if readonly and not allow_unreviewed and not version.get('reviewed'):
             continue
         if version.get('supersededBy'):
             continue
@@ -523,7 +559,9 @@ def candidates(versions, task, tools, readonly=False):
         # task semantics are verified by bounded selection below.
         if schema_contract(task) not in version['descriptor'].get('acceptedSchemas', [version['descriptor']['schema']]):
             continue
-        rows.append(deepcopy(version))
+        candidate = deepcopy(version)
+        candidate['_contractCompatibility'] = ('exact' if exact_contract else 'node_schema_revalidated')
+        rows.append(candidate)
     # Local lexical ranking only recalls; it never accepts a graph.
     def grams(s):
         return {s[i:i+2] for i in range(max(0, len(s)-1))}
@@ -659,9 +697,19 @@ def _bind_one(selection, rows, task, tools):
                 selected_ids.add(dependency); pending.append(dependency)
     slots = version['descriptor']['slots']
     needed = {name for name, slot in slots.items() if slot['nodeId'] in selected_ids}
-    bindings = {b['slot']: b for b in selection.get('bindings') or []}
-    if set(bindings) != needed or len(bindings) != len(selection.get('bindings') or []):
+    supplied = selection.get('bindings') or []
+    bindings = {b['slot']: b for b in supplied}
+    if len(bindings) != len(supplied):
         raise ValueError('当前槽必须完整且唯一')
+    missing = needed - set(bindings)
+    if missing:
+        raise ValueError('当前槽必须完整且唯一')
+    # A bounded matcher can return a binding for a sibling node that it then
+    # excludes from nodeIds. Such values cannot affect the selected graph, so
+    # retain the raw choice for audit and discard only these unused extras.
+    # Missing, duplicate, unverifiable, or incompatible bindings still fail.
+    unused = sorted(set(bindings) - needed)
+    bindings = {name: bindings[name] for name in needed}
     for name, item in bindings.items():
         if item['quote'] not in task['task'] or not quote_has(item['value'], item['quote']):
             raise ValueError('槽缺少当前请求逐字来源')
@@ -688,7 +736,8 @@ def _bind_one(selection, rows, task, tools):
         elif not _reference_dependencies(n['arguments']):
             known[n['tool']].validator.validate(n['arguments'])
         result.append(n)
-    return version, _merge_reconcile_fragments(result, known), bindings
+    normalization = {'droppedUnusedBindingSlots': unused} if unused else None
+    return version, _merge_reconcile_fragments(result, known), bindings, normalization
 
 
 def _namespace_node(node, prefix):
@@ -719,12 +768,14 @@ def bind_selection(choice, rows, task, tools):
     if len(selections) > 3: raise ValueError('最多组合三个片段')
     bound=[_bind_one(item, rows, task, tools) for item in selections]
     if len(bound)==1:
-        version,nodes,bindings=bound[0]; result=deepcopy(version);result['nodes']=_topological(nodes);result['currentBindings']=bindings
+        version,nodes,bindings,normalization=bound[0]; result=deepcopy(version);result['nodes']=_topological(nodes);result['currentBindings']=bindings
+        if normalization: result['matchNormalization']=normalization
         result['plan']={'steps':[{'id':n['id'],'intent':n['tool'],'dependencies':n['dependencies']} for n in result['nodes']]}
         return result
-    if len({v['id'] for v,_,_ in bound}) != len(bound): raise ValueError('组合必须来自不同图经验')
-    combined=[];bindings={};used_signatures=set()
-    for ordinal,(version,nodes,items) in enumerate(bound):
+    if len({v['id'] for v,_,_,_ in bound}) != len(bound): raise ValueError('组合必须来自不同图经验')
+    combined=[];bindings={};used_signatures=set();normalizations=[]
+    for ordinal,(version,nodes,items,normalization) in enumerate(bound):
+        if normalization: normalizations.append(dict(selection=ordinal, **normalization))
         prefix=f'c{ordinal}_'
         for node in nodes:
             renamed=_namespace_node(node,prefix)
@@ -733,9 +784,11 @@ def bind_selection(choice, rows, task, tools):
             used_signatures.add(signature);combined.append(renamed)
         for key,value in items.items(): bindings[prefix+key]=value
     combined=_topological(combined)
-    return {'id':'composition:' + ','.join(v['id'] for v,_,_ in bound), 'sourceVersionIds':[v['id'] for v,_,_ in bound],
-            'generation':max(v['generation'] for v,_,_ in bound), 'matchVersion':max(v['matchVersion'] for v,_,_ in bound),
-            'nodes':combined,'currentBindings':bindings,'plan':{'steps':[{'id':n['id'],'intent':n['tool'],'dependencies':n['dependencies']} for n in combined]}}
+    result = {'id':'composition:' + ','.join(v['id'] for v,_,_,_ in bound), 'sourceVersionIds':[v['id'] for v,_,_,_ in bound],
+              'generation':max(v['generation'] for v,_,_,_ in bound), 'matchVersion':max(v['matchVersion'] for v,_,_,_ in bound),
+              'nodes':combined,'currentBindings':bindings,'plan':{'steps':[{'id':n['id'],'intent':n['tool'],'dependencies':n['dependencies']} for n in combined]}}
+    if normalizations: result['matchNormalization'] = {'selections': normalizations}
+    return result
 
 
 def canonical_structure(proposal):

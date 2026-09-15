@@ -1170,8 +1170,8 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
         assert task and not questions
 
         # Keep all three real runner jobs queued so this API contract test cannot
-        # make provider calls. The live workspace creates all arms together and
-        # exposes only their queued/running states here.
+        # make provider calls. The live workspace creates all arms together; the shared run slot
+        # keeps A, B and C strictly serial without making provider calls here.
         app.state.workspace_runner.run_slots = asyncio.Semaphore(0)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             denied = await client.post(f"/api/workspaces/tasks/{task['id']}/comparison-runs", json={'confirmCost': False})
@@ -1181,6 +1181,7 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
             assert missing_primary.status_code == 503
             assert not app.state.workspace_runner.runs and not app.state.workspace_runner.tasks
             monkeypatch.setattr('backend.app.config.API_KEY', 'primary-secret')
+            monkeypatch.setattr('backend.app.config.SECONDARY_API_KEY', '')
             app.state.finance_release_descriptor = {
                 'datasetId': 'finance-attribution-v5-12-api-candidate',
                 'experimentId': 'd02f0ecd-8bb5-4359-94be-e7f7233df6a5',
@@ -1233,6 +1234,13 @@ async def test_workspace_comparison_runs_share_task_and_poll_only_real_run_state
                        for arm in payload['arms'])
             assert all(app.state.workspace_runner.runs[arm['runId']]['comparison']['executionPolicy'] == 'strict_serial_three_arm'
                        for arm in payload['arms'])
+            profiles = [app.state.workspace_runner.runs[arm['runId']]['runtimeProfile'] for arm in payload['arms']]
+            assert len({json.dumps(profile, sort_keys=True) for profile in profiles}) == 1
+            assert profiles[0] == {
+                'computeInterface': 'granular-compute-v1',
+                'evidenceBinding': 'current_scope_and_group_receipts_v1',
+                'publicEvidenceCount': 1,
+            }
 
             first = payload['arms'][0]
             saved = app.state.workspace_runner.runs[first['runId']]

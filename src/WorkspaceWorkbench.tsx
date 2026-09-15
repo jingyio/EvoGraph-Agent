@@ -622,8 +622,8 @@ export default function WorkspaceWorkbench() {
   const active = Boolean(busy === 'run' || comparison && ['queued', 'running'].includes(comparison.status));
   const historyComparison = Boolean(comparison?.id.startsWith('history:'));
   const planWaiting = planArm?.status === 'queued' ? '等待开始' : planArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
-  const traditionalWaiting = traditionalArm?.status === 'queued' ? '等待上一方法完成' : traditionalArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
-  const rsiWaiting = rsiArm?.status === 'queued' ? '等待上一方法完成' : rsiArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
+  const traditionalWaiting = traditionalArm?.status === 'queued' ? '等待 A 完成' : traditionalArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
+  const rsiWaiting = rsiArm?.status === 'queued' ? '等待 B 完成' : rsiArm ? '等待真实事件' : historyComparison ? '历史记录无此方法' : '等待运行创建';
 
   useEffect(() => {
     const area = requestArea.current;
@@ -886,7 +886,7 @@ export default function WorkspaceWorkbench() {
         <div>
           <p>三臂读取同一题目和附件，使用 qwen/qwen3.5-27b、同一工具和预算。A 用于检验传统 Agent 基线；B 与 C 使用相同图运行时，B 不读写跨任务经验，C 只读金融 12 任务冻结知识库。</p>
           <dl>
-            <div><dt>执行顺序</dt><dd>A 完成后运行 B，B 完成后运行 C</dd></div>
+            <div><dt>执行方式</dt><dd>A 完成后运行 B，B 完成后运行 C；三臂统一使用主 Key</dd></div>
             <div><dt>知识库</dt><dd>{comparison?.knowledgeBase ? `${comparison.knowledgeBase.versionCount || 0} 个版本 · ${comparison.knowledgeBase.releaseId || 'ID 未返回'} · 只读` : '启动后由后端返回版本和 Release ID'}</dd></div>
             <div><dt>阶段计时</dt><dd>只按后端真实事件更新，持续时间从当前事件时间戳计算</dd></div>
           </dl>

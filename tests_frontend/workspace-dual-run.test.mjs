@@ -11,7 +11,7 @@ test('one confirmed action starts the native serial three-arm comparison', () =>
   assert.match(source, /按顺序运行三臂/);
   assert.match(source, /确认 3 次真实运行及模型费用/);
   assert.doesNotMatch(source, /workspace-dual-protocol/);
-  assert.doesNotMatch(source, /三个 run 同时创建|主 Key 承载|Secondary Key 承载/);
+  assert.match(source, /A 完成后运行 B，B 完成后运行 C；三臂统一使用主 Key/);
   assert.doesNotMatch(source, /rsiStartTask/);
   assert.doesNotMatch(source, /startRsiRun/);
   assert.doesNotMatch(source, /awaitingRsi/);
@@ -136,22 +136,23 @@ test('protocol details stay in a collapsed experiment note instead of the presen
   const notesStart = source.indexOf('<details className="workspace-experiment-notes">');
   const notesEnd = source.indexOf('</details>', notesStart);
   const notes = source.slice(notesStart, notesEnd);
-  assert.match(notes, /A 完成后运行 B，B 完成后运行 C/);
+  assert.match(notes, /A 完成后运行 B，B 完成后运行 C；三臂统一使用主 Key/);
   assert.match(notes, /knowledgeBase\.versionCount/);
   assert.match(notes, /knowledgeBase\.releaseId/);
   assert.match(notes, /阶段计时/);
-  assert.doesNotMatch(notes, /并行|主 Key|Secondary Key|同时创建/);
+  assert.match(notes, /严格串行|主 Key|A 完成后运行 B/);
   assert.match(css, /\.workspace-experiment-notes>summary/);
 });
 
-test('queued serial lanes wait for the preceding method while old policies remain readable', () => {
+test('queued serial lanes wait for the preceding arm while old policies remain readable', () => {
   assert.match(source, /const planWaiting = planArm\?\.status === 'queued' \? '等待开始'/);
-  assert.match(source, /const traditionalWaiting = traditionalArm\?\.status === 'queued' \? '等待上一方法完成'/);
-  assert.match(source, /const rsiWaiting = rsiArm\?\.status === 'queued' \? '等待上一方法完成'/);
+  assert.match(source, /const traditionalWaiting = traditionalArm\?\.status === 'queued' \? '等待 A 完成'/);
+  assert.match(source, /const rsiWaiting = rsiArm\?\.status === 'queued' \? '等待 B 完成'/);
   assert.match(source, /waiting=\{planWaiting\}/);
   assert.match(source, /waiting=\{traditionalWaiting\}/);
   assert.match(source, /waiting=\{rsiWaiting\}/);
-  assert.doesNotMatch(source, /等待首次请求|已创建，等待首次请求/);
+  assert.match(source, /等待 A 完成/);
+  assert.match(source, /等待 B 完成/);
   assert.match(source, /parallel_dual_key/);
   assert.match(source, /parallel_three_arm_two_key/);
   assert.match(source, /arms\.every\(arm => \['passed', 'user_review_required'\]\.includes\(arm\.evaluation\?\.status \|\| ''\)\)/);

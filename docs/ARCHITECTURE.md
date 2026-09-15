@@ -1,3 +1,21 @@
+## 2026-09-15 未使用槽绑定的有界规范化（最新）
+
+轨迹匹配分为两步：模型提交候选图的 `nodeIds` 与当前参数 `bindings`，运行时先对所选节点求完整上游依赖闭包，再计算闭包真正引用的槽集合。模型可能先填写某节点参数、随后在同一选择中排除该节点；旧实现会因这种无执行影响的多余绑定拒绝整次图复用。
+
+`_bind_one` 现在仍先拒绝重复槽和所选闭包缺失槽，再仅从物化绑定中剔除闭包未引用的额外槽。额外槽不会进入 `resolve_arguments`，因此不能改变任何执行参数；原始 matcher DTO 保存在 `trajectoryMatch`，被剔除的槽另存为 `trajectoryMatchNormalization` 并产生事件。逐字 quote、值、类型和单位校验继续作用于所有实际使用槽。该边界只容忍无效载荷，不补节点、不推导值、不改变 matcher 的覆盖声明。
+
+真实单臂 run `1c904b6b-9f90-46f6-b3f8-b0a522ab6998` 没有触发规范化，因为新一次 matcher 直接选择了23个节点并完整绑定两个10期槽；运行时执行冻结 G2/M2 后只向模型交回未覆盖的金额差比较与报告。3次模型请求分别消耗5,012/22,109/22,375输入token，证明图回放路径已恢复。该单臂诊断不建立新的跨臂latency结论。
+
+## 2026-09-15 工作区 Agent 正常路径恢复的并行诊断（历史）
+
+工作区三臂在创建时共享一个请求级 runtime profile：`computeInterface=granular-compute-v1`、当前附件全部行组成的 `publicScopeEvidenceIds`、`runtimeEvidenceBinding=current_scope_and_group_receipts_v1`。该 profile 只改变工具面、公开证据范围和证据绑定方式，不修改保存的用户任务或历史工件。A/B/C因而读取相同输入、使用相同细粒度工具和报告协议；A/B使用主Key，C使用Secondary Key，并由`TaskRunner(3/3/3)`并行调度。
+
+报告阶段不再要求模型复制完整顶层或分组 evidence ID。运行时仅在当前范围已实际观察后补齐顶层证据；分组证据只从本run成功计算收据的`evidenceByKey`和当前观察集合绑定。模型仍必须提交业务指标、业务ID、原因、条件、数量和正文；运行时不补金额、ID、空组或结论，也不读取gold。进入报告上下文前移除`_evidenceRef`和`evidenceByKey`的大型重复映射，保留计算结果本身。报告校验失败继续走共享的有界恢复，不再由演示策略在首份失败报告后终止。
+
+冻结发布知识库具有显式兼容路径。普通只读经验仍要求审核状态与精确contract hash；只有Release Manifest已绑定的`frozen_finance_release`可读取其probation版本。contract hash不同必须逐节点确认工具仍存在、effect一致、依赖存在且`$output`首段仍是生产工具声明输出；回放时当前工具schema继续验证实际参数。run记录`contractCompatibility=node_schema_revalidated`，避免把“加载版本”冒充执行。
+
+真实验证`9c354b04-6373-4333-80d2-8967b8d50dc1`中，C使用G2/M2执行23个图节点，模型只补1个未覆盖计算和报告；报告输出602 token。A/B报告输出791/808 token。该结果恢复了正常时期“匹配→当前绑定→图回放→模型补残余/报告”的设计，无需用completion截断掩盖长证据数组。
+
 ## 2026-09-15 严格串行三臂调度与有界报告完成（最新）
 
 新建工作区三臂 comparison 使用单一主模型凭据，并由共享 `TaskRunner(run_limit=1, model_limit=1, read_limit=1)` 按 A 传统 Plan+ReAct、B 图执行不学习、C 图执行在线 RSI 的创建顺序串行调度。每个新 run 保存 `comparison.executionPolicy=strict_serial_three_arm`；聚合 DTO 只在三个保存 run 都带该策略时返回串行策略和 `1/1/1` 限额。旧记录缺少该字段时继续返回历史并行策略，防止把旧时长误标为串行计量。

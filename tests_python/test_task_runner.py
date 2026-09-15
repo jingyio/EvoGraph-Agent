@@ -99,20 +99,26 @@ async def test_strict_serial_runner_preserves_arm_start_order(tmp_path):
 
 
 
-async def test_strict_serial_demo_finishes_after_first_saved_report_and_binds_unique_evidence(tmp_path):
+async def test_comparison_report_failure_uses_shared_bounded_recovery(tmp_path):
     exact_ref = 'workspace:demo:table:orders:16'
     executor_calls = []
 
-    class DemoBank(Bank):
+    class RecoveryBank(Bank):
+        def task(self, key):
+            return dict(id=key, scenario='finance', split='user', task='完成当前订单复核并发布报告',
+                        publicScopeEvidenceIds=[exact_ref], suggestedBudget={'toolCalls': 20})
+
         def tools(self, key):
             def reconcile(args, ctx):
                 ctx.evidence.add(exact_ref)
-                return {'totals': {'count': 1}, 'comparisons': [], 'evidenceByKey': {'o-1': [exact_ref]}}
+                return {'totals': {'count': 2}, 'evidenceByKey': {'o-1': [exact_ref]}}
 
             def publish(args, ctx):
-                assert args['evidenceIds'] == [exact_ref]
                 ctx.run['submission'] = deepcopy(args)
-                ctx.run['evaluation'] = {'status': 'failed', 'issues': ['metrics'], 'scope': 'workspace-evidence'}
+                passed = args.get('metrics') == {'count': 2}
+                ctx.run['evaluation'] = {'status': 'passed' if passed else 'failed',
+                                         'issues': [] if passed else ['metrics'],
+                                         'scope': 'workspace-evidence'}
                 return {'saved': True, 'reportId': 'saved-report', 'evaluation': ctx.run['evaluation']}
 
             return [
@@ -126,7 +132,7 @@ async def test_strict_serial_demo_finishes_after_first_saved_report_and_binds_un
                 }), publish),
             ]
 
-    class DemoModel(Model):
+    class RecoveryModel(Model):
         async def complete(self, messages, tools):
             if self.role == 'planner':
                 return result('submit_plan', {'steps': []})
@@ -136,36 +142,33 @@ async def test_strict_serial_demo_finishes_after_first_saved_report_and_binds_un
                 return result('workspace_reconcile_keyed_sums', {
                     'anchorTableId': 'orders', 'keyField': 'order_id', 'aggregates': [{}],
                 })
-            assert {tool.name for tool in tools} == {'workspace_publish_report'}
-            assert any('摘要控制在500字以内' in message.get('content', '') for message in messages)
-            if 'workspace_publish_report' in prior:
-                raise AssertionError('首次报告保存后不应再次调用模型')
+            attempts = prior.count('workspace_publish_report')
+            assert 'workspace_publish_report' in {tool.name for tool in tools}
             return result('workspace_publish_report', {
-                'metrics': {'count': 1}, 'selectedIds': ['o-1'],
-                'evidenceIds': ['broken-prefix:orders:16'], 'summary': '已保存首次报告。',
+                'metrics': {'count': 1 if attempts == 0 else 2},
+                'selectedIds': ['o-1'], 'evidenceIds': [], 'summary': '当前资料复核结果。',
             })
 
-    runner = TaskRunner(DemoBank(tmp_path), lambda role: DemoModel(role, []), learning_enabled=False)
+    runner = TaskRunner(RecoveryBank(tmp_path), lambda role: RecoveryModel(role, []), learning_enabled=False)
     run = await runner.start(
         TaskRunRequest(taskId='demo', strategy='plan_react'),
         comparison_context={
-            'id': 'comparison-demo', 'arm': 'plan_react', 'providerProfile': 'primary_serial',
-            'executionPolicy': 'strict_serial_three_arm',
+            'id': 'comparison-demo', 'arm': 'plan_react', 'providerProfile': 'primary',
+            'executionPolicy': 'parallel_three_arm_two_key',
         },
     )
     await runner.tasks[run['id']]
 
     assert run['status'] == 'completed'
-    assert run['phase'] == '报告已保存 · 校验未通过'
-    assert run['evaluation']['status'] == 'failed'
-    assert run['metrics']['reportAttempts'] == 1
+    assert run['phase'] == '成果已保存'
+    assert run['evaluation']['status'] == 'passed'
+    assert run['metrics']['reportAttempts'] == 2
     assert run['metrics']['failedReportAttempts'] == 1
-    assert run['metrics']['reportEvidenceCanonicalizations'] == 1
-    assert len(executor_calls) == 2
-    assert any(event['type'] == 'demo_report_boundary' for event in run['events'])
-    assert any(event['type'] == 'report_evidence_binding' for event in run['events'])
-    assert any(event['type'] == 'report_validation_terminal' for event in run['events'])
-    assert 'reportRecovery' not in run
+    assert run['metrics']['reportEvidenceCanonicalizations'] == 2
+    assert len(executor_calls) == 3
+    assert any(event['type'] == 'report_recovery' for event in run['events'])
+    assert not any(event['type'] in {'demo_report_boundary', 'report_validation_terminal'} for event in run['events'])
+    assert run['reportRecovery'].get('termination') is None
 
 
 async def test_bad_plan_falls_back_and_counts_planner_request(tmp_path):

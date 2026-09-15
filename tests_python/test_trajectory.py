@@ -388,6 +388,27 @@ async def test_reconcile_fragment_dependency_closure_and_missing_clause(tmp_path
     assert len(derived_selected['nodes'][0]['arguments']['aggregates']) == 2
     assert len(derived_selected['nodes'][0]['arguments']['derivedTotals']) == 1
 
+    # The matcher may bind a sibling comparison and then exclude that node.
+    # The raw choice remains auditable, while the unused value cannot affect
+    # the selected dependency closure and must not force a cold-plan fallback.
+    unused_bindings = [
+        {'slot': name, 'value': slot['sourceValue'], 'quote': task['task']}
+        for name, slot in proposal['descriptor']['slots'].items()
+    ]
+    normalized = trajectory.bind_selection({
+        'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [derived['id']],
+        'bindings': unused_bindings, 'reason': '排除比较节点后遗留了无用槽', 'uncovered': ['comparison'],
+    }, [version], task, list(tools.values()))
+    assert normalized['currentBindings'] == {}
+    assert normalized['matchNormalization']['droppedUnusedBindingSlots'] == sorted(
+        item['slot'] for item in unused_bindings)
+    duplicate = deepcopy(unused_bindings) + [deepcopy(unused_bindings[0])]
+    with pytest.raises(ValueError, match='完整且唯一'):
+        trajectory.bind_selection({
+            'graphId': 'closure-g0', 'decision': 'partial', 'nodeIds': [derived['id']],
+            'bindings': duplicate, 'reason': '重复无用槽仍是损坏 DTO', 'uncovered': ['comparison'],
+        }, [version], task, list(tools.values()))
+
     comparison_bindings = [
         {'slot': name, 'value': slot['sourceValue'], 'quote': task['task']}
         for name, slot in proposal['descriptor']['slots'].items() if slot['nodeId'] == comparison['id']
@@ -436,3 +457,122 @@ def test_trajectory_contract_hash_ignores_dynamic_artifact_delivery_schema(tmp_p
     report = next(tool for tool in changed if tool.name == 'workspace_publish_report')
     report.parameters = {'type': 'object', 'properties': {'new_public_group': {'type': 'string'}}}
     assert trajectory.api_hash(changed) == original
+
+async def test_runtime_binds_report_evidence_from_current_receipts_without_model_copy(tmp_path):
+    from backend.task_runner import TaskRunner, TaskRunRequest
+
+    manager = WorkspaceManager(tmp_path)
+    task, _tools, reconcile_args = setup(manager)
+    workspace = manager.workspace(task['workspaceId'])
+    public_scope = sorted(
+        f'workspace:{workspace["id"]}:{row["rowId"]}'
+        for table_id in task['tableIds']
+        for row in workspace['tables'][table_id]['rows']
+    )
+    histories = []
+
+    def model_result(name, arguments):
+        return {
+            'message': {'role': 'assistant', 'content': '', 'tool_calls': [{
+                'id': name, 'type': 'function',
+                'function': {'name': name, 'arguments': json.dumps(arguments)},
+            }]},
+            'usage': {'input': 10, 'output': 2, 'reasoning': 0},
+            'finishReason': 'tool_calls',
+        }
+
+    class Model:
+        model = 'runtime-evidence-binding-test'
+        settings = {}
+
+        async def complete(self, messages, available):
+            histories.append(deepcopy(messages))
+            if any(tool.name == 'submit_plan' for tool in available):
+                return model_result('submit_plan', {'steps': []})
+            prior = [call['function']['name'] for message in messages for call in message.get('tool_calls') or []]
+            if 'workspace_preview_rows' not in prior:
+                return model_result('workspace_preview_rows', {
+                    'tableId': task['tableBindings']['orders'], 'page': 1, 'pageSize': 50,
+                })
+            if prior.count('workspace_map_fields') == 0:
+                return model_result('workspace_map_fields', {
+                    'tableId': task['tableBindings']['payments'], 'keyField': 'order_id',
+                    'fields': ['amount_cents', 'installments'],
+                })
+            if prior.count('workspace_map_fields') == 1:
+                return model_result('workspace_map_fields', {
+                    'tableId': task['tableBindings']['items'], 'keyField': 'order_id',
+                    'fields': ['price_cents', 'freight_cents'],
+                })
+            report_tool = next(tool for tool in available if tool.name == 'workspace_publish_report')
+            assert 'evidenceIds' not in report_tool.parameters['required']
+            group_required = report_tool.parameters['properties']['groups']['items']['required']
+            assert 'evidenceIds' not in group_required
+            return model_result('workspace_publish_report', {
+                'metrics': {'difference_count': 1},
+                'selectedIds': ['o2'],
+                'summary': '当前附件中有一笔订单需要复核。',
+                'groups': [{
+                    'name': 'difference', 'reason': '支付与商品金额存在差额',
+                    'condition': '绝对差额严格大于5分', 'count': 1,
+                    'selectedIds': ['o2'],
+                }],
+            })
+
+    runner = TaskRunner(WorkspaceBank(manager), lambda _role: Model(), learning_enabled=False,
+                        run_directory=tmp_path / 'runs')
+    run = await runner.start(
+        TaskRunRequest(taskId=task['id'], strategy='plan_react'),
+        task_overrides={
+            'computeInterface': 'granular-compute-v1',
+            'publicScopeEvidenceIds': public_scope,
+            'runtimeEvidenceBinding': 'current_scope_and_group_receipts_v1',
+        },
+    )
+    await runner.tasks[run['id']]
+
+    assert run['evaluation']['status'] == 'user_review_required'
+    assert run['submission']['evidenceIds'] == public_scope
+    group = run['submission']['groups'][0]
+    assert group['selectedIds'] == ['o2'] and group['evidenceIds']
+    assert set(group['evidenceIds']).issubset(set(public_scope))
+    assert run['metrics']['reportGroupEvidenceBindings'] == len(group['evidenceIds'])
+    assert any(event['type'] == 'group_evidence_receipt_binding' for event in run['events'])
+    report_history = histories[-1]
+    assert 'evidenceByKey' not in json.dumps(report_history, ensure_ascii=False)
+    assert '_evidenceRef' not in json.dumps(report_history, ensure_ascii=False)
+    await runner.shutdown()
+
+
+def test_frozen_release_revalidates_saved_nodes_after_additive_tool_change(tmp_path):
+    manager = WorkspaceManager(tmp_path)
+    task, tools, reconcile_args = setup(manager)
+    context = ToolContext({'id': 'source'})
+
+    async def build():
+        output = await tools['workspace_reconcile_keyed_sums'].execute(reconcile_args, context)
+        run = {
+            'id': 'source', 'status': 'completed', 'evaluation': {'status': 'passed'},
+            'toolTrace': [{
+                'ok': True, 'tool': 'workspace_reconcile_keyed_sums',
+                'arguments': reconcile_args, 'result': output,
+            }],
+        }
+        proposal = trajectory.induce(run, task, list(tools.values()))
+        return dict(proposal, id='frozen-g0', generation=0, matchVersion=0,
+                    reviewed=False, supersededBy=None, contractHash='older-additive-contract')
+
+    version = __import__('asyncio').run(build())
+    assert trajectory.candidates([version], task, list(tools.values()), readonly=True)[0] == []
+    rows, _ = trajectory.candidates(
+        [version], task, list(tools.values()), readonly=True,
+        allow_unreviewed=True, allow_compatible_contract=True,
+    )
+    assert len(rows) == 1 and rows[0]['_contractCompatibility'] == 'node_schema_revalidated'
+
+    incompatible = deepcopy(version)
+    incompatible['nodes'][0]['tool'] = 'workspace_removed_tool'
+    assert trajectory.candidates(
+        [incompatible], task, list(tools.values()), readonly=True,
+        allow_unreviewed=True, allow_compatible_contract=True,
+    )[0] == []
