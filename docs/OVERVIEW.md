@@ -13,4 +13,4 @@ EvoGraph Agent 面向重复出现的运营任务。传统 Agent 每次都要重�
 
 项目使用公开历史数据构造冻结任务：Olist 财务记录、CFPB 投诉记录和 Zammad GitHub Issues。它们不是生产企业数据库；公开数据、项目初始化的演示记录和真实平台数据在开发分支中分开标注。
 
-完整架构、任务库、协议和源代码在 [`develop`](https://github.com/jingyio/EvoGraph-Agent/tree/develop) 分支。`main` 只保留交付所需的事实说明与演示材料。
+`main` 同时保留可运行的最小机制实现：[`core/`](../core/) 用标准库演示 DAG 校验、当前任务绑定、版本谱系、实质差异与后续实际使用；它不包含模型服务、前端或候选实验工件。完整架构、任务库、协议和产品源码在 [`develop`](https://github.com/jingyio/EvoGraph-Agent/tree/develop) 分支。
